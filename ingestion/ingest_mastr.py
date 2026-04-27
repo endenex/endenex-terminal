@@ -23,10 +23,15 @@ ONSHORE_LABEL = 'Windkraft an Land'
 
 def download_mastr() -> pd.DataFrame:
     log.info('Downloading MaStR wind data via open-mastr (bulk method)...')
+    import os
+    import sqlalchemy as sa
     from open_mastr import Mastr
     db = Mastr()
-    db.download(method='bulk', data=['WindExtended'])
-    df = db.get_df('WindExtended')
+    db.download(method='bulk', data=['wind'])
+    # open-mastr stores data in SQLite; read wind_extended table directly
+    db_path = os.path.join(os.path.expanduser('~'), '.open-MaStR', 'data', 'sqlite', 'open-mastr.db')
+    engine = sa.create_engine(f'sqlite:///{db_path}')
+    df = pd.read_sql_table('wind_extended', engine)
     log.info(f'Downloaded {len(df):,} MaStR wind unit records')
     return df
 
