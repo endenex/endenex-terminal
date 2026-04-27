@@ -8,6 +8,7 @@ dist-ssr
 # Environment — never commit real credentials
 .env.local
 .env.*.local
+ingestion/.env
 
 # Editor
 .vscode/*
