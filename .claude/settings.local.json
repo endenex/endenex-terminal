@@ -5,7 +5,11 @@
       "mcp__Claude_in_Chrome__tabs_context_mcp",
       "mcp__Claude_in_Chrome__navigate",
       "mcp__Claude_in_Chrome__get_page_text",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "WebFetch(domain:www.gov.uk)",
+      "Bash(pip install *)",
+      "Bash(python3 -c ' *)",
+      "Bash(pip3 install *)"
     ]
   }
 }
