@@ -27,11 +27,9 @@ export function Sidebar() {
   return (
     <aside className="w-56 min-h-screen bg-terminal-navy flex flex-col border-r border-terminal-navy-border flex-shrink-0">
       {/* Wordmark */}
-      <div className="px-5 py-5 border-b border-terminal-navy-border">
-        <div className="text-terminal-teal font-mono text-[11px] tracking-[0.2em] font-medium">
-          ENDENEX
-        </div>
-        <div className="text-gray-500 font-mono text-[11px] tracking-[0.2em] mt-0.5">
+      <div className="px-5 py-4 border-b border-terminal-navy-border">
+        <img src="/logo-white.png" alt="Endenex" className="h-5 w-auto" />
+        <div className="text-gray-500 font-mono text-[10px] tracking-[0.2em] mt-2">
           TERMINAL
         </div>
       </div>
