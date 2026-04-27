@@ -33,8 +33,18 @@ _bng_to_wgs84 = Transformer.from_crs('EPSG:27700', 'EPSG:4326', always_xy=True)
 
 
 def osgb_to_latlon(x, y) -> tuple[float | None, float | None]:
+    import math
     try:
-        lon, lat = _bng_to_wgs84.transform(float(x), float(y))
+        fx, fy = float(x), float(y)
+        # Reject zero/missing placeholders and invalid values
+        if fx == 0 or fy == 0 or math.isnan(fx) or math.isnan(fy):
+            return None, None
+        lon, lat = _bng_to_wgs84.transform(fx, fy)
+        if math.isinf(lat) or math.isinf(lon) or math.isnan(lat) or math.isnan(lon):
+            return None, None
+        # Sanity check: UK bounding box
+        if not (49.0 <= lat <= 61.0 and -8.5 <= lon <= 2.0):
+            return None, None
         return round(lat, 6), round(lon, 6)
     except Exception:
         return None, None
