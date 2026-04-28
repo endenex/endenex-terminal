@@ -77,8 +77,22 @@ def map_records(df: pd.DataFrame) -> list[dict]:
             'last_reviewed': today,
         })
 
-    log.info(f'Mapped {len(records):,} records for upsert')
-    return records
+    # Deduplicate by external_id — keep highest capacity where EIC appears >1 time
+    seen: dict[str, dict] = {}
+    for rec in records:
+        eid = rec['external_id']
+        if eid not in seen:
+            seen[eid] = rec
+        else:
+            existing_cap = seen[eid]['capacity_mw'] or 0
+            new_cap = rec['capacity_mw'] or 0
+            if new_cap > existing_cap:
+                seen[eid] = rec
+    deduped = list(seen.values())
+    if len(deduped) < len(records):
+        log.info(f'Deduplicated {len(records) - len(deduped):,} duplicate EIC records')
+    log.info(f'Mapped {len(deduped):,} records for upsert')
+    return deduped
 
 
 def _parse_date(val) -> str | None:
