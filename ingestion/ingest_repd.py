@@ -60,10 +60,13 @@ def download_repd() -> pd.DataFrame:
 
 
 def parse_date(val) -> str | None:
-    if val is None or (isinstance(val, float) and pd.isna(val)):
+    if val is None or pd.isnull(val):
         return None
     try:
-        return pd.to_datetime(val).date().isoformat()
+        ts = pd.to_datetime(val)
+        if ts is pd.NaT:
+            return None
+        return ts.date().isoformat()
     except Exception:
         return None
 
