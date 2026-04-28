@@ -15,10 +15,10 @@ from base_ingestor import get_supabase_client, upsert_assets, today_iso
 
 log = logging.getLogger(__name__)
 
-# ODRÉ OpenDataSoft API — filtered to wind installations above 36kW
+# ODRÉ OpenDataSoft API — filtered to wind installations (updated to current dataset)
 ODRE_URL = (
     'https://odre.opendatasoft.com/api/explore/v2.1/catalog/datasets/'
-    'registre-national-installation-production-stockage-electricite-simplifie/'
+    'registre-national-installation-production-stockage-electricite-agrege/'
     'exports/csv'
     '?where=filiere%3D%22Eolien%22'
     '&timezone=UTC'
@@ -43,51 +43,33 @@ def download_odre() -> pd.DataFrame:
     return df
 
 
-def parse_coords(coord_str: str) -> tuple[float | None, float | None]:
-    """Parse 'lat,lon' or 'lat, lon' coordinate string."""
-    try:
-        parts = str(coord_str).split(',')
-        return float(parts[0].strip()), float(parts[1].strip())
-    except Exception:
-        return None, None
-
-
 def map_records(df: pd.DataFrame) -> list[dict]:
     today = today_iso()
     records = []
 
     for _, row in df.iterrows():
-        # Use installation name + commune as composite external ID (no stable numeric ID in ODRÉ)
-        name = _to_str(row.get('nomInstallation') or row.get('nom_installation'))
-        commune = _to_str(row.get('commune') or row.get('Commune'))
-        if not name:
+        # EIC code is the stable installation identifier in the aggregated register
+        eic = _to_str(row.get('codeeicresourceobject'))
+        name = _to_str(row.get('nominstallation'))
+        if not eic and not name:
             continue
-        external_id = f"FR-{name}-{commune or 'unknown'}".replace(' ', '_')[:200]
+        commune = _to_str(row.get('commune'))
+        external_id = (eic or f"FR-{name}-{commune or 'unknown'}").replace(' ', '_')[:200]
 
-        # Capacity in kW → MW
-        cap_kw = _to_float(row.get('puissanceInstalleeKW') or row.get('puissance_installee'))
+        # Capacity in kW → MW (puismaxinstallee column)
+        cap_kw = _to_float(row.get('puismaxinstallee'))
         capacity_mw = round(cap_kw / 1000, 4) if cap_kw else None
 
-        # Coordinates — may be combined 'lat,lon' string
-        lat, lon = None, None
-        coord_raw = row.get('coordonneesGPS') or row.get('coordonnees_gps')
-        if coord_raw and str(coord_raw).strip() not in ('', 'nan'):
-            lat, lon = parse_coords(coord_raw)
-        else:
-            lat = _to_float(row.get('latitude') or row.get('Latitude'))
-            lon = _to_float(row.get('longitude') or row.get('Longitude'))
-
+        # Aggregated register does not include coordinates
         records.append({
             'asset_class': ASSET_CLASS,
             'country_code': COUNTRY_CODE,
             'external_id': external_id,
             'name': name,
             'capacity_mw': capacity_mw,
-            'commissioning_date': _parse_date(
-                row.get('dateMiseEnService') or row.get('date_mise_en_service')
-            ),
-            'latitude': lat,
-            'longitude': lon,
+            'commissioning_date': _parse_date(row.get('datemiseenservice')),
+            'latitude': None,
+            'longitude': None,
             'source_type': SOURCE_TYPE,
             'source_date': today,
             'confidence': 'Medium',   # Site-level, not turbine-level
