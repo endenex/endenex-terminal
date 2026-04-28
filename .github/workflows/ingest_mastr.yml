@@ -10,8 +10,8 @@ on:
 jobs:
   ingest:
     runs-on: ubuntu-latest
-    # MaStR bulk download is large — allow up to 90 minutes
-    timeout-minutes: 90
+    # MaStR bulk XML download is large — allow up to 6 hours (GitHub Actions max)
+    timeout-minutes: 360
 
     steps:
       - name: Checkout
