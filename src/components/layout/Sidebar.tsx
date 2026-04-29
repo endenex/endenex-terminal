@@ -1,12 +1,12 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useClerk, useUser } from '@clerk/clerk-react'
-import { Activity, SlidersHorizontal, Calculator, LayoutDashboard, LogOut, ChevronRight } from 'lucide-react'
+import { Activity, GitBranch, Calculator, LayoutDashboard, LogOut, ChevronRight } from 'lucide-react'
 import { clsx } from 'clsx'
 
 const NAV_ITEMS = [
   { path: '/dashboard', label: 'Overview', icon: LayoutDashboard },
+  { path: '/repowering-pipeline', label: 'Repowering Pipeline', icon: GitBranch },
   { path: '/market-monitor', label: 'Market Monitor', icon: Activity },
-  { path: '/asset-screener', label: 'Asset Screener', icon: SlidersHorizontal },
   { path: '/workbench', label: 'Workbench', icon: Calculator },
 ]
 
