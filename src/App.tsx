@@ -10,6 +10,7 @@ import { OnboardingPage } from '@/pages/OnboardingPage'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { MarketMonitorPage } from '@/pages/MarketMonitorPage'
 import { RepoweringPipelinePage } from '@/pages/RepoweringPipelinePage'
+import { RecoveryValuePage } from '@/pages/RecoveryValuePage'
 import { WorkbenchPage } from '@/pages/WorkbenchPage'
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
@@ -76,6 +77,7 @@ function AppRoutes() {
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/market-monitor" element={<MarketMonitorPage />} />
             <Route path="/repowering-pipeline" element={<RepoweringPipelinePage />} />
+            <Route path="/recovery-value" element={<RecoveryValuePage />} />
             <Route path="/workbench" element={<WorkbenchPage />} />
           </Route>
         </Route>
