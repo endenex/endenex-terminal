@@ -55,6 +55,10 @@ export interface RepoweringProject {
   operator: string | null
   planning_reference: string | null
   location_description: string | null
+  turbine_make: string | null
+  turbine_model: string | null
+  hub_height_m: number | null
+  rotor_diameter_m: number | null
   source_url: string | null
   notes: string | null
   asset_id: string | null

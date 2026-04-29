@@ -161,6 +161,10 @@ function DetailPanel({
     ['Country', COUNTRIES.find(c => c.code === project.country_code)?.label ?? project.country_code],
     ['Capacity', formatMW(project.capacity_mw)],
     ['Turbines', project.turbine_count != null ? String(project.turbine_count) : '—'],
+    ['Turbine make', project.turbine_make ?? '—'],
+    ['Turbine model', project.turbine_model ?? '—'],
+    ['Hub height', project.hub_height_m != null ? `${project.hub_height_m} m` : '—'],
+    ['Rotor diameter', project.rotor_diameter_m != null ? `${project.rotor_diameter_m} m` : '—'],
     ['Developer', project.developer ?? '—'],
     ['Operator', project.operator ?? '—'],
     ['Planning ref', project.planning_reference ?? '—'],
@@ -379,10 +383,12 @@ export function RepoweringPipelinePage() {
                       ['Project', 'text-left pl-6 py-2.5 pr-3'],
                       ['Country', 'text-left py-2.5 pr-3'],
                       ['Capacity', 'text-right py-2.5 pr-3 font-mono'],
+                      ['Turbine', 'text-left py-2.5 pr-3'],
+                      ['Hub Ht (m)', 'text-right py-2.5 pr-3 font-mono'],
+                      ['Rotor (m)', 'text-right py-2.5 pr-3 font-mono'],
                       ['Developer', 'text-left py-2.5 pr-3'],
                       ['Stage', 'text-left py-2.5 pr-3'],
                       ['Stage Date', 'text-left py-2.5 pr-3 font-mono'],
-                      ['Source', 'text-left py-2.5 pr-3'],
                       ['Confidence', 'text-left py-2.5 pr-6'],
                     ].map(([label, cls]) => (
                       <th key={label} className={clsx('text-[10px] text-gray-400 font-medium tracking-wide uppercase', cls)}>
@@ -412,6 +418,17 @@ export function RepoweringPipelinePage() {
                       <td className="py-3 pr-3 text-right font-mono text-gray-700">
                         {formatMW(p.capacity_mw)}
                       </td>
+                      <td className="py-3 pr-3 text-gray-600 max-w-[160px] truncate font-mono text-xs">
+                        {p.turbine_make && p.turbine_model
+                          ? `${p.turbine_make} ${p.turbine_model}`
+                          : p.turbine_model ?? p.turbine_make ?? '—'}
+                      </td>
+                      <td className="py-3 pr-3 text-right font-mono text-gray-600">
+                        {p.hub_height_m != null ? p.hub_height_m : '—'}
+                      </td>
+                      <td className="py-3 pr-3 text-right font-mono text-gray-600">
+                        {p.rotor_diameter_m != null ? p.rotor_diameter_m : '—'}
+                      </td>
                       <td className="py-3 pr-3 text-gray-600 max-w-[160px] truncate">
                         {p.developer ?? '—'}
                       </td>
@@ -420,9 +437,6 @@ export function RepoweringPipelinePage() {
                       </td>
                       <td className="py-3 pr-3 font-mono text-gray-500">
                         {formatDate(p.stage_date)}
-                      </td>
-                      <td className="py-3 pr-3 font-mono text-gray-500">
-                        {p.source_type}
                       </td>
                       <td className="py-3 pr-6">
                         <span className={clsx('font-mono', CONFIDENCE_COLOUR[p.confidence])}>
