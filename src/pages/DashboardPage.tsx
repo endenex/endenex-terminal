@@ -1,166 +1,173 @@
 import { Link } from 'react-router-dom'
 import { useUser } from '@clerk/clerk-react'
-import { Activity, SlidersHorizontal, Calculator, ArrowRight } from 'lucide-react'
+import { TrendingUp, Wind, Layers, Leaf, Radio, BarChart2, ArrowRight } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
-import { Card } from '@/components/ui/Card'
-import { Badge } from '@/components/ui/Badge'
 
-const WORKSPACES = [
+const MODULES = [
   {
-    path: '/market-monitor',
-    icon: Activity,
-    name: 'Market Monitor',
-    description:
-      'Structured, source-attributed intelligence on repowering events, decommissioning campaigns, and contractor activity across onshore wind markets.',
-    features: [
-      'Planning applications, consents, construction starts, commissioning events',
-      'Decommissioning campaign activity and contractor mobilisations',
-      'Country and asset class filters',
-      'Source attribution and confidence level on every record',
-    ],
+    path: '/dci',
+    icon: TrendingUp,
+    label: 'DCI',
+    name: 'Decommissioning Cost Index',
+    description: 'Independent benchmark for wind turbine decommissioning costs. Spot values, confidence ranges, and full methodology documentation.',
+    status: 'In build',
+    statusClass: 'text-terminal-teal',
   },
   {
-    path: '/asset-screener',
-    icon: SlidersHorizontal,
-    name: 'Asset Screener',
-    description:
-      'Signal-stack classification of repowering candidates. Identify forward pipeline opportunities before public announcement.',
-    features: [
-      'Age, support scheme expiry, and planning signals',
-      'Grid connection value and owner behaviour classification',
-      'Overall classification: Watchlist / Candidate / Active / Confirmed',
-      'Watchlists and saved views',
-    ],
+    path: '/retirement',
+    icon: Wind,
+    label: 'RETIREMENT',
+    name: 'Asset Retirement Intelligence',
+    description: 'Repowering pipeline screener. Projects by stage, country, capacity, turbine specification, and developer — with source attribution on every record.',
+    status: 'Live',
+    statusClass: 'text-emerald-400',
   },
   {
-    path: '/workbench',
-    icon: Calculator,
-    name: 'Liability & Materials Workbench',
-    description:
-      'DCI benchmark methodology, portfolio liability estimation, and forward supply curves for recoverable materials from retiring clean energy assets.',
-    features: [
-      'DCI Spot — Europe (EUR/MW) and US (USD/MW)',
-      'Portfolio liability estimation: gross cost, NRO, net liability ranges',
-      'Board memo and lender / surety export formats',
-      'Recoverable materials outlook by geography and quarter',
-    ],
+    path: '/materials',
+    icon: Layers,
+    label: 'MATERIALS',
+    name: 'Recovery Value',
+    description: 'Scrap metal prices and net recovery offsets by material type and region. Steel, copper, aluminium, and rare earth — updated from published market indices.',
+    status: 'Live',
+    statusClass: 'text-emerald-400',
+  },
+  {
+    path: '/blades',
+    icon: Leaf,
+    label: 'BLADES',
+    name: 'Blade Waste Intelligence',
+    description: 'GRP and composite blade volumes by region and year. Recycling pathway availability, end-of-life cost modelling, and contractor directory.',
+    status: 'Planned',
+    statusClass: 'text-terminal-muted',
+  },
+  {
+    path: '/watch',
+    icon: Radio,
+    label: 'WATCH',
+    name: 'Market Watch',
+    description: 'Structured, source-attributed intelligence on repowering events, decommissioning campaigns, and contractor activity across onshore wind markets.',
+    status: 'Planned',
+    statusClass: 'text-terminal-muted',
+  },
+  {
+    path: '/portfolio',
+    icon: BarChart2,
+    label: 'PORTFOLIO',
+    name: 'Portfolio Analytics',
+    description: 'Portfolio liability exposure modelling, NRO attribution by site, sensitivity analysis, and export formats for boards, lenders, and sureties.',
+    status: 'Planned',
+    statusClass: 'text-terminal-muted',
   },
 ]
 
 export function DashboardPage() {
   const { user } = useUser()
-  const greeting = user?.firstName ? `Welcome, ${user.firstName}` : 'Welcome'
+  const firstName = user?.firstName ?? ''
 
   return (
-    <div className="flex flex-col flex-1">
+    <div className="flex flex-col flex-1 min-h-0 overflow-auto">
       <TopBar
-        title={greeting}
-        subtitle="Market intelligence for ageing clean energy assets"
+        title={firstName ? `Welcome, ${firstName}` : 'Welcome'}
+        subtitle="Institutional intelligence for ageing clean energy assets"
       />
 
-      <div className="p-6 flex-1">
-        {/* Build status */}
-        <div className="bg-terminal-navy border border-terminal-navy-border rounded-lg px-5 py-3 mb-6 flex items-center justify-between">
+      <div className="p-6 space-y-6">
+
+        {/* Status banner */}
+        <div className="flex items-center justify-between bg-terminal-surface border border-terminal-border rounded-lg px-5 py-3">
           <div className="flex items-center gap-3">
-            <div className="w-2 h-2 rounded-full bg-terminal-teal" />
-            <span className="text-white text-sm font-medium">
-              Phase 1 — Infrastructure complete
+            <div className="w-2 h-2 rounded-full bg-terminal-teal animate-pulse" />
+            <span className="text-terminal-text text-xs font-medium font-mono">
+              ENDENEX TERMINAL · PHASE 1
             </span>
           </div>
-          <div className="flex items-center gap-5 text-xs text-gray-500 font-mono">
-            <span>DCI Europe · DCI US</span>
+          <div className="flex items-center gap-5 text-[11px] text-terminal-muted font-mono">
+            <span>DE · GB · US · DK · FR · ES</span>
             <span>Onshore Wind</span>
-            <span>DE · GB · US</span>
           </div>
         </div>
 
-        {/* Workspace tiles */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-6">
-          {WORKSPACES.map(({ path, icon: Icon, name, description, features }) => (
+        {/* Module grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {MODULES.map(({ path, icon: Icon, label, name, description, status, statusClass }) => (
             <Link key={path} to={path} className="group block">
-              <Card className="h-full transition-shadow hover:shadow-md hover:border-gray-300">
-                <div className="p-5">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="w-9 h-9 bg-terminal-teal/10 rounded-lg flex items-center justify-center">
-                      <Icon size={17} className="text-terminal-teal" />
+              <div className="h-full border border-terminal-border rounded-lg bg-terminal-surface hover:border-terminal-teal/40 transition-colors p-5">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 bg-terminal-black border border-terminal-border rounded flex items-center justify-center">
+                      <Icon size={14} className="text-terminal-teal" />
                     </div>
-                    <Badge variant="phase1">Phase 1</Badge>
+                    <div>
+                      <div className="text-[10px] font-mono text-terminal-muted tracking-widest">{label}</div>
+                      <div className="text-xs font-semibold text-terminal-text leading-tight">{name}</div>
+                    </div>
                   </div>
-
-                  <h3 className="text-gray-900 font-semibold text-sm mb-2">{name}</h3>
-                  <p className="text-gray-500 text-xs leading-relaxed mb-4">{description}</p>
-
-                  <ul className="space-y-1.5 mb-5">
-                    {features.map((f) => (
-                      <li key={f} className="flex items-start gap-2 text-xs text-gray-600">
-                        <div className="w-1 h-1 rounded-full bg-terminal-teal flex-shrink-0 mt-1.5" />
-                        {f}
-                      </li>
-                    ))}
-                  </ul>
-
-                  <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-                    <span className="text-xs text-gray-400 font-mono">In development</span>
-                    <ArrowRight
-                      size={13}
-                      className="text-gray-300 group-hover:text-terminal-teal transition-colors"
-                    />
-                  </div>
+                  <span className={`text-[10px] font-mono ${statusClass}`}>{status}</span>
                 </div>
-              </Card>
+
+                <p className="text-xs text-terminal-muted leading-relaxed mb-4">{description}</p>
+
+                <div className="flex items-center justify-between pt-3 border-t border-terminal-border">
+                  <span className="text-[10px] font-mono text-terminal-muted">Open module</span>
+                  <ArrowRight
+                    size={12}
+                    className="text-terminal-muted group-hover:text-terminal-teal transition-colors"
+                  />
+                </div>
+              </div>
             </Link>
           ))}
         </div>
 
-        {/* Status cards */}
+        {/* Data coverage */}
         <div className="grid grid-cols-2 gap-4">
-          <Card>
-            <div className="p-5">
-              <div className="text-[10px] text-gray-400 font-mono tracking-widest uppercase mb-4">
-                Asset Registry Coverage — Phase 1
-              </div>
-              <div className="space-y-2.5">
-                {[
-                  { market: 'Germany', source: 'MaStR', note: 'Ingestion pipeline — Step 2' },
-                  { market: 'United Kingdom', source: 'REPD', note: 'Ingestion pipeline — Step 2' },
-                  { market: 'United States', source: 'USWTDB', note: 'Ingestion pipeline — Step 2' },
-                ].map(({ market, source, note }) => (
-                  <div key={market} className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="text-gray-900 font-medium">{market}</span>
-                      <span className="text-gray-400 font-mono">{source}</span>
-                    </div>
-                    <span className="text-gray-400">{note}</span>
-                  </div>
-                ))}
-              </div>
+          <div className="border border-terminal-border rounded-lg bg-terminal-surface p-5">
+            <div className="text-[10px] text-terminal-muted font-mono tracking-widest uppercase mb-4">
+              Asset Registry Coverage
             </div>
-          </Card>
+            <div className="space-y-2.5">
+              {[
+                { market: 'Germany',        source: 'MaStR',         turbines: '~30,000' },
+                { market: 'United Kingdom', source: 'REPD',          turbines: '~15,000' },
+                { market: 'United States',  source: 'USWTDB',        turbines: '~72,000' },
+                { market: 'Denmark',        source: 'Energistyrelsen', turbines: '~6,000' },
+                { market: 'France',         source: 'ODRÉ',          turbines: '~8,000'  },
+                { market: 'Spain',          source: 'GEM Tracker',   turbines: '~23,000' },
+              ].map(({ market, source, turbines }) => (
+                <div key={market} className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="text-terminal-text font-medium">{market}</span>
+                    <span className="text-terminal-muted font-mono text-[11px]">{source}</span>
+                  </div>
+                  <span className="text-terminal-muted font-mono text-[11px]">{turbines}</span>
+                </div>
+              ))}
+            </div>
+          </div>
 
-          <Card>
-            <div className="p-5">
-              <div className="text-[10px] text-gray-400 font-mono tracking-widest uppercase mb-4">
-                DCI Publication Status
-              </div>
-              <div className="space-y-2.5">
-                {[
-                  { index: 'DCI Europe · Spot', ccy: 'EUR / MW', status: 'Pending methodology' },
-                  { index: 'DCI US · Spot', ccy: 'USD / MW', status: 'Pending methodology' },
-                  { index: 'DCI Forward', ccy: '—', status: 'Phase 2' },
-                  { index: 'DCI Reserve', ccy: '—', status: 'Phase 2' },
-                ].map(({ index, ccy, status }) => (
-                  <div key={index} className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="text-gray-900 font-medium font-mono">{index}</span>
-                      <span className="text-gray-400">{ccy}</span>
-                    </div>
-                    <span className="text-gray-400">{status}</span>
-                  </div>
-                ))}
-              </div>
+          <div className="border border-terminal-border rounded-lg bg-terminal-surface p-5">
+            <div className="text-[10px] text-terminal-muted font-mono tracking-widest uppercase mb-4">
+              DCI Publication Status
             </div>
-          </Card>
+            <div className="space-y-2.5">
+              {[
+                { index: 'DCI Europe · Spot', ccy: 'EUR / MW', status: 'Methodology in build' },
+                { index: 'DCI US · Spot',     ccy: 'USD / MW', status: 'Methodology in build' },
+                { index: 'DCI Forward',        ccy: '—',        status: 'Phase 2' },
+                { index: 'DCI Reserve',        ccy: '—',        status: 'Phase 2' },
+              ].map(({ index, ccy, status }) => (
+                <div key={index} className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="text-terminal-text font-medium font-mono">{index}</span>
+                    <span className="text-terminal-muted text-[11px]">{ccy}</span>
+                  </div>
+                  <span className="text-terminal-muted text-[11px]">{status}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
+
       </div>
     </div>
   )

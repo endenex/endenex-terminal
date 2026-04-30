@@ -5,24 +5,25 @@ type BadgeVariant =
   | 'confirmed' | 'active' | 'candidate' | 'watchlist'
   | 'phase1' | 'phase2' | 'phase3' | 'phase4'
   | 'observed' | 'inferred' | 'modelled'
-  | 'neutral'
+  | 'neutral' | 'coming-soon'
 
 const VARIANT_STYLES: Record<BadgeVariant, string> = {
-  high: 'bg-green-100 text-green-800 border-green-200',
-  medium: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-  low: 'bg-red-100 text-red-800 border-red-200',
-  confirmed: 'bg-teal-100 text-teal-800 border-teal-200',
-  active: 'bg-blue-100 text-blue-800 border-blue-200',
-  candidate: 'bg-purple-100 text-purple-800 border-purple-200',
-  watchlist: 'bg-gray-100 text-gray-700 border-gray-200',
-  phase1: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  phase2: 'bg-gray-100 text-gray-500 border-gray-200',
-  phase3: 'bg-gray-100 text-gray-400 border-gray-200',
-  phase4: 'bg-gray-100 text-gray-400 border-gray-200',
-  observed: 'bg-blue-50 text-blue-700 border-blue-100',
-  inferred: 'bg-yellow-50 text-yellow-700 border-yellow-100',
-  modelled: 'bg-purple-50 text-purple-700 border-purple-100',
-  neutral: 'bg-gray-100 text-gray-600 border-gray-200',
+  high:        'bg-emerald-900/30 text-emerald-400 border-emerald-700/50',
+  medium:      'bg-amber-900/30 text-amber-400 border-amber-700/50',
+  low:         'bg-red-900/30 text-red-400 border-red-700/50',
+  confirmed:   'bg-teal-900/30 text-teal-400 border-teal-700/50',
+  active:      'bg-blue-900/30 text-blue-400 border-blue-700/50',
+  candidate:   'bg-violet-900/30 text-violet-400 border-violet-700/50',
+  watchlist:   'bg-terminal-border text-terminal-muted border-terminal-border',
+  phase1:      'bg-emerald-900/30 text-emerald-400 border-emerald-700/50',
+  phase2:      'bg-terminal-border text-terminal-muted border-terminal-border',
+  phase3:      'bg-terminal-border text-terminal-muted border-terminal-border',
+  phase4:      'bg-terminal-border text-terminal-muted border-terminal-border',
+  observed:    'bg-blue-900/30 text-blue-400 border-blue-700/50',
+  inferred:    'bg-amber-900/30 text-amber-400 border-amber-700/50',
+  modelled:    'bg-violet-900/30 text-violet-400 border-violet-700/50',
+  neutral:     'bg-terminal-border text-terminal-muted border-terminal-border',
+  'coming-soon': 'bg-terminal-border text-terminal-muted border-terminal-border',
 }
 
 interface BadgeProps {

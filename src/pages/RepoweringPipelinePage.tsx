@@ -26,9 +26,9 @@ const STAGE_ORDER: (RepoweringStage | 'all')[] = [
 ]
 
 const CONFIDENCE_COLOUR: Record<string, string> = {
-  High: 'text-emerald-600',
-  Medium: 'text-amber-600',
-  Low: 'text-red-500',
+  High: 'text-emerald-400',
+  Medium: 'text-amber-400',
+  Low: 'text-red-400',
 }
 
 const COUNTRIES = [
@@ -64,11 +64,11 @@ function formatMW(val: number | null): string {
 
 function StagePill({ stage }: { stage: RepoweringStage }) {
   const colours: Record<RepoweringStage, string> = {
-    announced: 'bg-sky-50 text-sky-700 border-sky-200',
-    application_submitted: 'bg-violet-50 text-violet-700 border-violet-200',
-    application_approved: 'bg-blue-50 text-blue-700 border-blue-200',
-    permitted: 'bg-teal-50 text-teal-700 border-teal-200',
-    ongoing: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    announced: 'bg-sky-900/30 text-sky-400 border-sky-700/50',
+    application_submitted: 'bg-violet-900/30 text-violet-400 border-violet-700/50',
+    application_approved: 'bg-blue-900/30 text-blue-400 border-blue-700/50',
+    permitted: 'bg-teal-900/30 text-teal-400 border-teal-700/50',
+    ongoing: 'bg-emerald-900/30 text-emerald-400 border-emerald-700/50',
   }
   return (
     <span className={clsx(
@@ -107,35 +107,35 @@ function CountryDropdown({
     <div className="relative">
       <button
         onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded text-sm text-gray-700 hover:border-gray-300 transition-colors min-w-[160px]"
+        className="flex items-center gap-2 px-3 py-1.5 bg-terminal-surface border border-terminal-border rounded text-xs text-terminal-muted hover:border-terminal-teal hover:text-terminal-text transition-colors min-w-[160px] font-mono"
       >
         <span className="flex-1 text-left">{label}</span>
-        <ChevronDown size={13} className="text-gray-400 flex-shrink-0" />
+        <ChevronDown size={13} className="text-terminal-muted flex-shrink-0" />
       </button>
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute top-full left-0 mt-1 z-20 bg-white border border-gray-200 rounded shadow-lg min-w-[180px] py-1">
+          <div className="absolute top-full left-0 mt-1 z-20 bg-terminal-surface border border-terminal-border rounded shadow-xl min-w-[180px] py-1">
             {COUNTRIES.map(({ code, label: cLabel }) => (
               <label
                 key={code}
-                className="flex items-center gap-2.5 px-3 py-1.5 hover:bg-gray-50 cursor-pointer"
+                className="flex items-center gap-2.5 px-3 py-1.5 hover:bg-terminal-black cursor-pointer"
               >
                 <input
                   type="checkbox"
                   checked={selected.includes(code)}
                   onChange={() => toggle(code)}
-                  className="accent-teal-600 w-3.5 h-3.5"
+                  className="accent-teal-500 w-3.5 h-3.5"
                 />
-                <span className="text-sm text-gray-700">{cLabel}</span>
-                <span className="ml-auto text-[10px] text-gray-400 font-mono">{code}</span>
+                <span className="text-xs text-terminal-muted">{cLabel}</span>
+                <span className="ml-auto text-[10px] text-terminal-muted font-mono">{code}</span>
               </label>
             ))}
             {selected.length > 0 && (
-              <div className="border-t border-gray-100 mt-1 pt-1 px-3 pb-1">
+              <div className="border-t border-terminal-border mt-1 pt-1 px-3 pb-1">
                 <button
                   onClick={() => onChange([])}
-                  className="text-xs text-gray-400 hover:text-gray-600"
+                  className="text-xs text-terminal-muted hover:text-terminal-text"
                 >
                   Clear
                 </button>
@@ -180,11 +180,11 @@ function DetailPanel({
   ]
 
   return (
-    <div className="w-80 flex-shrink-0 border-l border-gray-200 bg-white flex flex-col">
+    <div className="w-80 flex-shrink-0 border-l border-terminal-border bg-terminal-surface flex flex-col">
       {/* Header */}
-      <div className="flex items-start justify-between px-5 py-4 border-b border-gray-100">
+      <div className="flex items-start justify-between px-5 py-4 border-b border-terminal-border">
         <div className="flex-1 min-w-0 pr-3">
-          <div className="text-sm font-semibold text-gray-900 leading-snug">
+          <div className="text-sm font-semibold text-terminal-text leading-snug">
             {project.project_name}
           </div>
           <div className="mt-1.5">
@@ -193,7 +193,7 @@ function DetailPanel({
         </div>
         <button
           onClick={onClose}
-          className="text-gray-400 hover:text-gray-600 flex-shrink-0 mt-0.5"
+          className="text-terminal-muted hover:text-terminal-text flex-shrink-0 mt-0.5"
         >
           <X size={15} />
         </button>
@@ -202,43 +202,43 @@ function DetailPanel({
       {/* Project details */}
       <div className="flex-1 overflow-y-auto">
         <div className="px-5 py-4">
-          <div className="text-[10px] text-gray-400 font-mono tracking-widest uppercase mb-3">
+          <div className="text-[10px] text-terminal-muted font-mono tracking-widest uppercase mb-3">
             Project Details
           </div>
           <div className="space-y-2.5">
             {rows.map(([label, value]) => (
               <div key={label} className="flex justify-between gap-3 text-xs">
-                <span className="text-gray-400 flex-shrink-0">{label}</span>
-                <span className="text-gray-900 font-mono text-right">{value}</span>
+                <span className="text-terminal-muted flex-shrink-0">{label}</span>
+                <span className="text-terminal-text font-mono text-right">{value}</span>
               </div>
             ))}
           </div>
         </div>
 
         {project.notes && (
-          <div className="px-5 py-3 border-t border-gray-100">
-            <div className="text-[10px] text-gray-400 font-mono tracking-widest uppercase mb-2">
+          <div className="px-5 py-3 border-t border-terminal-border">
+            <div className="text-[10px] text-terminal-muted font-mono tracking-widest uppercase mb-2">
               Notes
             </div>
-            <p className="text-xs text-gray-600 leading-relaxed">{project.notes}</p>
+            <p className="text-xs text-terminal-muted leading-relaxed">{project.notes}</p>
           </div>
         )}
 
         {/* Source metadata */}
-        <div className="px-5 py-4 border-t border-gray-100">
-          <div className="text-[10px] text-gray-400 font-mono tracking-widest uppercase mb-3">
+        <div className="px-5 py-4 border-t border-terminal-border">
+          <div className="text-[10px] text-terminal-muted font-mono tracking-widest uppercase mb-3">
             Source Metadata
           </div>
           <div className="space-y-2.5">
             {metaRows.map(([label, value]) => (
               <div key={label} className="flex justify-between gap-3 text-xs">
-                <span className="text-gray-400 flex-shrink-0">{label}</span>
+                <span className="text-terminal-muted flex-shrink-0">{label}</span>
                 <span
                   className={clsx(
                     'font-mono text-right',
                     label === 'Confidence'
-                      ? CONFIDENCE_COLOUR[value] ?? 'text-gray-900'
-                      : 'text-gray-900'
+                      ? CONFIDENCE_COLOUR[value] ?? 'text-terminal-text'
+                      : 'text-terminal-text'
                   )}
                 >
                   {value}
@@ -269,9 +269,9 @@ function DetailPanel({
 function EmptyState({ stage, countries }: { stage: RepoweringStage | 'all'; countries: string[] }) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center py-24 text-center">
-      <div className="text-gray-300 text-4xl mb-4">◎</div>
-      <div className="text-sm font-medium text-gray-500 mb-1">No projects found</div>
-      <div className="text-xs text-gray-400 max-w-xs leading-relaxed">
+      <div className="text-terminal-border text-4xl mb-4">◎</div>
+      <div className="text-sm font-medium text-terminal-muted mb-1">No projects found</div>
+      <div className="text-xs text-terminal-muted max-w-xs leading-relaxed">
         {stage !== 'all'
           ? `No ${STAGE_LABELS[stage].toLowerCase()} projects`
           : 'No repowering projects'}
@@ -337,17 +337,17 @@ export function RepoweringPipelinePage() {
       />
 
       {/* Stage tabs */}
-      <div className="border-b border-gray-200 bg-white px-6">
+      <div className="border-b border-terminal-border bg-terminal-surface px-6">
         <div className="flex items-center gap-0">
           {STAGE_ORDER.map(s => (
             <button
               key={s}
               onClick={() => setStage(s)}
               className={clsx(
-                'px-4 py-3 text-xs font-medium border-b-2 transition-colors whitespace-nowrap',
+                'px-4 py-3 text-xs font-mono font-medium border-b-2 transition-colors whitespace-nowrap',
                 stage === s
                   ? 'border-terminal-teal text-terminal-teal'
-                  : 'border-transparent text-gray-500 hover:text-gray-800'
+                  : 'border-transparent text-terminal-muted hover:text-terminal-text'
               )}
             >
               {STAGE_LABELS[s]}
@@ -357,9 +357,9 @@ export function RepoweringPipelinePage() {
       </div>
 
       {/* Filter bar */}
-      <div className="bg-white border-b border-gray-200 px-6 py-2.5 flex items-center gap-4">
+      <div className="bg-terminal-black border-b border-terminal-border px-6 py-2.5 flex items-center gap-4">
         <CountryDropdown selected={countries} onChange={setCountries} />
-        <div className="ml-auto text-xs text-gray-400 font-mono">
+        <div className="ml-auto text-xs text-terminal-muted font-mono">
           {loading ? '—' : `${total.toLocaleString()} project${total !== 1 ? 's' : ''}`}
         </div>
       </div>
@@ -378,7 +378,7 @@ export function RepoweringPipelinePage() {
             <>
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50">
+                  <tr className="border-b border-terminal-border bg-terminal-surface">
                     {[
                       ['Project', 'text-left pl-6 py-2.5 pr-3'],
                       ['Country', 'text-left py-2.5 pr-3'],
@@ -391,7 +391,7 @@ export function RepoweringPipelinePage() {
                       ['Stage Date', 'text-left py-2.5 pr-3 font-mono'],
                       ['Confidence', 'text-left py-2.5 pr-6'],
                     ].map(([label, cls]) => (
-                      <th key={label} className={clsx('text-[10px] text-gray-400 font-medium tracking-wide uppercase', cls)}>
+                      <th key={label} className={clsx('text-[10px] text-terminal-muted font-medium tracking-wide uppercase', cls)}>
                         {label}
                       </th>
                     ))}
@@ -403,39 +403,39 @@ export function RepoweringPipelinePage() {
                       key={p.id}
                       onClick={() => setSelected(sel => sel?.id === p.id ? null : p)}
                       className={clsx(
-                        'border-b border-gray-100 cursor-pointer transition-colors',
+                        'border-b border-terminal-border cursor-pointer transition-colors',
                         selected?.id === p.id
-                          ? 'bg-teal-50'
-                          : 'hover:bg-gray-50'
+                          ? 'bg-terminal-teal/10'
+                          : 'hover:bg-terminal-surface'
                       )}
                     >
-                      <td className="pl-6 py-3 pr-3 text-gray-900 font-medium max-w-[220px] truncate">
+                      <td className="pl-6 py-3 pr-3 text-terminal-text font-medium max-w-[220px] truncate">
                         {p.project_name}
                       </td>
-                      <td className="py-3 pr-3 text-gray-600">
+                      <td className="py-3 pr-3 text-terminal-muted">
                         {COUNTRIES.find(c => c.code === p.country_code)?.label ?? p.country_code}
                       </td>
-                      <td className="py-3 pr-3 text-right font-mono text-gray-700">
+                      <td className="py-3 pr-3 text-right font-mono text-terminal-text">
                         {formatMW(p.capacity_mw)}
                       </td>
-                      <td className="py-3 pr-3 text-gray-600 max-w-[160px] truncate font-mono text-xs">
+                      <td className="py-3 pr-3 text-terminal-muted max-w-[160px] truncate font-mono text-xs">
                         {p.turbine_make && p.turbine_model
                           ? `${p.turbine_make} ${p.turbine_model}`
                           : p.turbine_model ?? p.turbine_make ?? '—'}
                       </td>
-                      <td className="py-3 pr-3 text-right font-mono text-gray-600">
+                      <td className="py-3 pr-3 text-right font-mono text-terminal-muted">
                         {p.hub_height_m != null ? p.hub_height_m : '—'}
                       </td>
-                      <td className="py-3 pr-3 text-right font-mono text-gray-600">
+                      <td className="py-3 pr-3 text-right font-mono text-terminal-muted">
                         {p.rotor_diameter_m != null ? p.rotor_diameter_m : '—'}
                       </td>
-                      <td className="py-3 pr-3 text-gray-600 max-w-[160px] truncate">
+                      <td className="py-3 pr-3 text-terminal-muted max-w-[160px] truncate">
                         {p.developer ?? '—'}
                       </td>
                       <td className="py-3 pr-3">
                         <StagePill stage={p.stage} />
                       </td>
-                      <td className="py-3 pr-3 font-mono text-gray-500">
+                      <td className="py-3 pr-3 font-mono text-terminal-muted">
                         {formatDate(p.stage_date)}
                       </td>
                       <td className="py-3 pr-6">
@@ -450,25 +450,25 @@ export function RepoweringPipelinePage() {
 
               {/* Pagination */}
               {totalPages > 1 && (
-                <div className="flex items-center justify-between px-6 py-3 border-t border-gray-100 bg-white">
-                  <span className="text-xs text-gray-400 font-mono">
+                <div className="flex items-center justify-between px-6 py-3 border-t border-terminal-border bg-terminal-surface">
+                  <span className="text-xs text-terminal-muted font-mono">
                     {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total.toLocaleString()}
                   </span>
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => setPage(p => Math.max(0, p - 1))}
                       disabled={page === 0}
-                      className="p-1.5 rounded text-gray-400 hover:text-gray-700 disabled:opacity-30 transition-colors"
+                      className="p-1.5 rounded text-terminal-muted hover:text-terminal-text disabled:opacity-30 transition-colors"
                     >
                       <ChevronLeft size={14} />
                     </button>
-                    <span className="text-xs text-gray-500 font-mono px-2">
+                    <span className="text-xs text-terminal-muted font-mono px-2">
                       {page + 1} / {totalPages}
                     </span>
                     <button
                       onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
                       disabled={page === totalPages - 1}
-                      className="p-1.5 rounded text-gray-400 hover:text-gray-700 disabled:opacity-30 transition-colors"
+                      className="p-1.5 rounded text-terminal-muted hover:text-terminal-text disabled:opacity-30 transition-colors"
                     >
                       <ChevronRight size={14} />
                     </button>

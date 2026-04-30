@@ -8,10 +8,12 @@ import { SignInPage } from '@/pages/SignInPage'
 import { SignUpPage } from '@/pages/SignUpPage'
 import { OnboardingPage } from '@/pages/OnboardingPage'
 import { DashboardPage } from '@/pages/DashboardPage'
-import { MarketMonitorPage } from '@/pages/MarketMonitorPage'
-import { RepoweringPipelinePage } from '@/pages/RepoweringPipelinePage'
-import { RecoveryValuePage } from '@/pages/RecoveryValuePage'
-import { WorkbenchPage } from '@/pages/WorkbenchPage'
+import { DciPage } from '@/pages/DciPage'
+import { RetirementPage } from '@/pages/RetirementPage'
+import { MaterialsPage } from '@/pages/MaterialsPage'
+import { BladesPage } from '@/pages/BladesPage'
+import { WatchPage } from '@/pages/WatchPage'
+import { PortfolioPage } from '@/pages/PortfolioPage'
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
 
@@ -47,23 +49,9 @@ function OnboardingGuard() {
   return <Outlet />
 }
 
-function RootRedirect() {
-  return (
-    <>
-      <SignedIn>
-        <Navigate to="/dashboard" replace />
-      </SignedIn>
-      <SignedOut>
-        <Navigate to="/sign-in" replace />
-      </SignedOut>
-    </>
-  )
-}
-
 function AppRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<RootRedirect />} />
       <Route path="/sign-in/*" element={<SignInPage />} />
       <Route path="/sign-up/*" element={<SignUpPage />} />
 
@@ -74,16 +62,25 @@ function AppRoutes() {
         {/* Protected: auth + onboarding required */}
         <Route element={<OnboardingGuard />}>
           <Route element={<AppShell />}>
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/market-monitor" element={<MarketMonitorPage />} />
-            <Route path="/repowering-pipeline" element={<RepoweringPipelinePage />} />
-            <Route path="/recovery-value" element={<RecoveryValuePage />} />
-            <Route path="/workbench" element={<WorkbenchPage />} />
+            <Route path="/" element={<DashboardPage />} />
+            <Route path="/dci" element={<DciPage />} />
+            <Route path="/retirement" element={<RetirementPage />} />
+            <Route path="/materials" element={<MaterialsPage />} />
+            <Route path="/blades" element={<BladesPage />} />
+            <Route path="/watch" element={<WatchPage />} />
+            <Route path="/portfolio" element={<PortfolioPage />} />
+
+            {/* Legacy redirects */}
+            <Route path="/dashboard" element={<Navigate to="/" replace />} />
+            <Route path="/repowering-pipeline" element={<Navigate to="/retirement" replace />} />
+            <Route path="/recovery-value" element={<Navigate to="/materials" replace />} />
+            <Route path="/market-monitor" element={<Navigate to="/watch" replace />} />
+            <Route path="/workbench" element={<Navigate to="/dci" replace />} />
           </Route>
         </Route>
       </Route>
 
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<Navigate to="/sign-in" replace />} />
     </Routes>
   )
 }

@@ -73,9 +73,9 @@ const MATERIAL_NOTES: Record<string, string> = {
 }
 
 const CONFIDENCE_COLOUR: Record<string, string> = {
-  High:   'text-emerald-600',
-  Medium: 'text-amber-600',
-  Low:    'text-red-500',
+  High:   'text-emerald-400',
+  Medium: 'text-amber-400',
+  Low:    'text-red-400',
 }
 
 const CURRENCY_SYMBOL: Record<Currency, string> = {
@@ -109,7 +109,7 @@ function fmtRange(low: number | null, mid: number | null, high: number | null, s
 function EmptySection({ label }: { label: string }) {
   return (
     <tr>
-      <td colSpan={6} className="px-6 py-8 text-center text-xs text-gray-400">
+      <td colSpan={6} className="px-6 py-8 text-center text-xs text-terminal-muted">
         No {label} data for this region yet. Prices are entered manually — check back after the next update.
       </td>
     </tr>
@@ -178,7 +178,7 @@ export function RecoveryValuePage() {
       />
 
       {/* Region tabs */}
-      <div className="border-b border-gray-200 bg-white px-6">
+      <div className="border-b border-terminal-border bg-terminal-surface px-6">
         <div className="flex items-center gap-0">
           {REGIONS.map(r => (
             <button
@@ -188,7 +188,7 @@ export function RecoveryValuePage() {
                 'px-5 py-3 text-xs font-medium border-b-2 transition-colors',
                 region === r.code
                   ? 'border-terminal-teal text-terminal-teal'
-                  : 'border-transparent text-gray-500 hover:text-gray-800'
+                  : 'border-transparent text-terminal-muted hover:text-gray-800'
               )}
             >
               {r.label}
@@ -204,27 +204,27 @@ export function RecoveryValuePage() {
         <div>
           <div className="flex items-center justify-between mb-3">
             <div>
-              <h2 className="text-sm font-semibold text-gray-900">Scrap Metal Prices</h2>
-              <p className="text-xs text-gray-400 mt-0.5">
+              <h2 className="text-sm font-semibold text-terminal-text">Scrap Metal Prices</h2>
+              <p className="text-xs text-terminal-muted mt-0.5">
                 Published market prices — source attributed. Updated daily.
               </p>
             </div>
           </div>
 
-          <div className="border border-gray-200 rounded-lg overflow-hidden">
+          <div className="border border-terminal-border rounded-lg overflow-hidden">
             <table className="w-full text-xs">
               <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
+                <tr className="bg-terminal-black border-b border-terminal-border">
                   {[
                     ['Material', 'text-left pl-5 py-2.5 pr-3'],
-                    ['Component', 'text-left py-2.5 pr-3 text-gray-400'],
+                    ['Component', 'text-left py-2.5 pr-3 text-terminal-muted'],
                     ['Price / tonne', 'text-right py-2.5 pr-3 font-mono'],
                     ['Source', 'text-left py-2.5 pr-3'],
                     ['Price Date', 'text-left py-2.5 pr-3 font-mono'],
                     ['Confidence', 'text-left py-2.5 pr-5'],
                   ].map(([label, cls]) => (
                     <th key={label} className={clsx(
-                      'text-[10px] text-gray-400 font-medium tracking-wide uppercase', cls
+                      'text-[10px] text-terminal-muted font-medium tracking-wide uppercase', cls
                     )}>
                       {label}
                     </th>
@@ -234,7 +234,7 @@ export function RecoveryValuePage() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={6} className="px-5 py-8 text-center text-xs text-gray-400 font-mono">
+                    <td colSpan={6} className="px-5 py-8 text-center text-xs text-terminal-muted font-mono">
                       Loading…
                     </td>
                   </tr>
@@ -244,20 +244,20 @@ export function RecoveryValuePage() {
                   MATERIAL_ORDER.map(mat => {
                     const p = priceMap[mat]
                     return (
-                      <tr key={mat} className="border-b border-gray-100 last:border-0">
-                        <td className="pl-5 py-3 pr-3 font-medium text-gray-900">
+                      <tr key={mat} className="border-b border-terminal-border last:border-0">
+                        <td className="pl-5 py-3 pr-3 font-medium text-terminal-text">
                           {MATERIAL_LABELS[mat]}
                         </td>
-                        <td className="py-3 pr-3 text-gray-400">
+                        <td className="py-3 pr-3 text-terminal-muted">
                           {MATERIAL_NOTES[mat]}
                         </td>
-                        <td className="py-3 pr-3 text-right font-mono text-gray-900 font-medium">
+                        <td className="py-3 pr-3 text-right font-mono text-terminal-text font-medium">
                           {p ? fmt(p.price_per_tonne, symbol) : '—'}
                         </td>
-                        <td className="py-3 pr-3 text-gray-500 font-mono">
+                        <td className="py-3 pr-3 text-terminal-muted font-mono">
                           {p?.source_name ?? '—'}
                         </td>
-                        <td className="py-3 pr-3 text-gray-500 font-mono">
+                        <td className="py-3 pr-3 text-terminal-muted font-mono">
                           {p ? fmtDate(p.price_date) : '—'}
                         </td>
                         <td className="py-3 pr-5">
@@ -279,17 +279,17 @@ export function RecoveryValuePage() {
         {/* ── NRO Estimates ────────────────────────────────────────── */}
         <div>
           <div className="mb-3">
-            <h2 className="text-sm font-semibold text-gray-900">Net Recovery Offset (NRO)</h2>
-            <p className="text-xs text-gray-400 mt-0.5">
+            <h2 className="text-sm font-semibold text-terminal-text">Net Recovery Offset (NRO)</h2>
+            <p className="text-xs text-terminal-muted mt-0.5">
               Net recovery value after merchant costs. Shown as a range (low – high).
               Merchant margin is not disclosed.
             </p>
           </div>
 
-          <div className="border border-gray-200 rounded-lg overflow-hidden">
+          <div className="border border-terminal-border rounded-lg overflow-hidden">
             <table className="w-full text-xs">
               <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
+                <tr className="bg-terminal-black border-b border-terminal-border">
                   {[
                     ['Material', 'text-left pl-5 py-2.5 pr-3'],
                     ['Net / tonne', 'text-right py-2.5 pr-3 font-mono'],
@@ -299,7 +299,7 @@ export function RecoveryValuePage() {
                     ['Last Reviewed', 'text-left py-2.5 pr-5 font-mono'],
                   ].map(([label, cls]) => (
                     <th key={label} className={clsx(
-                      'text-[10px] text-gray-400 font-medium tracking-wide uppercase', cls
+                      'text-[10px] text-terminal-muted font-medium tracking-wide uppercase', cls
                     )}>
                       {label}
                     </th>
@@ -309,7 +309,7 @@ export function RecoveryValuePage() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={6} className="px-5 py-8 text-center text-xs text-gray-400 font-mono">
+                    <td colSpan={6} className="px-5 py-8 text-center text-xs text-terminal-muted font-mono">
                       Loading…
                     </td>
                   </tr>
@@ -319,17 +319,17 @@ export function RecoveryValuePage() {
                   MATERIAL_ORDER.map(mat => {
                     const n = nroMap[mat]
                     return (
-                      <tr key={mat} className="border-b border-gray-100 last:border-0">
-                        <td className="pl-5 py-3 pr-3 font-medium text-gray-900">
+                      <tr key={mat} className="border-b border-terminal-border last:border-0">
+                        <td className="pl-5 py-3 pr-3 font-medium text-terminal-text">
                           {MATERIAL_LABELS[mat]}
                         </td>
-                        <td className="py-3 pr-3 text-right font-mono text-gray-900">
+                        <td className="py-3 pr-3 text-right font-mono text-terminal-text">
                           {n ? fmtRange(n.net_per_tonne_low, n.net_per_tonne_mid, n.net_per_tonne_high, symbol) : '—'}
                         </td>
                         <td className="py-3 pr-3 text-right font-mono text-gray-700">
                           {n ? fmtRange(n.net_per_mw_low, n.net_per_mw_mid, n.net_per_mw_high, symbol) : '—'}
                         </td>
-                        <td className="py-3 pr-3 text-gray-500 font-mono">
+                        <td className="py-3 pr-3 text-terminal-muted font-mono">
                           {n ? fmtDate(n.reference_date) : '—'}
                         </td>
                         <td className="py-3 pr-3">
@@ -339,7 +339,7 @@ export function RecoveryValuePage() {
                             </span>
                           ) : '—'}
                         </td>
-                        <td className="py-3 pr-5 text-gray-500 font-mono">
+                        <td className="py-3 pr-5 text-terminal-muted font-mono">
                           {n ? fmtDate(n.last_reviewed) : '—'}
                         </td>
                       </tr>
@@ -352,11 +352,11 @@ export function RecoveryValuePage() {
         </div>
 
         {/* Methodology note */}
-        <div className="bg-gray-50 border border-gray-200 rounded-lg px-5 py-4">
-          <div className="text-[10px] text-gray-400 font-mono tracking-widest uppercase mb-2">
+        <div className="bg-terminal-black border border-terminal-border rounded-lg px-5 py-4">
+          <div className="text-[10px] text-terminal-muted font-mono tracking-widest uppercase mb-2">
             Methodology
           </div>
-          <p className="text-xs text-gray-500 leading-relaxed">
+          <p className="text-xs text-terminal-muted leading-relaxed">
             Material volumes sourced from OEM Life Cycle Assessment (LCA) documents.
             Scrap prices sourced from published market indices (LME, Fastmarkets, AMM).
             Net Recovery Offset (NRO) = scrap price minus merchant handling cost.
