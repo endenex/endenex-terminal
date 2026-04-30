@@ -31,6 +31,8 @@ interface WatchEvent {
   source_url: string | null
   confidence: 'High' | 'Medium' | 'Low'
   last_reviewed: string
+  source_count: number
+  is_duplicate: boolean
   watch_sources: WatchSource | null
 }
 
@@ -234,7 +236,9 @@ function DetailPanel({ event, onClose }: { event: WatchEvent; onClose: () => voi
 
         {(event.watch_sources || event.source_url) && (
           <div>
-            <div className="text-[10px] font-mono text-terminal-muted uppercase tracking-widest mb-2">Source</div>
+            <div className="text-[10px] font-mono text-terminal-muted uppercase tracking-widest mb-2">
+              {event.source_count > 1 ? `Source · ${event.source_count} outlets covered this` : 'Source'}
+            </div>
             <div className="text-xs text-terminal-text">{event.watch_sources?.name ?? '—'}</div>
             {sourceLink && (
               <a
@@ -279,6 +283,7 @@ export function WatchPage() {
         let q = supabase
           .from('watch_events')
           .select('*, watch_sources(id, name, url)')
+          .eq('is_duplicate', false)
           .order('event_date', { ascending: false })
 
         if (category !== 'all') q = q.eq('category', category)
@@ -416,8 +421,15 @@ export function WatchPage() {
                         <td className="py-3 pr-3 text-terminal-muted truncate max-w-[140px]">
                           {entity ?? '—'}
                         </td>
-                        <td className="py-3 pr-3 font-mono text-terminal-muted truncate">
-                          {ev.watch_sources?.name ?? '—'}
+                        <td className="py-3 pr-3 font-mono text-terminal-muted">
+                          <div className="flex items-center gap-1.5">
+                            <span className="truncate">{ev.watch_sources?.name ?? '—'}</span>
+                            {ev.source_count > 1 && (
+                              <span className="flex-shrink-0 text-[9px] font-mono bg-terminal-border text-terminal-muted rounded px-1 py-0.5">
+                                +{ev.source_count - 1}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="py-3 pr-5">
                           <span className={clsx('font-mono', CONFIDENCE_COLOUR[ev.confidence])}>
