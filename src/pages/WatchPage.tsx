@@ -356,92 +356,82 @@ export function WatchPage() {
         {/* Table */}
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           <div className="flex-1 overflow-auto">
-            <table className="w-full text-xs">
-              <thead className="sticky top-0 z-10">
-                <tr className="bg-terminal-black border-b border-terminal-border">
-                  {[
-                    ['Date',       'text-left pl-5 py-2.5 pr-3 font-mono w-28'],
-                    ['Category',   'text-left py-2.5 pr-3 w-28'],
-                    ['Type',       'text-left py-2.5 pr-3'],
-                    ['Scope',      'text-left py-2.5 pr-3 font-mono w-16'],
-                    ['Headline',   'text-left py-2.5 pr-3'],
-                    ['Entity',     'text-left py-2.5 pr-3 w-36'],
-                    ['Source',     'text-left py-2.5 pr-3 font-mono w-32'],
-                    ['Confidence', 'text-left py-2.5 pr-5 w-20'],
-                  ].map(([label, cls]) => (
-                    <th
-                      key={label}
-                      className={clsx('text-[10px] text-terminal-muted font-medium tracking-wide uppercase', cls)}
-                    >
-                      {label}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr>
-                    <td colSpan={8} className="px-5 py-10 text-center text-xs text-terminal-muted font-mono">
-                      Loading…
-                    </td>
-                  </tr>
-                ) : paged.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="px-5 py-10 text-center text-xs text-terminal-muted">
-                      No events found. Events are curated manually — check back after the next update.
-                    </td>
-                  </tr>
-                ) : (
-                  paged.map(ev => {
-                    const style  = CATEGORY_STYLE[ev.category]
-                    const entity = ev.site_name || ev.company_name || ev.developer
-                    const isSelected = selected?.id === ev.id
-                    return (
-                      <tr
-                        key={ev.id}
-                        onClick={() => setSelected(s => s?.id === ev.id ? null : ev)}
-                        className={clsx(
-                          'border-b border-terminal-border cursor-pointer transition-colors',
-                          isSelected ? 'bg-terminal-teal/5' : 'hover:bg-terminal-surface'
-                        )}
-                      >
-                        <td className="pl-5 py-3 pr-3 font-mono text-terminal-muted whitespace-nowrap">
-                          {fmtDate(ev.event_date)}
-                        </td>
-                        <td className="py-3 pr-3">
-                          <span className={clsx('text-[10px] font-mono px-1.5 py-0.5 rounded', style.pill)}>
-                            {CATEGORY_LABEL[ev.category]}
-                          </span>
-                        </td>
-                        <td className="py-3 pr-3 text-terminal-muted">{ev.event_type}</td>
-                        <td className="py-3 pr-3 font-mono text-terminal-muted">{ev.scope}</td>
-                        <td className="py-3 pr-3 text-terminal-text font-medium max-w-xs">
-                          <span className="line-clamp-2">{ev.headline}</span>
-                        </td>
-                        <td className="py-3 pr-3 text-terminal-muted truncate max-w-[140px]">
-                          {entity ?? '—'}
-                        </td>
-                        <td className="py-3 pr-3 font-mono text-terminal-muted">
-                          <div className="flex items-center gap-1.5">
-                            <span className="truncate">{ev.watch_sources?.name ?? '—'}</span>
-                            {ev.source_count > 1 && (
-                              <span className="flex-shrink-0 text-[9px] font-mono bg-terminal-border text-terminal-muted rounded px-1 py-0.5">
-                                +{ev.source_count - 1}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="py-3 pr-5">
-                          <span className={clsx('font-mono', CONFIDENCE_COLOUR[ev.confidence])}>
-                            {ev.confidence}
-                          </span>
-                        </td>
-                      </tr>
-                    )
-                  })
-                )}
-              </tbody>
-            </table>
+            {loading ? (
+              <div className="px-6 py-12 text-center text-xs text-terminal-muted font-mono">
+                Loading…
+              </div>
+            ) : paged.length === 0 ? (
+              <div className="px-6 py-12 text-center text-xs text-terminal-muted">
+                No events found. The feed is updated daily from the Endenex intelligence pipeline.
+              </div>
+            ) : (
+              paged.map(ev => {
+                const style      = CATEGORY_STYLE[ev.category]
+                const entity     = ev.site_name || ev.company_name || ev.developer
+                const isSelected = selected?.id === ev.id
+                const entityLine = [entity, ev.capacity_mw != null ? `${ev.capacity_mw} MW` : null]
+                  .filter(Boolean).join(' · ')
+
+                return (
+                  <div
+                    key={ev.id}
+                    onClick={() => setSelected(s => s?.id === ev.id ? null : ev)}
+                    className={clsx(
+                      'px-6 py-5 border-b border-terminal-border cursor-pointer transition-colors',
+                      isSelected
+                        ? 'bg-terminal-teal/5 border-l-2 border-l-terminal-teal'
+                        : 'hover:bg-terminal-surface border-l-2 border-l-transparent'
+                    )}
+                  >
+                    {/* Meta strip */}
+                    <div className="flex items-center gap-2 mb-2.5 flex-wrap">
+                      <span className="text-[11px] font-mono text-terminal-muted">
+                        {fmtDate(ev.event_date)}
+                      </span>
+                      <span className="text-terminal-border">·</span>
+                      <span className={clsx('text-[10px] font-mono px-1.5 py-0.5 rounded', style.pill)}>
+                        {CATEGORY_LABEL[ev.category]}
+                      </span>
+                      <span className="text-[11px] text-terminal-muted">{ev.event_type}</span>
+                      <span className="text-terminal-border">·</span>
+                      <span className="text-[11px] font-mono text-terminal-muted">{ev.scope}</span>
+
+                      <div className="ml-auto flex items-center gap-3 flex-shrink-0">
+                        <span className={clsx('text-[11px] font-mono', CONFIDENCE_COLOUR[ev.confidence])}>
+                          {ev.confidence}
+                        </span>
+                        <span className="text-[11px] font-mono text-terminal-muted">
+                          {ev.watch_sources?.name ?? ''}
+                          {ev.source_count > 1 && (
+                            <span className="text-terminal-muted/60"> +{ev.source_count - 1}</span>
+                          )}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Headline */}
+                    <h3 className="text-[13px] font-semibold text-terminal-text leading-snug mb-2 tracking-tight">
+                      {ev.headline}
+                    </h3>
+
+                    {/* Summary — wire-service style, 3 lines max */}
+                    {ev.notes && (
+                      <p className="text-xs text-terminal-muted leading-relaxed line-clamp-3">
+                        {ev.notes}
+                      </p>
+                    )}
+
+                    {/* Entity / capacity tag */}
+                    {entityLine && (
+                      <div className="flex items-center gap-1.5 mt-2.5">
+                        <div className="w-1 h-1 rounded-full bg-terminal-border flex-shrink-0" />
+                        <span className="text-[11px] font-mono text-terminal-muted">{entityLine}</span>
+                      </div>
+                    )}
+                  </div>
+                )
+              })
+            )}
           </div>
 
           {/* Pagination */}
