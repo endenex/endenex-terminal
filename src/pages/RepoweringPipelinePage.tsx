@@ -344,8 +344,12 @@ export function RepoweringPipelinePage() {
     setSelected(null)
   }, [stage, countries])
 
+  const REFRESH_MS = 5 * 60 * 1000
+
   useEffect(() => {
     fetchProjects()
+    const id = setInterval(fetchProjects, REFRESH_MS)
+    return () => clearInterval(id)
   }, [fetchProjects])
 
   const totalPages = Math.ceil(total / PAGE_SIZE)
@@ -439,19 +443,28 @@ export function RepoweringPipelinePage() {
                       <td className="py-3 pr-3 text-terminal-muted">
                         {COUNTRIES.find(c => c.code === p.country_code)?.label ?? p.country_code}
                       </td>
-                      <td className="py-3 pr-3 text-right font-mono text-terminal-text">
-                        {formatMW(p.capacity_mw)}
+                      <td className="py-3 pr-3 text-right text-terminal-text">
+                        {p.capacity_mw != null
+                          ? <><span className="num">{p.capacity_mw.toLocaleString('en-GB', { maximumFractionDigits: 1 })}</span><span className="unit">MW</span></>
+                          : <span className="num text-terminal-muted">—</span>
+                        }
                       </td>
                       <td className="py-3 pr-3 text-terminal-muted max-w-[160px] truncate font-mono text-xs">
                         {p.turbine_make && p.turbine_model
                           ? `${p.turbine_make} ${p.turbine_model}`
                           : p.turbine_model ?? p.turbine_make ?? '—'}
                       </td>
-                      <td className="py-3 pr-3 text-right font-mono text-terminal-muted">
-                        {p.hub_height_m != null ? p.hub_height_m : '—'}
+                      <td className="py-3 pr-3 text-right text-terminal-muted">
+                        {p.hub_height_m != null
+                          ? <><span className="num">{p.hub_height_m}</span><span className="unit">m</span></>
+                          : <span className="num">—</span>
+                        }
                       </td>
-                      <td className="py-3 pr-3 text-right font-mono text-terminal-muted">
-                        {p.rotor_diameter_m != null ? p.rotor_diameter_m : '—'}
+                      <td className="py-3 pr-3 text-right text-terminal-muted">
+                        {p.rotor_diameter_m != null
+                          ? <><span className="num">{p.rotor_diameter_m}</span><span className="unit">m</span></>
+                          : <span className="num">—</span>
+                        }
                       </td>
                       <td className="py-3 pr-3 text-terminal-muted max-w-[160px] truncate">
                         {p.developer ?? '—'}

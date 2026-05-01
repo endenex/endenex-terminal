@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { clsx } from 'clsx'
 import { supabase } from '@/lib/supabase'
 import { TopBar } from '@/components/layout/TopBar'
@@ -144,48 +144,42 @@ export function RecoveryValuePage() {
   const currency = REGIONS.find(r => r.code === region)?.currency ?? 'EUR'
   const symbol = CURRENCY_SYMBOL[currency]
 
-  useEffect(() => {
-    const fetch = async () => {
-      setLoading(true)
-      try {
-        // Latest price per material for this region
-        const [priceRes, nroRes] = await Promise.all([
-          supabase
-            .from('commodity_prices')
-            .select('*')
-            .eq('region', region)
-            .order('price_date', { ascending: false }),
-          supabase
-            .from('nro_estimates')
-            .select('*')
-            .eq('region', region)
-            .order('reference_date', { ascending: false }),
-        ])
+  const REFRESH_MS = 5 * 60 * 1000
 
-        // Keep latest and second-latest per material for direction indicator
-        const latestPrices: Record<string, CommodityPrice>  = {}
-        const prevPricesMap: Record<string, CommodityPrice> = {}
-        for (const p of priceRes.data ?? []) {
-          if (!latestPrices[p.material_type])       latestPrices[p.material_type]  = p
-          else if (!prevPricesMap[p.material_type]) prevPricesMap[p.material_type] = p
-        }
-        setPrices(Object.values(latestPrices))
-        setPrevPrices(prevPricesMap)
+  const load = useCallback(async (showSpinner = false) => {
+    if (showSpinner) setLoading(true)
+    try {
+      const [priceRes, nroRes] = await Promise.all([
+        supabase.from('commodity_prices').select('*').eq('region', region).order('price_date', { ascending: false }),
+        supabase.from('nro_estimates').select('*').eq('region', region).order('reference_date', { ascending: false }),
+      ])
 
-        // Deduplicate: keep latest NRO per material
-        const latestNro: Record<string, NroEstimate> = {}
-        for (const n of nroRes.data ?? []) {
-          if (!latestNro[n.material_type]) latestNro[n.material_type] = n
-        }
-        setNro(Object.values(latestNro))
-      } catch (err) {
-        console.error(err)
-      } finally {
-        setLoading(false)
+      const latestPrices: Record<string, CommodityPrice>  = {}
+      const prevPricesMap: Record<string, CommodityPrice> = {}
+      for (const p of priceRes.data ?? []) {
+        if (!latestPrices[p.material_type])       latestPrices[p.material_type]  = p
+        else if (!prevPricesMap[p.material_type]) prevPricesMap[p.material_type] = p
       }
+      setPrices(Object.values(latestPrices))
+      setPrevPrices(prevPricesMap)
+
+      const latestNro: Record<string, NroEstimate> = {}
+      for (const n of nroRes.data ?? []) {
+        if (!latestNro[n.material_type]) latestNro[n.material_type] = n
+      }
+      setNro(Object.values(latestNro))
+    } catch (err) {
+      console.error(err)
+    } finally {
+      if (showSpinner) setLoading(false)
     }
-    fetch()
   }, [region])
+
+  useEffect(() => {
+    load(true)
+    const id = setInterval(() => load(false), REFRESH_MS)
+    return () => clearInterval(id)
+  }, [load])
 
   const priceMap = Object.fromEntries(prices.map(p => [p.material_type, p]))
   const nroMap   = Object.fromEntries(nro.map(n => [n.material_type, n]))
@@ -284,8 +278,11 @@ export function RecoveryValuePage() {
                         <td className="py-3 pr-3 text-terminal-muted">
                           {MATERIAL_NOTES[mat]}
                         </td>
-                        <td className="py-3 pr-3 text-right font-mono text-terminal-text font-medium">
-                          {p ? fmt(p.price_per_tonne, symbol) : '—'}
+                        <td className="py-3 pr-3 text-right font-medium">
+                          {p
+                            ? <span className="num text-terminal-text">{fmt(p.price_per_tonne, symbol)}</span>
+                            : <span className="num text-terminal-muted">—</span>
+                          }
                         </td>
                         <td className="py-3 pr-3 text-right">
                           {p && prev

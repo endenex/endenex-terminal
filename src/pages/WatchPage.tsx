@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { clsx } from 'clsx'
 import { ExternalLink, ChevronDown } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -278,31 +278,37 @@ export function WatchPage() {
     setSelected(null)
   }, [category, scopes, confidence])
 
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true)
-      try {
-        let q = supabase
-          .from('watch_events')
-          .select('*, watch_sources(id, name, url)')
-          .eq('is_duplicate', false)
-          .order('event_date', { ascending: false })
+  const REFRESH_MS = 5 * 60 * 1000  // 5 minutes
 
-        if (category !== 'all') q = q.eq('category', category)
-        if (scopes.length > 0)  q = q.in('scope', scopes)
-        if (confidence)         q = q.eq('confidence', confidence)
+  const load = useCallback(async (showSpinner = false) => {
+    if (showSpinner) setLoading(true)
+    try {
+      let q = supabase
+        .from('watch_events')
+        .select('*, watch_sources(id, name, url)')
+        .eq('is_duplicate', false)
+        .order('event_date', { ascending: false })
 
-        const { data, error } = await q
-        if (error) throw error
-        setEvents(data ?? [])
-      } catch (err) {
-        console.error(err)
-      } finally {
-        setLoading(false)
-      }
+      if (category !== 'all') q = q.eq('category', category)
+      if (scopes.length > 0)  q = q.in('scope', scopes)
+      if (confidence)         q = q.eq('confidence', confidence)
+
+      const { data, error } = await q
+      if (error) throw error
+      setEvents(data ?? [])
+    } catch (err) {
+      console.error(err)
+    } finally {
+      if (showSpinner) setLoading(false)
     }
-    load()
   }, [category, scopes, confidence])
+
+  // Initial load (with spinner) + 5-min silent refresh
+  useEffect(() => {
+    load(true)
+    const id = setInterval(() => load(false), REFRESH_MS)
+    return () => clearInterval(id)
+  }, [load])
 
   const paged      = events.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
   const totalPages = Math.ceil(events.length / PAGE_SIZE)

@@ -84,3 +84,28 @@
   background: rgba(0, 123, 138, 0.12);
   border: 1px solid #007B8A;
 }
+
+/* ── Font discipline ────────────────────────────────────────────────────────── */
+
+/*
+  Bloomberg/IBKR convention:
+  - Labels, headings, prose: Inter (proportional, default)
+  - All numeric values: monospace + tabular-nums (already global via *)
+  - Unit suffixes (MW, /t, %, EUR, USD…): slightly dimmed, 90% font-size
+
+  .num       — numeric value in a data cell (applies font-mono)
+  .unit      — unit suffix following a number (dimmed, smaller)
+*/
+
+.num {
+  font-family: ui-monospace, 'Cascadia Code', 'Fira Mono', monospace;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+.unit {
+  font-family: ui-monospace, 'Cascadia Code', 'Fira Mono', monospace;
+  font-size: 0.9em;
+  color: #7D8590;  /* terminal-muted */
+  margin-left: 0.15em;
+}
