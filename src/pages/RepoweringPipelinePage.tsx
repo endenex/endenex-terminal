@@ -6,6 +6,8 @@ import { TopBar } from '@/components/layout/TopBar'
 import type { TopBarMeta } from '@/components/layout/TopBar'
 import type { RepoweringProject, RepoweringStage } from '@/lib/types'
 import { SkeletonTableRow } from '@/components/ui/Skeleton'
+import { useTableSort } from '@/hooks/useTableSort'
+import { SortableTh } from '@/components/ui/SortableHeader'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -354,6 +356,12 @@ export function RepoweringPipelinePage() {
 
   const totalPages = Math.ceil(total / PAGE_SIZE)
 
+  type ProjKey = 'project_name' | 'country_code' | 'capacity_mw' | 'developer' | 'stage' | 'stage_date' | 'confidence' | 'hub_height_m' | 'rotor_diameter_m'
+  const { sorted: sortedProjects, sort, toggle } = useTableSort<RepoweringProject, ProjKey>(
+    projects,
+    (row, key) => row[key] as string | number | null,
+  )
+
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <TopBar
@@ -407,26 +415,20 @@ export function RepoweringPipelinePage() {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-terminal-border bg-terminal-surface">
-                    {[
-                      ['Project', 'text-left pl-6 py-2.5 pr-3'],
-                      ['Country', 'text-left py-2.5 pr-3'],
-                      ['Capacity', 'text-right py-2.5 pr-3 font-mono'],
-                      ['Turbine', 'text-left py-2.5 pr-3'],
-                      ['Hub Ht (m)', 'text-right py-2.5 pr-3 font-mono'],
-                      ['Rotor (m)', 'text-right py-2.5 pr-3 font-mono'],
-                      ['Developer', 'text-left py-2.5 pr-3'],
-                      ['Stage', 'text-left py-2.5 pr-3'],
-                      ['Stage Date', 'text-left py-2.5 pr-3 font-mono'],
-                      ['Confidence', 'text-left py-2.5 pr-6'],
-                    ].map(([label, cls]) => (
-                      <th key={label} className={clsx('text-[10px] text-terminal-muted font-medium tracking-wide uppercase', cls)}>
-                        {label}
-                      </th>
-                    ))}
+                    <SortableTh label="Project"    sortKey="project_name"     sort={sort} onSort={toggle} className="text-left pl-6 py-2.5 pr-3" />
+                    <SortableTh label="Country"    sortKey="country_code"     sort={sort} onSort={toggle} className="text-left py-2.5 pr-3" />
+                    <SortableTh label="Capacity"   sortKey="capacity_mw"      sort={sort} onSort={toggle} className="text-right py-2.5 pr-3" />
+                    <th className="text-[10px] text-terminal-muted font-medium tracking-wide uppercase text-left py-2.5 pr-3">Turbine</th>
+                    <SortableTh label="Hub Ht"     sortKey="hub_height_m"     sort={sort} onSort={toggle} className="text-right py-2.5 pr-3" />
+                    <SortableTh label="Rotor"      sortKey="rotor_diameter_m" sort={sort} onSort={toggle} className="text-right py-2.5 pr-3" />
+                    <SortableTh label="Developer"  sortKey="developer"        sort={sort} onSort={toggle} className="text-left py-2.5 pr-3" />
+                    <SortableTh label="Stage"      sortKey="stage"            sort={sort} onSort={toggle} className="text-left py-2.5 pr-3" />
+                    <SortableTh label="Stage Date" sortKey="stage_date"       sort={sort} onSort={toggle} className="text-left py-2.5 pr-3" />
+                    <SortableTh label="Confidence" sortKey="confidence"       sort={sort} onSort={toggle} className="text-left py-2.5 pr-6" />
                   </tr>
                 </thead>
                 <tbody>
-                  {projects.map(p => (
+                  {sortedProjects.map(p => (
                     <tr
                       key={p.id}
                       onClick={() => setSelected(sel => sel?.id === p.id ? null : p)}

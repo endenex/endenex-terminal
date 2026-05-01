@@ -4,6 +4,8 @@ import { supabase } from '@/lib/supabase'
 import { TopBar } from '@/components/layout/TopBar'
 import type { TopBarMeta } from '@/components/layout/TopBar'
 import { SkeletonTableRow } from '@/components/ui/Skeleton'
+import { useTableSort } from '@/hooks/useTableSort'
+import { SortableTh } from '@/components/ui/SortableHeader'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -183,7 +185,15 @@ export function RecoveryValuePage() {
 
   const priceMap = Object.fromEntries(prices.map(p => [p.material_type, p]))
   const nroMap   = Object.fromEntries(nro.map(n => [n.material_type, n]))
-  const prevMap  = prevPrices   // already a Record<string, CommodityPrice>
+  const prevMap  = prevPrices
+
+  // Sort the material order list for the prices table
+  type PriceKey = 'material_type' | 'price_per_tonne' | 'price_date' | 'source_name' | 'confidence'
+  const priceRows = MATERIAL_ORDER.map(m => priceMap[m]).filter(Boolean) as CommodityPrice[]
+  const { sorted: sortedPrices, sort: priceSort, toggle: priceToggle } = useTableSort<CommodityPrice, PriceKey>(
+    priceRows,
+    (row, key) => row[key] as string | number | null,
+  )
 
   // Most recent price_date and source for the current region
   const priceMeta = useMemo((): TopBarMeta[] => {
@@ -244,31 +254,23 @@ export function RecoveryValuePage() {
             <table className="w-full text-xs">
               <thead>
                 <tr className="bg-terminal-black border-b border-terminal-border">
-                  {[
-                    ['Material', 'text-left pl-5 py-2.5 pr-3'],
-                    ['Component', 'text-left py-2.5 pr-3 text-terminal-muted'],
-                    ['Price / tonne', 'text-right py-2.5 pr-3 font-mono'],
-                    ['Change', 'text-right py-2.5 pr-3 font-mono'],
-                    ['Source', 'text-left py-2.5 pr-3'],
-                    ['Price Date', 'text-left py-2.5 pr-3 font-mono'],
-                    ['Confidence', 'text-left py-2.5 pr-5'],
-                  ].map(([label, cls]) => (
-                    <th key={label} className={clsx(
-                      'text-[10px] text-terminal-muted font-medium tracking-wide uppercase', cls
-                    )}>
-                      {label}
-                    </th>
-                  ))}
+                    <SortableTh label="Material"    sortKey="material_type"   sort={priceSort} onSort={priceToggle} className="text-left pl-5 py-2.5 pr-3" />
+                    <th className="text-[10px] text-terminal-muted font-medium tracking-wide uppercase text-left py-2.5 pr-3">Component</th>
+                    <SortableTh label="Price / t"   sortKey="price_per_tonne" sort={priceSort} onSort={priceToggle} className="text-right py-2.5 pr-3" />
+                    <th className="text-[10px] text-terminal-muted font-medium tracking-wide uppercase text-right py-2.5 pr-3">Change</th>
+                    <SortableTh label="Source"      sortKey="source_name"     sort={priceSort} onSort={priceToggle} className="text-left py-2.5 pr-3" />
+                    <SortableTh label="Price Date"  sortKey="price_date"      sort={priceSort} onSort={priceToggle} className="text-left py-2.5 pr-3" />
+                    <SortableTh label="Confidence"  sortKey="confidence"      sort={priceSort} onSort={priceToggle} className="text-left py-2.5 pr-5" />
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   Array.from({ length: 7 }).map((_, i) => <SkeletonTableRow key={i} cols={7} />)
-                ) : prices.length === 0 ? (
+                ) : sortedPrices.length === 0 ? (
                   <EmptySection label="scrap price" />
                 ) : (
-                  MATERIAL_ORDER.map(mat => {
-                    const p    = priceMap[mat]
+                  sortedPrices.map(p => {
+                    const mat  = p.material_type
                     const prev = prevMap[mat]
                     return (
                       <tr key={mat} className="border-b border-terminal-border last:border-0">
