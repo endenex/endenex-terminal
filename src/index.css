@@ -49,6 +49,11 @@
   --dv-tab-close-icon:                                     none;
 }
 
+/* Hide dockview's internal tab bar — NavBar is the only tab control */
+.endenex-dockview .dv-tabs-and-actions-container {
+  display: none !important;
+}
+
 /* Tab typography */
 .endenex-dockview .dv-tab {
   font-family: 'Inter', sans-serif;

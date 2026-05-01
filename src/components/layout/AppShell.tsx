@@ -37,7 +37,23 @@ const COMPONENTS: Record<string, React.FC<IDockviewPanelProps>> = {
 const LAYOUT_KEY = 'endenex-terminal-layout'
 
 function defaultLayout(api: DockviewApi) {
-  api.addPanel({ id: 'watch', component: 'watch', title: 'Market Watch' })
+  const ids = Object.keys(PANELS) as PanelId[]
+
+  // First panel
+  api.addPanel({ id: ids[0], component: ids[0], title: PANELS[ids[0]].title })
+
+  // Remaining panels added as tabs within the same group
+  for (let i = 1; i < ids.length; i++) {
+    api.addPanel({
+      id:        ids[i],
+      component: ids[i],
+      title:     PANELS[ids[i]].title,
+      position:  { referencePanel: ids[0], direction: 'within' },
+    })
+  }
+
+  // Open on Market Watch by default
+  api.getPanel('watch')?.api.setActive()
 }
 
 // ── AppShell ───────────────────────────────────────────────────────────────────
@@ -56,10 +72,9 @@ export function AppShell() {
       } catch { /* ignore */ }
     })
 
-    const saved = localStorage.getItem(LAYOUT_KEY)
-    if (saved) {
-      try { event.api.fromJSON(JSON.parse(saved)); return } catch { /* fall through */ }
-    }
+    // Always use default layout (all modules as tabs)
+    // Clear any stale saved layout from previous sessions
+    localStorage.removeItem(LAYOUT_KEY)
     defaultLayout(event.api)
   }, [])
 
