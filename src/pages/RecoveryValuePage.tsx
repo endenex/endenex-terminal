@@ -106,12 +106,26 @@ function fmtRange(low: number | null, mid: number | null, high: number | null, s
   return `${fmt(low, symbol)} – ${fmt(high, symbol)}`
 }
 
+// Direction indicator ▲/▼ with percentage change
+function PriceDirection({ current, prev }: { current: number; prev: number | undefined }) {
+  if (prev == null || prev === 0) return null
+  const pct = ((current - prev) / prev) * 100
+  if (Math.abs(pct) < 0.05) return null  // effectively flat
+  const up = pct > 0
+  return (
+    <span className={`inline-flex items-center gap-0.5 text-[11px] font-mono ${up ? 'text-emerald-400' : 'text-red-400'}`}>
+      {up ? '▲' : '▼'}
+      {Math.abs(pct).toFixed(1)}%
+    </span>
+  )
+}
+
 // ── Empty state ───────────────────────────────────────────────────────────────
 
-function EmptySection({ label }: { label: string }) {
+function EmptySection({ label, cols = 7 }: { label: string; cols?: number }) {
   return (
     <tr>
-      <td colSpan={6} className="px-6 py-8 text-center text-xs text-terminal-muted">
+      <td colSpan={cols} className="px-6 py-8 text-center text-xs text-terminal-muted">
         No {label} data for this region yet. Prices are entered manually — check back after the next update.
       </td>
     </tr>
@@ -123,6 +137,7 @@ function EmptySection({ label }: { label: string }) {
 export function RecoveryValuePage() {
   const [region, setRegion] = useState<Region>('EU')
   const [prices, setPrices] = useState<CommodityPrice[]>([])
+  const [prevPrices, setPrevPrices] = useState<Record<string, CommodityPrice>>({})
   const [nro, setNro] = useState<NroEstimate[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -147,12 +162,15 @@ export function RecoveryValuePage() {
             .order('reference_date', { ascending: false }),
         ])
 
-        // Deduplicate: keep latest price per material
-        const latestPrices: Record<string, CommodityPrice> = {}
+        // Keep latest and second-latest per material for direction indicator
+        const latestPrices: Record<string, CommodityPrice>  = {}
+        const prevPricesMap: Record<string, CommodityPrice> = {}
         for (const p of priceRes.data ?? []) {
-          if (!latestPrices[p.material_type]) latestPrices[p.material_type] = p
+          if (!latestPrices[p.material_type])       latestPrices[p.material_type]  = p
+          else if (!prevPricesMap[p.material_type]) prevPricesMap[p.material_type] = p
         }
         setPrices(Object.values(latestPrices))
+        setPrevPrices(prevPricesMap)
 
         // Deduplicate: keep latest NRO per material
         const latestNro: Record<string, NroEstimate> = {}
@@ -171,6 +189,7 @@ export function RecoveryValuePage() {
 
   const priceMap = Object.fromEntries(prices.map(p => [p.material_type, p]))
   const nroMap   = Object.fromEntries(nro.map(n => [n.material_type, n]))
+  const prevMap  = prevPrices   // already a Record<string, CommodityPrice>
 
   // Most recent price_date and source for the current region
   const priceMeta = useMemo((): TopBarMeta[] => {
@@ -235,6 +254,7 @@ export function RecoveryValuePage() {
                     ['Material', 'text-left pl-5 py-2.5 pr-3'],
                     ['Component', 'text-left py-2.5 pr-3 text-terminal-muted'],
                     ['Price / tonne', 'text-right py-2.5 pr-3 font-mono'],
+                    ['Change', 'text-right py-2.5 pr-3 font-mono'],
                     ['Source', 'text-left py-2.5 pr-3'],
                     ['Price Date', 'text-left py-2.5 pr-3 font-mono'],
                     ['Confidence', 'text-left py-2.5 pr-5'],
@@ -249,12 +269,13 @@ export function RecoveryValuePage() {
               </thead>
               <tbody>
                 {loading ? (
-                  Array.from({ length: 7 }).map((_, i) => <SkeletonTableRow key={i} cols={6} />)
+                  Array.from({ length: 7 }).map((_, i) => <SkeletonTableRow key={i} cols={7} />)
                 ) : prices.length === 0 ? (
                   <EmptySection label="scrap price" />
                 ) : (
                   MATERIAL_ORDER.map(mat => {
-                    const p = priceMap[mat]
+                    const p    = priceMap[mat]
+                    const prev = prevMap[mat]
                     return (
                       <tr key={mat} className="border-b border-terminal-border last:border-0">
                         <td className="pl-5 py-3 pr-3 font-medium text-terminal-text">
@@ -265,6 +286,12 @@ export function RecoveryValuePage() {
                         </td>
                         <td className="py-3 pr-3 text-right font-mono text-terminal-text font-medium">
                           {p ? fmt(p.price_per_tonne, symbol) : '—'}
+                        </td>
+                        <td className="py-3 pr-3 text-right">
+                          {p && prev
+                            ? <PriceDirection current={p.price_per_tonne} prev={prev.price_per_tonne} />
+                            : <span className="text-[11px] font-mono text-terminal-border">—</span>
+                          }
                         </td>
                         <td className="py-3 pr-3 text-terminal-muted font-mono">
                           {p?.source_name ?? '—'}

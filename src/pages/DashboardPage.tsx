@@ -265,9 +265,22 @@ function WatchFeed() {
 
 // ── Recovery Value ─────────────────────────────────────────────────────────────
 
+function PriceDirection({ current, prev }: { current: number; prev: number | undefined }) {
+  if (prev == null || prev === 0) return null
+  const pct = ((current - prev) / prev) * 100
+  if (Math.abs(pct) < 0.05) return null
+  const up = pct > 0
+  return (
+    <span className={`text-[10px] font-mono ml-1 ${up ? 'text-emerald-400' : 'text-red-400'}`}>
+      {up ? '▲' : '▼'}{Math.abs(pct).toFixed(1)}%
+    </span>
+  )
+}
+
 function RecoveryValuePanel() {
   const [region, setRegion] = useState<RvRegion>('EU')
   const [prices, setPrices] = useState<CommodityRow[]>([])
+  const [prevMap, setPrevMap] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
 
   const currency = RV_REGIONS.find(r => r.code === region)?.currency ?? 'EUR'
@@ -281,12 +294,15 @@ function RecoveryValuePanel() {
       .order('price_date', { ascending: false })
       .then(({ data }) => {
         if (!data) { setLoading(false); return }
-        const seen = new Set<string>()
+        const seen   = new Set<string>()
+        const prev: Record<string, number> = {}
         const deduped: CommodityRow[] = []
         for (const row of data as CommodityRow[]) {
           if (!seen.has(row.material_type)) {
             seen.add(row.material_type)
             deduped.push(row)
+          } else if (!(row.material_type in prev)) {
+            prev[row.material_type] = row.price_per_tonne
           }
         }
         deduped.sort((a, b) => {
@@ -295,6 +311,7 @@ function RecoveryValuePanel() {
           return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi)
         })
         setPrices(deduped)
+        setPrevMap(prev)
         setLoading(false)
       })
   }, [region])
@@ -336,11 +353,11 @@ function RecoveryValuePanel() {
             <span className="text-xs text-terminal-text">
               {MATERIAL_LABELS[row.material_type] ?? row.material_type}
             </span>
-            <div className="flex items-center gap-3 flex-shrink-0">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <span className="text-xs font-mono text-terminal-text">
                 {fmtPrice(row.price_per_tonne, currency)}<span className="text-terminal-muted text-[10px]"> /t</span>
               </span>
-              <span className="text-[10px] font-mono text-terminal-muted w-12 text-right">{fmtDate(row.price_date)}</span>
+              <PriceDirection current={row.price_per_tonne} prev={prevMap[row.material_type]} />
             </div>
           </div>
         ))}
