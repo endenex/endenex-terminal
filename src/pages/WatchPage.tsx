@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { clsx } from 'clsx'
 import { ExternalLink, ChevronDown } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { TopBar } from '@/components/layout/TopBar'
+import type { TopBarMeta } from '@/components/layout/TopBar'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -305,11 +306,26 @@ export function WatchPage() {
   const paged      = events.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
   const totalPages = Math.ceil(events.length / PAGE_SIZE)
 
+  // Derive freshness from the most recent last_reviewed date across loaded events
+  const feedMeta = useMemo((): TopBarMeta[] => {
+    if (events.length === 0) return []
+    const latest = events.reduce(
+      (max, e) => (e.last_reviewed > max ? e.last_reviewed : max),
+      events[0].last_reviewed,
+    )
+    return [
+      { label: 'Source', value: 'Endenex Intelligence Pipeline' },
+      { label: 'Updated', value: fmtDate(latest) },
+      { label: 'Sync', value: 'Daily · 07:00 UTC' },
+    ]
+  }, [events])
+
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <TopBar
         title="Market Watch"
         subtitle="Repowering events, regulatory changes, commodity signals, and supply chain activity"
+        meta={feedMeta}
       />
 
       {/* Filter bar */}

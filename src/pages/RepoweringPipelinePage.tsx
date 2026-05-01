@@ -3,6 +3,7 @@ import { X, ExternalLink, ChevronRight, ChevronLeft, ChevronDown } from 'lucide-
 import { clsx } from 'clsx'
 import { supabase } from '@/lib/supabase'
 import { TopBar } from '@/components/layout/TopBar'
+import type { TopBarMeta } from '@/components/layout/TopBar'
 import type { RepoweringProject, RepoweringStage } from '@/lib/types'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -292,6 +293,25 @@ export function RepoweringPipelinePage() {
   const [page, setPage] = useState(0)
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<RepoweringProject | null>(null)
+  const [topBarMeta, setTopBarMeta] = useState<TopBarMeta[]>([])
+
+  // One-time fetch: most recent last_reviewed across the entire table
+  useEffect(() => {
+    supabase
+      .from('repowering_projects')
+      .select('last_reviewed, source_type')
+      .order('last_reviewed', { ascending: false })
+      .limit(50)
+      .then(({ data }) => {
+        if (!data || data.length === 0) return
+        const latest   = data[0].last_reviewed as string
+        const sources  = [...new Set((data as { source_type: string }[]).map(r => r.source_type).filter(Boolean))]
+        setTopBarMeta([
+          { label: 'Source', value: sources.slice(0, 3).join(' · ') || '—' },
+          { label: 'Last reviewed', value: formatDate(latest) },
+        ])
+      })
+  }, [])
 
   const fetchProjects = useCallback(async () => {
     setLoading(true)
@@ -334,6 +354,7 @@ export function RepoweringPipelinePage() {
       <TopBar
         title="Repowering Pipeline"
         subtitle="Onshore wind repowering projects by pipeline stage"
+        meta={topBarMeta}
       />
 
       {/* Stage tabs */}

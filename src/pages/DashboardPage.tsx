@@ -118,29 +118,42 @@ function Panel({
   label,
   panelId,
   action,
+  asOf,
+  viewLabel = 'View all →',
   children,
   loading,
   className,
 }: {
-  label: string
-  panelId: PanelId
-  action?: React.ReactNode   // extra controls in header (e.g. region tabs)
-  children: React.ReactNode
-  loading?: boolean
+  label:      string
+  panelId:    PanelId
+  action?:    React.ReactNode
+  asOf?:      string | null      // "as of" date string shown right of label
+  viewLabel?: string
+  children:   React.ReactNode
+  loading?:   boolean
   className?: string
 }) {
   const { openPanel } = useWorkspace()
   return (
     <div className={clsx('flex flex-col border border-terminal-border rounded bg-terminal-surface overflow-hidden', className)}>
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-terminal-border flex-shrink-0 gap-3">
-        <span className="text-[10px] text-terminal-muted tracking-widest uppercase whitespace-nowrap">{label}</span>
-        {action}
-        <button
-          onClick={() => openPanel(panelId)}
-          className="text-[10px] text-terminal-teal hover:underline transition-colors whitespace-nowrap flex-shrink-0"
-        >
-          View all →
-        </button>
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-terminal-border flex-shrink-0 gap-3 min-w-0">
+        <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+          <span className="text-[10px] text-terminal-muted tracking-widest uppercase whitespace-nowrap flex-shrink-0">{label}</span>
+          {asOf && (
+            <span className="text-[10px] font-mono text-terminal-border whitespace-nowrap truncate">
+              · {asOf}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {action}
+          <button
+            onClick={() => openPanel(panelId)}
+            className="text-[10px] text-terminal-teal hover:underline transition-colors whitespace-nowrap"
+          >
+            {viewLabel}
+          </button>
+        </div>
       </div>
       {loading ? (
         <div className="flex items-center justify-center py-8 text-xs text-terminal-muted font-mono">
@@ -212,8 +225,10 @@ function WatchFeed() {
       })
   }, [])
 
+  const latestDate = events.length > 0 ? fmtDate(events[0].event_date) : null
+
   return (
-    <Panel label="Market Watch" panelId="watch" loading={loading}>
+    <Panel label="Market Watch" panelId="watch" loading={loading} asOf={latestDate}>
       <div className="divide-y divide-terminal-border overflow-auto">
         {events.length === 0 ? (
           <p className="px-5 py-8 text-xs text-terminal-muted text-center">
@@ -288,6 +303,10 @@ function RecoveryValuePanel() {
       })
   }, [region])
 
+  const latestPriceDate = prices.length > 0
+    ? fmtDate([...prices].sort((a, b) => b.price_date.localeCompare(a.price_date))[0].price_date)
+    : null
+
   const regionTabs = (
     <div className="flex items-center gap-0 flex-1">
       {RV_REGIONS.map(r => (
@@ -308,7 +327,7 @@ function RecoveryValuePanel() {
   )
 
   return (
-    <Panel label="Recovery Value" panelId="materials" action={regionTabs} loading={loading}>
+    <Panel label="Recovery Value" panelId="materials" action={regionTabs} loading={loading} asOf={latestPriceDate}>
       <div className="divide-y divide-terminal-border">
         {prices.length === 0 ? (
           <p className="px-4 py-5 text-xs text-terminal-muted text-center">
@@ -338,6 +357,7 @@ function RetirementPanel() {
   const [stages, setStages] = useState<StageBucket[]>([])
   const [recent, setRecent] = useState<RetirementRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [lastReviewed, setLastReviewed] = useState<string | null>(null)
 
   useEffect(() => {
     Promise.all([
@@ -347,7 +367,13 @@ function RetirementPanel() {
         .select('id, project_name, country_code, stage, capacity_mw, developer, stage_date')
         .order('stage_date', { ascending: false })
         .limit(5),
-    ]).then(([stageRes, recentRes]) => {
+      supabase
+        .from('repowering_projects')
+        .select('last_reviewed')
+        .order('last_reviewed', { ascending: false })
+        .limit(1)
+        .single(),
+    ]).then(([stageRes, recentRes, reviewedRes]) => {
       const tally: Record<string, number> = {}
       for (const row of (stageRes.data ?? []) as { stage: string }[]) {
         tally[row.stage] = (tally[row.stage] ?? 0) + 1
@@ -355,6 +381,8 @@ function RetirementPanel() {
       const ORDER = ['announced', 'application_submitted', 'application_approved', 'permitted', 'ongoing']
       setStages(ORDER.map(s => ({ stage: s, count: tally[s] ?? 0 })))
       setRecent((recentRes.data as RetirementRow[]) ?? [])
+      const reviewedDate = (reviewedRes.data as { last_reviewed: string } | null)?.last_reviewed ?? null
+      setLastReviewed(reviewedDate)
       setLoading(false)
     })
   }, [])
@@ -362,7 +390,12 @@ function RetirementPanel() {
   const total = stages.reduce((s, r) => s + r.count, 0)
 
   return (
-    <Panel label="Asset Retirement Pipeline" panelId="retirement" loading={loading}>
+    <Panel
+      label="Asset Retirement Pipeline"
+      panelId="retirement"
+      loading={loading}
+      asOf={lastReviewed ? fmtDate(lastReviewed) : null}
+    >
       <div>
         {/* Stage summary */}
         {total > 0 && (

@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { clsx } from 'clsx'
 import { supabase } from '@/lib/supabase'
 import { TopBar } from '@/components/layout/TopBar'
+import type { TopBarMeta } from '@/components/layout/TopBar'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -168,13 +169,27 @@ export function RecoveryValuePage() {
   }, [region])
 
   const priceMap = Object.fromEntries(prices.map(p => [p.material_type, p]))
-  const nroMap = Object.fromEntries(nro.map(n => [n.material_type, n]))
+  const nroMap   = Object.fromEntries(nro.map(n => [n.material_type, n]))
+
+  // Most recent price_date and source for the current region
+  const priceMeta = useMemo((): TopBarMeta[] => {
+    if (prices.length === 0) return []
+    const sorted  = [...prices].sort((a, b) => b.price_date.localeCompare(a.price_date))
+    const latest  = sorted[0]
+    // Collect unique source names
+    const sources = [...new Set(prices.map(p => p.source_name).filter(Boolean))].join(' · ')
+    return [
+      { label: 'Source', value: sources || '—' },
+      { label: 'Prices as of', value: fmtDate(latest.price_date) },
+    ]
+  }, [prices])
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-auto">
       <TopBar
         title="Recovery Value"
         subtitle="Scrap metal prices and net recovery offset by material and region"
+        meta={priceMeta}
       />
 
       {/* Region tabs */}
