@@ -54,7 +54,7 @@ function defaultLayout(api: DockviewApi) {
       position:  { referencePanel: ids[0], direction: 'within' },
     })
   }
-  api.getPanel('watch')?.api.setActive()
+  api.getPanel('home')?.api.setActive()
 }
 
 // ── AppShell ───────────────────────────────────────────────────────────────────

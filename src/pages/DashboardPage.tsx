@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { clsx } from 'clsx'
 import { supabase } from '@/lib/supabase'
 import { TopBar } from '@/components/layout/TopBar'
 import { useWorkspace } from '@/context/WorkspaceContext'
 import type { PanelId } from '@/components/layout/AppShell'
-import { SkeletonFeedRow, SkeletonPriceRow, SkeletonCompactRow } from '@/components/ui/Skeleton'
+import { SkeletonFeedRow, SkeletonPriceRow, SkeletonCompactRow, SkeletonBar } from '@/components/ui/Skeleton'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -489,6 +489,140 @@ function DciStatusPanel() {
   )
 }
 
+// ── DCI summary banner ─────────────────────────────────────────────────────────
+
+interface DciPub {
+  series:           string
+  publication_date: string
+  index_value:      number | null
+  net_liability:    number | null
+  currency:         string
+}
+
+const DCI_SERIES = [
+  { series: 'europe_wind', label: 'DCI Spot Europe Wind', ccy: 'EUR' },
+  { series: 'us_wind',     label: 'DCI Spot US Wind',     ccy: 'USD' },
+]
+
+const CCY_SYM: Record<string, string> = { EUR: '€', USD: '$', GBP: '£' }
+
+function DciSummaryBanner() {
+  const { openPanel } = useWorkspace()
+  const [pubs, setPubs]     = useState<DciPub[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    supabase
+      .from('dci_publications')
+      .select('series, publication_date, index_value, net_liability, currency')
+      .eq('is_published', true)
+      .in('series', ['europe_wind', 'us_wind'])
+      .order('publication_date', { ascending: false })
+      .then(({ data }) => { setPubs((data as DciPub[]) ?? []); setLoading(false) })
+  }, [])
+
+  // Latest and prior per series for direction
+  const latest = useMemo(() => {
+    const m: Record<string, DciPub> = {}
+    for (const p of pubs) if (!m[p.series]) m[p.series] = p
+    return m
+  }, [pubs])
+  const prior = useMemo(() => {
+    const seen = new Set<string>()
+    const m:    Record<string, DciPub> = {}
+    for (const p of pubs) {
+      if (!seen.has(p.series)) { seen.add(p.series); continue }
+      if (!m[p.series]) m[p.series] = p
+    }
+    return m
+  }, [pubs])
+
+  const hasPubs = Object.keys(latest).length > 0
+
+  return (
+    <div className="border border-terminal-border rounded bg-terminal-surface overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 py-3 border-b border-terminal-border bg-terminal-black">
+        <div className="flex items-center gap-3">
+          <div className="w-1.5 h-1.5 rounded-full bg-terminal-teal flex-shrink-0" />
+          <span className="text-[10px] font-mono text-terminal-muted tracking-widest uppercase">
+            Decommissioning Cost Index
+          </span>
+          <span className="text-[10px] font-mono text-terminal-border">·</span>
+          <span className="text-[10px] font-mono text-terminal-muted">Onshore Wind · Base = 100</span>
+        </div>
+        <button
+          onClick={() => openPanel('dci')}
+          className="text-[10px] text-terminal-teal hover:underline transition-colors"
+        >
+          Full DCI →
+        </button>
+      </div>
+
+      {/* Series values */}
+      <div className="grid grid-cols-2 divide-x divide-terminal-border">
+        {DCI_SERIES.map(({ series, label, ccy }) => {
+          const l = latest[series]
+          const p = prior[series]
+          const sym = CCY_SYM[ccy] ?? ''
+          let direction: React.ReactNode = null
+          if (l?.index_value != null && p?.index_value != null && p.index_value !== 0) {
+            const pct = ((l.index_value - p.index_value) / p.index_value) * 100
+            if (Math.abs(pct) >= 0.01) {
+              const up = pct > 0
+              // For a cost index: up = red (bad for liability holders), down = green
+              direction = (
+                <span className={`text-xs font-mono ${up ? 'text-red-400' : 'text-emerald-400'}`}>
+                  {up ? '▲' : '▼'}{Math.abs(pct).toFixed(1)}%
+                </span>
+              )
+            }
+          }
+
+          return (
+            <div key={series} className="px-6 py-5">
+              <div className="text-[10px] font-mono text-terminal-muted tracking-widest uppercase mb-3">
+                {label}
+              </div>
+              {loading ? (
+                <div className="space-y-2">
+                  <SkeletonBar className="h-8 w-28" />
+                  <SkeletonBar className="h-4 w-36" />
+                </div>
+              ) : !hasPubs || !l ? (
+                <div className="space-y-1">
+                  <div className="text-2xl font-semibold font-mono text-terminal-border">—</div>
+                  <p className="text-[11px] text-terminal-muted">First publication pending</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex items-end gap-3">
+                    <span className="text-2xl font-semibold font-mono text-terminal-text">
+                      {l.index_value?.toFixed(2) ?? '—'}
+                    </span>
+                    {direction}
+                  </div>
+                  <div className="flex items-center gap-4 text-[11px] font-mono text-terminal-muted">
+                    {l.net_liability != null && (
+                      <span>
+                        <span className="text-terminal-text">
+                          {sym}{Math.round(l.net_liability).toLocaleString('en-GB')}
+                        </span>
+                        <span className="unit">/MW</span>
+                      </span>
+                    )}
+                    <span>{fmtDate(l.publication_date)}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────────
 
 export function DashboardPage() {
@@ -499,52 +633,57 @@ export function DashboardPage() {
         subtitle="Institutional intelligence for ageing clean energy assets"
       />
 
-      {/*
-        Three-column layout:
-          Left  (flex-1):  Market Watch feed — taller, denser
-          Mid   (340px):   Recovery Value + Retirement pipeline
-          Right (300px):   DCI + Blade Waste + Portfolio
-      */}
-      <div className="flex-1 p-4 grid grid-cols-[1fr_340px_300px] gap-3 min-h-0 overflow-auto items-start">
+      <div className="flex-1 p-4 space-y-3 min-h-0 overflow-auto">
 
-        {/* ── Left: Watch feed ────────────────────────────────────── */}
-        <WatchFeed />
+        {/* ── DCI — full width, top prominence ───────────────────── */}
+        <DciSummaryBanner />
 
-        {/* ── Centre: Recovery Value + Retirement ─────────────────── */}
-        <div className="flex flex-col gap-3">
-          <RecoveryValuePanel />
-          <RetirementPanel />
+        {/*
+          Three-column grid below the DCI banner:
+            Left  (flex-1):  Market Watch feed
+            Mid   (340px):   Recovery Value + Retirement pipeline
+            Right (280px):   Blade Waste + Portfolio
+        */}
+        <div className="grid grid-cols-[1fr_340px_280px] gap-3 items-start">
+
+          {/* ── Left: Watch feed ──────────────────────────────────── */}
+          <WatchFeed />
+
+          {/* ── Centre: Recovery Value + Retirement ──────────────── */}
+          <div className="flex flex-col gap-3">
+            <RecoveryValuePanel />
+            <RetirementPanel />
+          </div>
+
+          {/* ── Right: Blades + Portfolio ─────────────────────────── */}
+          <div className="flex flex-col gap-3">
+            <PlannedPanel
+              label="Blade Waste Intelligence"
+              panelId="blades"
+              description="GRP and composite blade volumes by region and year, recycling pathway availability, and end-of-life cost modelling."
+              signals={[
+                'Blade inventory by region and turbine model',
+                'GRP / composite volume estimates',
+                'Recycling pathway availability by geography',
+                'End-of-life cost modelling',
+                'Processor and contractor directory',
+              ]}
+            />
+            <PlannedPanel
+              label="Portfolio Analytics"
+              panelId="portfolio"
+              description="Model aggregate decommissioning liability exposure, attribute NRO by site, run sensitivity scenarios, and export for boards, lenders, and sureties."
+              signals={[
+                'Portfolio upload and site configuration',
+                'Aggregate liability vs DCI benchmark',
+                'NRO attribution by site and material',
+                'Sensitivity analysis — price and timing',
+                'Board memo and surety pack export',
+              ]}
+            />
+          </div>
+
         </div>
-
-        {/* ── Right: DCI + Blades + Portfolio ─────────────────────── */}
-        <div className="flex flex-col gap-3">
-          <DciStatusPanel />
-          <PlannedPanel
-            label="Blade Waste Intelligence"
-            panelId="blades"
-            description="GRP and composite blade volumes by region and year, recycling pathway availability, and end-of-life cost modelling."
-            signals={[
-              'Blade inventory by region and turbine model',
-              'GRP / composite volume estimates',
-              'Recycling pathway availability by geography',
-              'End-of-life cost modelling',
-              'Processor and contractor directory',
-            ]}
-          />
-          <PlannedPanel
-            label="Portfolio Analytics"
-            panelId="portfolio"
-            description="Model aggregate decommissioning liability exposure, attribute NRO by site, run sensitivity scenarios, and export for boards, lenders, and sureties."
-            signals={[
-              'Portfolio upload and site configuration',
-              'Aggregate liability vs DCI benchmark',
-              'NRO attribution by site and material',
-              'Sensitivity analysis — price and timing',
-              'Board memo and surety pack export',
-            ]}
-          />
-        </div>
-
       </div>
     </div>
   )
