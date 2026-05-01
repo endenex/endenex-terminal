@@ -1,7 +1,8 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useMemo } from 'react'
 import { DockviewReact, DockviewReadyEvent, DockviewApi, IDockviewPanelProps } from 'dockview'
 import 'dockview/dist/styles/dockview.css'
 import { NavBar } from './NavBar'
+import { WorkspaceContext } from '@/context/WorkspaceContext'
 import { DashboardPage }  from '@/pages/DashboardPage'
 import { DciPage }        from '@/pages/DciPage'
 import { RetirementPage } from '@/pages/RetirementPage'
@@ -86,16 +87,20 @@ export function AppShell() {
     a.addPanel({ id, component: id, title: PANELS[id].title })
   }, [])
 
+  const ctxValue = useMemo(() => ({ openPanel }), [openPanel])
+
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-terminal-black">
-      <NavBar api={api} onOpen={openPanel} />
-      <div className="flex-1 min-h-0">
-        <DockviewReact
-          className="endenex-dockview"
-          components={COMPONENTS}
-          onReady={onReady}
-        />
+    <WorkspaceContext.Provider value={ctxValue}>
+      <div className="flex flex-col h-screen overflow-hidden bg-terminal-black">
+        <NavBar api={api} onOpen={openPanel} />
+        <div className="flex-1 min-h-0">
+          <DockviewReact
+            className="endenex-dockview"
+            components={COMPONENTS}
+            onReady={onReady}
+          />
+        </div>
       </div>
-    </div>
+    </WorkspaceContext.Provider>
   )
 }
