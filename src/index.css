@@ -46,12 +46,13 @@
   --dv-drag-over-border-color:                             #007B8A;
   --dv-overlay-z-index:                                    999;
   --dv-tab-border-width:                                   1px;
-  --dv-tab-close-icon:                                     none;
+  --dv-tab-close-icon:                                     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%237D8590' d='M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.749.749 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.749.749 0 1 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06z'/%3E%3C/svg%3E");
 }
 
-/* Hide dockview's internal tab bar — NavBar is the only tab control */
+/* Tab bar — visible so panels can be dragged to create splits */
 .endenex-dockview .dv-tabs-and-actions-container {
-  display: none !important;
+  background: var(--dv-tabs-and-actions-container-background-color);
+  border-bottom: 1px solid #21262D;
 }
 
 /* Tab typography */

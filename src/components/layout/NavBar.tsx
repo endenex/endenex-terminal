@@ -7,11 +7,12 @@ import { PANELS, type PanelId } from './AppShell'
 const ALL_PANELS = Object.keys(PANELS) as PanelId[]
 
 interface NavBarProps {
-  api:    DockviewApi | null
-  onOpen: (id: PanelId) => void
+  api:     DockviewApi | null
+  onOpen:  (id: PanelId) => void
+  onReset: () => void
 }
 
-export function NavBar({ api, onOpen }: NavBarProps) {
+export function NavBar({ api, onOpen, onReset }: NavBarProps) {
   const { signOut } = useClerk()
   const { user }    = useUser()
   const [active, setActive] = useState<string | null>(null)
@@ -69,11 +70,18 @@ export function NavBar({ api, onOpen }: NavBarProps) {
         })}
       </nav>
 
-      {/* User */}
+      {/* User + controls */}
       <div className="flex items-center gap-4 px-4 border-l border-terminal-navy-border flex-shrink-0">
         <span className="text-[10px] text-gray-600 hidden lg:block">
           {user?.primaryEmailAddress?.emailAddress}
         </span>
+        <button
+          onClick={onReset}
+          title="Reset workspace to default layout"
+          className="text-[10px] text-gray-600 hover:text-gray-300 transition-colors tracking-wider uppercase"
+        >
+          Reset layout
+        </button>
         <button
           onClick={() => signOut()}
           className="text-[10px] text-gray-600 hover:text-gray-300 transition-colors tracking-wider uppercase"

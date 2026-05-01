@@ -1,4 +1,5 @@
-import { useState, useCallback, useRef, useMemo } from 'react'
+import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
+import { useUser } from '@clerk/clerk-react'
 import { DockviewReact, DockviewReadyEvent, DockviewApi, IDockviewPanelProps } from 'dockview'
 import 'dockview/dist/styles/dockview.css'
 import { NavBar } from './NavBar'
@@ -35,15 +36,15 @@ const COMPONENTS: Record<string, React.FC<IDockviewPanelProps>> = {
   portfolio:  () => <PortfolioPage />,
 }
 
-const LAYOUT_KEY = 'endenex-terminal-layout'
+const LAYOUT_PREFIX = 'endenex-layout'
+
+function layoutKey(userId: string) {
+  return `${LAYOUT_PREFIX}-${userId}`
+}
 
 function defaultLayout(api: DockviewApi) {
   const ids = Object.keys(PANELS) as PanelId[]
-
-  // First panel
   api.addPanel({ id: ids[0], component: ids[0], title: PANELS[ids[0]].title })
-
-  // Remaining panels added as tabs within the same group
   for (let i = 1; i < ids.length; i++) {
     api.addPanel({
       id:        ids[i],
@@ -52,14 +53,20 @@ function defaultLayout(api: DockviewApi) {
       position:  { referencePanel: ids[0], direction: 'within' },
     })
   }
-
-  // Open on Market Watch by default
   api.getPanel('watch')?.api.setActive()
 }
 
 // ── AppShell ───────────────────────────────────────────────────────────────────
 
 export function AppShell() {
+  const { user } = useUser()
+
+  // Keep userId in a ref so stable callbacks can read the latest value
+  const userIdRef = useRef<string>('default')
+  useEffect(() => {
+    if (user?.id) userIdRef.current = user.id
+  }, [user?.id])
+
   const [api, setApi] = useState<DockviewApi | null>(null)
   const apiRef        = useRef<DockviewApi | null>(null)
 
@@ -67,17 +74,35 @@ export function AppShell() {
     apiRef.current = event.api
     setApi(event.api)
 
-    event.api.onDidLayoutChange(() => {
-      try {
-        localStorage.setItem(LAYOUT_KEY, JSON.stringify(event.api.toJSON()))
-      } catch { /* ignore */ }
-    })
+    // ── Restore saved layout (per user) or fall back to default ──────────────
+    const key   = layoutKey(userIdRef.current)
+    const saved = localStorage.getItem(key)
+    let restored = false
 
-    // Always use default layout (all modules as tabs)
-    // Clear any stale saved layout from previous sessions
-    localStorage.removeItem(LAYOUT_KEY)
-    defaultLayout(event.api)
-  }, [])
+    if (saved) {
+      try {
+        event.api.fromJSON(JSON.parse(saved))
+        restored = true
+      } catch {
+        // Saved layout is stale/corrupt — clear it and use default
+        localStorage.removeItem(key)
+      }
+    }
+
+    if (!restored) defaultLayout(event.api)
+
+    // ── Debounced save on every layout change ─────────────────────────────────
+    let saveTimer: ReturnType<typeof setTimeout>
+    event.api.onDidLayoutChange(() => {
+      clearTimeout(saveTimer)
+      saveTimer = setTimeout(() => {
+        try {
+          const k = layoutKey(userIdRef.current)
+          localStorage.setItem(k, JSON.stringify(event.api.toJSON()))
+        } catch { /* storage full or unavailable */ }
+      }, 800)
+    })
+  }, [])  // stable — reads userIdRef via ref
 
   const openPanel = useCallback((id: PanelId) => {
     const a = apiRef.current
@@ -87,12 +112,23 @@ export function AppShell() {
     a.addPanel({ id, component: id, title: PANELS[id].title })
   }, [])
 
+  // Reset layout: clear saved state and re-apply default
+  const resetLayout = useCallback(() => {
+    const a = apiRef.current
+    if (!a) return
+    localStorage.removeItem(layoutKey(userIdRef.current))
+
+    // Close all panels then re-apply default
+    a.panels.forEach(p => p.api.close())
+    defaultLayout(a)
+  }, [])
+
   const ctxValue = useMemo(() => ({ openPanel }), [openPanel])
 
   return (
     <WorkspaceContext.Provider value={ctxValue}>
       <div className="flex flex-col h-screen overflow-hidden bg-terminal-black">
-        <NavBar api={api} onOpen={openPanel} />
+        <NavBar api={api} onOpen={openPanel} onReset={resetLayout} />
         <div className="flex-1 min-h-0">
           <DockviewReact
             className="endenex-dockview"
