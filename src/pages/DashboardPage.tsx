@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { TopBar } from '@/components/layout/TopBar'
 import { useWorkspace } from '@/context/WorkspaceContext'
 import type { PanelId } from '@/components/layout/AppShell'
+import { SkeletonFeedRow, SkeletonPriceRow, SkeletonCompactRow } from '@/components/ui/Skeleton'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -130,7 +131,6 @@ function Panel({
   asOf?:      string | null      // "as of" date string shown right of label
   viewLabel?: string
   children:   React.ReactNode
-  loading?:   boolean
   className?: string
 }) {
   const { openPanel } = useWorkspace()
@@ -155,13 +155,7 @@ function Panel({
           </button>
         </div>
       </div>
-      {loading ? (
-        <div className="flex items-center justify-center py-8 text-xs text-terminal-muted font-mono">
-          Loading…
-        </div>
-      ) : (
-        children
-      )}
+      {children}
     </div>
   )
 }
@@ -228,9 +222,11 @@ function WatchFeed() {
   const latestDate = events.length > 0 ? fmtDate(events[0].event_date) : null
 
   return (
-    <Panel label="Market Watch" panelId="watch" loading={loading} asOf={latestDate}>
+    <Panel label="Market Watch" panelId="watch" asOf={latestDate}>
       <div className="divide-y divide-terminal-border overflow-auto">
-        {events.length === 0 ? (
+        {loading ? (
+          Array.from({ length: 6 }).map((_, i) => <SkeletonFeedRow key={i} />)
+        ) : events.length === 0 ? (
           <p className="px-5 py-8 text-xs text-terminal-muted text-center">
             No events yet — feed updates daily.
           </p>
@@ -327,9 +323,11 @@ function RecoveryValuePanel() {
   )
 
   return (
-    <Panel label="Recovery Value" panelId="materials" action={regionTabs} loading={loading} asOf={latestPriceDate}>
+    <Panel label="Recovery Value" panelId="materials" action={regionTabs} asOf={latestPriceDate}>
       <div className="divide-y divide-terminal-border">
-        {prices.length === 0 ? (
+        {loading ? (
+          Array.from({ length: 7 }).map((_, i) => <SkeletonPriceRow key={i} />)
+        ) : prices.length === 0 ? (
           <p className="px-4 py-5 text-xs text-terminal-muted text-center">
             No prices for {region} yet.
           </p>
@@ -393,10 +391,13 @@ function RetirementPanel() {
     <Panel
       label="Asset Retirement Pipeline"
       panelId="retirement"
-      loading={loading}
       asOf={lastReviewed ? fmtDate(lastReviewed) : null}
     >
-      <div>
+      {loading ? (
+        <div className="divide-y divide-terminal-border">
+          {Array.from({ length: 5 }).map((_, i) => <SkeletonCompactRow key={i} />)}
+        </div>
+      ) : <div>
         {/* Stage summary */}
         {total > 0 && (
           <div className="flex items-center gap-4 px-4 py-3 border-b border-terminal-border flex-wrap">
@@ -430,7 +431,7 @@ function RetirementPanel() {
             </div>
           ))}
         </div>
-      </div>
+      </div>}
     </Panel>
   )
 }

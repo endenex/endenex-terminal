@@ -4,6 +4,7 @@ import { ExternalLink, ChevronDown } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { TopBar } from '@/components/layout/TopBar'
 import type { TopBarMeta } from '@/components/layout/TopBar'
+import { SkeletonFeedRow } from '@/components/ui/Skeleton'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -373,9 +374,7 @@ export function WatchPage() {
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           <div className="flex-1 overflow-auto">
             {loading ? (
-              <div className="px-6 py-12 text-center text-xs text-terminal-muted font-mono">
-                Loading…
-              </div>
+              Array.from({ length: 8 }).map((_, i) => <SkeletonFeedRow key={i} />)
             ) : paged.length === 0 ? (
               <div className="px-6 py-12 text-center text-xs text-terminal-muted">
                 No events found. The feed is updated daily from the Endenex intelligence pipeline.

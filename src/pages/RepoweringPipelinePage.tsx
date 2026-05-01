@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { TopBar } from '@/components/layout/TopBar'
 import type { TopBarMeta } from '@/components/layout/TopBar'
 import type { RepoweringProject, RepoweringStage } from '@/lib/types'
+import { SkeletonTableRow } from '@/components/ui/Skeleton'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -390,9 +391,11 @@ export function RepoweringPipelinePage() {
         {/* Table */}
         <div className="flex-1 overflow-auto">
           {loading ? (
-            <div className="flex items-center justify-center py-24">
-              <div className="text-xs text-gray-400 font-mono">Loading…</div>
-            </div>
+            <table className="w-full">
+              <tbody>
+                {Array.from({ length: 12 }).map((_, i) => <SkeletonTableRow key={i} cols={10} />)}
+              </tbody>
+            </table>
           ) : projects.length === 0 ? (
             <EmptyState stage={stage} countries={countries} />
           ) : (

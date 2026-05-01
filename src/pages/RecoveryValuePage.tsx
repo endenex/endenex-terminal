@@ -3,6 +3,7 @@ import { clsx } from 'clsx'
 import { supabase } from '@/lib/supabase'
 import { TopBar } from '@/components/layout/TopBar'
 import type { TopBarMeta } from '@/components/layout/TopBar'
+import { SkeletonTableRow } from '@/components/ui/Skeleton'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -248,11 +249,7 @@ export function RecoveryValuePage() {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr>
-                    <td colSpan={6} className="px-5 py-8 text-center text-xs text-terminal-muted font-mono">
-                      Loading…
-                    </td>
-                  </tr>
+                  Array.from({ length: 7 }).map((_, i) => <SkeletonTableRow key={i} cols={6} />)
                 ) : prices.length === 0 ? (
                   <EmptySection label="scrap price" />
                 ) : (
@@ -323,11 +320,7 @@ export function RecoveryValuePage() {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr>
-                    <td colSpan={6} className="px-5 py-8 text-center text-xs text-terminal-muted font-mono">
-                      Loading…
-                    </td>
-                  </tr>
+                  Array.from({ length: 7 }).map((_, i) => <SkeletonTableRow key={i} cols={6} />)
                 ) : nro.length === 0 ? (
                   <EmptySection label="NRO estimate" />
                 ) : (
