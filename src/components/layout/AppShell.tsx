@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from 'react'
 import { DockviewReact, DockviewReadyEvent, DockviewApi, IDockviewPanelProps } from 'dockview'
 import 'dockview/dist/styles/dockview.css'
-import { Sidebar, PanelId } from './Sidebar'
+import { NavBar } from './NavBar'
 import { DashboardPage }  from '@/pages/DashboardPage'
 import { DciPage }        from '@/pages/DciPage'
 import { RetirementPage } from '@/pages/RetirementPage'
@@ -11,6 +11,8 @@ import { WatchPage }      from '@/pages/WatchPage'
 import { PortfolioPage }  from '@/pages/PortfolioPage'
 
 // ── Panel registry ─────────────────────────────────────────────────────────────
+
+export type PanelId = 'home' | 'dci' | 'retirement' | 'materials' | 'blades' | 'watch' | 'portfolio'
 
 export const PANELS: Record<PanelId, { title: string }> = {
   home:       { title: 'Home' },
@@ -22,7 +24,6 @@ export const PANELS: Record<PanelId, { title: string }> = {
   portfolio:  { title: 'Portfolio' },
 }
 
-// Dockview requires components typed as FC<IDockviewPanelProps>
 const COMPONENTS: Record<string, React.FC<IDockviewPanelProps>> = {
   home:       () => <DashboardPage />,
   dci:        () => <DciPage />,
@@ -42,44 +43,38 @@ function defaultLayout(api: DockviewApi) {
 // ── AppShell ───────────────────────────────────────────────────────────────────
 
 export function AppShell() {
-  const apiRef = useRef<DockviewApi | null>(null)
+  const [api, setApi] = useState<DockviewApi | null>(null)
+  const apiRef        = useRef<DockviewApi | null>(null)
 
   const onReady = useCallback((event: DockviewReadyEvent) => {
     apiRef.current = event.api
+    setApi(event.api)
 
-    // Save layout on any change
     event.api.onDidLayoutChange(() => {
       try {
         localStorage.setItem(LAYOUT_KEY, JSON.stringify(event.api.toJSON()))
       } catch { /* ignore */ }
     })
 
-    // Restore saved layout or use default
     const saved = localStorage.getItem(LAYOUT_KEY)
     if (saved) {
-      try {
-        event.api.fromJSON(JSON.parse(saved))
-        return
-      } catch { /* fall through to default */ }
+      try { event.api.fromJSON(JSON.parse(saved)); return } catch { /* fall through */ }
     }
     defaultLayout(event.api)
   }, [])
 
   const openPanel = useCallback((id: PanelId) => {
-    const api = apiRef.current
-    if (!api) return
-    const existing = api.getPanel(id)
-    if (existing) {
-      existing.api.setActive()
-      return
-    }
-    api.addPanel({ id, component: id, title: PANELS[id].title })
+    const a = apiRef.current
+    if (!a) return
+    const existing = a.getPanel(id)
+    if (existing) { existing.api.setActive(); return }
+    a.addPanel({ id, component: id, title: PANELS[id].title })
   }, [])
 
   return (
-    <div className="flex h-screen overflow-hidden bg-terminal-black">
-      <Sidebar onOpen={openPanel} />
-      <div className="flex-1 min-w-0 h-full">
+    <div className="flex flex-col h-screen overflow-hidden bg-terminal-black">
+      <NavBar api={api} onOpen={openPanel} />
+      <div className="flex-1 min-h-0">
         <DockviewReact
           className="endenex-dockview"
           components={COMPONENTS}
