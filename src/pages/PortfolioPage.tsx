@@ -1,4 +1,3 @@
-import { BarChart2 } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { ModulePlaceholder } from '@/components/ui/ModulePlaceholder'
 
@@ -10,7 +9,6 @@ export function PortfolioPage() {
         subtitle="Liability exposure modelling and NRO attribution across your asset portfolio"
       />
       <ModulePlaceholder
-        icon={BarChart2}
         label="PORTFOLIO"
         name="Portfolio Analytics"
         description="Upload and configure your portfolio of wind assets. Model aggregate decommissioning liability exposure against DCI benchmarks, attribute Net Recovery Offset by site, run sensitivity scenarios, and export in formats suited to boards, lenders, and sureties."

@@ -1,4 +1,3 @@
-import { TrendingUp } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { ModulePlaceholder } from '@/components/ui/ModulePlaceholder'
 
@@ -10,7 +9,6 @@ export function DciPage() {
         subtitle="Independent benchmark for wind turbine decommissioning costs"
       />
       <ModulePlaceholder
-        icon={TrendingUp}
         label="DCI"
         name="Decommissioning Cost Index"
         description="An independent, methodology-driven benchmark for onshore wind turbine decommissioning costs. Spot values published as confidence ranges — never single-point estimates. Full methodology documentation version-controlled, exportable, and citable."

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { clsx } from 'clsx'
-import { X, ExternalLink, ChevronDown } from 'lucide-react'
+import { ExternalLink, ChevronDown } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { TopBar } from '@/components/layout/TopBar'
 
@@ -161,9 +161,9 @@ function DetailPanel({ event, onClose }: { event: WatchEvent; onClose: () => voi
         </span>
         <button
           onClick={onClose}
-          className="text-terminal-muted hover:text-terminal-text transition-colors"
+          className="text-terminal-muted hover:text-terminal-text transition-colors text-sm leading-none"
         >
-          <X size={14} />
+          ×
         </button>
       </div>
 

@@ -1,4 +1,3 @@
-import { Leaf } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { ModulePlaceholder } from '@/components/ui/ModulePlaceholder'
 
@@ -10,7 +9,6 @@ export function BladesPage() {
         subtitle="GRP and composite blade volumes, recycling pathways, and end-of-life cost modelling"
       />
       <ModulePlaceholder
-        icon={Leaf}
         label="BLADES"
         name="Blade Waste Intelligence"
         description="Blade inventory tracking, GRP and composite material volumes by region and year, recycling pathway availability, and end-of-life cost modelling across European and US onshore wind markets. Blades handled separately from metallic scrap — no GRP volumes reported under Recovery Value."

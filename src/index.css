@@ -5,5 +5,69 @@
 @layer base {
   body {
     @apply font-sans antialiased bg-terminal-black text-terminal-text;
+    font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
+}
+
+/* ── Dockview theme — terminal palette ──────────────────────────────────────── */
+
+.endenex-dockview {
+  --dv-background-color:                                   #0D1117;
+  --dv-group-view-background-color:                        #0D1117;
+  --dv-tabs-and-actions-container-background-color:        #161B22;
+  --dv-tabs-and-actions-container-height:                  34px;
+  --dv-tab-height:                                         34px;
+
+  /* Active group — visible tab */
+  --dv-activegroup-visiblepanel-tab-background-color:      #0D1117;
+  --dv-activegroup-visiblepanel-tab-color:                 #E6EDF3;
+  /* Active group — hidden tabs */
+  --dv-activegroup-hiddenpanel-tab-background-color:       #161B22;
+  --dv-activegroup-hiddenpanel-tab-color:                  #7D8590;
+  /* Inactive group */
+  --dv-inactivegroup-visiblepanel-tab-background-color:    #161B22;
+  --dv-inactivegroup-visiblepanel-tab-color:               #7D8590;
+  --dv-inactivegroup-hiddenpanel-tab-background-color:     #161B22;
+  --dv-inactivegroup-hiddenpanel-tab-color:                #4D5562;
+
+  --dv-tab-divider-color:                                  #21262D;
+  --dv-separator-border:                                   #21262D;
+  --dv-paneview-header-border-color:                       #21262D;
+  --dv-drag-over-background-color:                         rgba(0, 123, 138, 0.08);
+  --dv-drag-over-border-color:                             #007B8A;
+  --dv-overlay-z-index:                                    999;
+  --dv-tab-border-width:                                   1px;
+  --dv-tab-close-icon:                                     none;
+}
+
+/* Tab typography */
+.endenex-dockview .dv-tab {
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  padding: 0 16px;
+  border-right: 1px solid #21262D;
+}
+
+/* Active tab bottom indicator */
+.endenex-dockview .dv-tab.active-tab {
+  border-bottom: 2px solid #007B8A;
+}
+
+/* Resize handle */
+.endenex-dockview .dv-sash-container .dv-sash {
+  background: #21262D;
+}
+.endenex-dockview .dv-sash-container .dv-sash:hover,
+.endenex-dockview .dv-sash-container .dv-sash.active {
+  background: #007B8A;
+}
+
+/* Drop target overlay */
+.endenex-dockview .dv-drop-target .dv-drop-target-anchor {
+  background: rgba(0, 123, 138, 0.12);
+  border: 1px solid #007B8A;
 }
