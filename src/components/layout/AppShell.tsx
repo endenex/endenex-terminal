@@ -3,6 +3,7 @@ import { useUser } from '@clerk/clerk-react'
 import { DockviewReact, DockviewReadyEvent, DockviewApi, IDockviewPanelProps } from 'dockview'
 import 'dockview/dist/styles/dockview.css'
 import { NavBar } from './NavBar'
+import { StatusBar } from './StatusBar'
 import { WorkspaceContext } from '@/context/WorkspaceContext'
 import { DashboardPage }  from '@/pages/DashboardPage'
 import { DciPage }        from '@/pages/DciPage'
@@ -136,6 +137,7 @@ export function AppShell() {
             onReady={onReady}
           />
         </div>
+        <StatusBar />
       </div>
     </WorkspaceContext.Provider>
   )
