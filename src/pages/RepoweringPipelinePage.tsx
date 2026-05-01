@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { X, ExternalLink, ChevronRight, ChevronLeft, ChevronDown } from 'lucide-react'
 import { clsx } from 'clsx'
+import { ResponsiveContainer, BarChart, Bar, XAxis, Cell, Tooltip } from 'recharts'
 import { supabase } from '@/lib/supabase'
 import { TopBar } from '@/components/layout/TopBar'
 import type { TopBarMeta } from '@/components/layout/TopBar'
@@ -297,23 +298,33 @@ export function RepoweringPipelinePage() {
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<RepoweringProject | null>(null)
   const [topBarMeta, setTopBarMeta] = useState<TopBarMeta[]>([])
+  const [stageCounts, setStageCounts] = useState<{ stage: string; count: number; label: string }[]>([])
 
-  // One-time fetch: most recent last_reviewed across the entire table
+  // One-time fetches: metadata + all stage counts for chart
   useEffect(() => {
-    supabase
-      .from('repowering_projects')
-      .select('last_reviewed, source_type')
-      .order('last_reviewed', { ascending: false })
-      .limit(50)
-      .then(({ data }) => {
-        if (!data || data.length === 0) return
-        const latest   = data[0].last_reviewed as string
-        const sources  = [...new Set((data as { source_type: string }[]).map(r => r.source_type).filter(Boolean))]
+    Promise.all([
+      supabase.from('repowering_projects').select('last_reviewed, source_type').order('last_reviewed', { ascending: false }).limit(50),
+      supabase.from('repowering_projects').select('stage'),
+    ]).then(([metaRes, stageRes]) => {
+      // TopBar metadata
+      if (metaRes.data && metaRes.data.length > 0) {
+        const latest  = metaRes.data[0].last_reviewed as string
+        const sources = [...new Set((metaRes.data as { source_type: string }[]).map(r => r.source_type).filter(Boolean))]
         setTopBarMeta([
           { label: 'Source', value: sources.slice(0, 3).join(' · ') || '—' },
           { label: 'Last reviewed', value: formatDate(latest) },
         ])
-      })
+      }
+      // Stage bar chart counts
+      const tally: Record<string, number> = {}
+      for (const row of (stageRes.data ?? []) as { stage: string }[]) {
+        tally[row.stage] = (tally[row.stage] ?? 0) + 1
+      }
+      const stageOrder: RepoweringStage[] = ['announced', 'application_submitted', 'application_approved', 'permitted', 'ongoing']
+      setStageCounts(stageOrder.filter(s => tally[s] > 0).map(s => ({
+        stage: s, count: tally[s], label: STAGE_LABELS[s],
+      })))
+    })
   }, [])
 
   const fetchProjects = useCallback(async () => {
@@ -389,6 +400,49 @@ export function RepoweringPipelinePage() {
           ))}
         </div>
       </div>
+
+      {/* Stage bar chart */}
+      {stageCounts.length > 0 && (
+        <div className="bg-terminal-black border-b border-terminal-border px-6 py-3 flex items-center gap-6">
+          <span className="text-[10px] font-mono text-terminal-muted uppercase tracking-widest flex-shrink-0">
+            Pipeline
+          </span>
+          <div className="flex-1 h-8">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={stageCounts} layout="vertical" margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                <XAxis type="number" hide />
+                <Tooltip
+                  cursor={false}
+                  contentStyle={{
+                    background: '#161B22', border: '1px solid #21262D',
+                    borderRadius: 4, fontSize: 11, fontFamily: 'monospace',
+                    color: '#E6EDF3', padding: '4px 8px',
+                  }}
+                  formatter={(v: number, _: string, entry: { payload: { label: string } }) =>
+                    [`${v} projects`, entry.payload.label]
+                  }
+                />
+                <Bar dataKey="count" radius={2} barSize={10} isAnimationActive={false}>
+                  {stageCounts.map((_, i) => (
+                    <Cell
+                      key={i}
+                      fill={['#38bdf8','#818cf8','#60a5fa','#2dd4bf','#34d399'][i % 5]}
+                      fillOpacity={0.7}
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="flex items-center gap-3 flex-shrink-0">
+            {stageCounts.map(({ stage: s, count, label }) => (
+              <span key={s} className="flex items-center gap-1 text-[10px] font-mono text-terminal-muted">
+                <span className="num text-terminal-text">{count}</span> {label}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Filter bar */}
       <div className="bg-terminal-black border-b border-terminal-border px-6 py-2.5 flex items-center gap-4">

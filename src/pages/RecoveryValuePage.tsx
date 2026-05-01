@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { clsx } from 'clsx'
+import { ResponsiveContainer, AreaChart, Area, Tooltip } from 'recharts'
 import { supabase } from '@/lib/supabase'
 import { TopBar } from '@/components/layout/TopBar'
 import type { TopBarMeta } from '@/components/layout/TopBar'
@@ -108,6 +109,40 @@ function fmtRange(low: number | null, mid: number | null, high: number | null, s
   return `${fmt(low, symbol)} – ${fmt(high, symbol)}`
 }
 
+// Inline sparkline for a material's price history
+function PriceSparkline({ data }: { data: { v: number }[] }) {
+  if (data.length < 2) return null
+  const up = data[data.length - 1].v >= data[0].v
+  const colour = up ? '#34d399' : '#f87171'  // emerald-400 / red-400
+  return (
+    <div className="w-20 h-7">
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={data} margin={{ top: 2, right: 0, left: 0, bottom: 2 }}>
+          <defs>
+            <linearGradient id={`sg-${up ? 'up' : 'dn'}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%"  stopColor={colour} stopOpacity={0.25} />
+              <stop offset="95%" stopColor={colour} stopOpacity={0.0} />
+            </linearGradient>
+          </defs>
+          <Area
+            type="monotone"
+            dataKey="v"
+            stroke={colour}
+            strokeWidth={1.2}
+            fill={`url(#sg-${up ? 'up' : 'dn'})`}
+            dot={false}
+            isAnimationActive={false}
+          />
+          <Tooltip
+            contentStyle={{ display: 'none' }}
+            cursor={false}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
 // Direction indicator ▲/▼ with percentage change
 function PriceDirection({ current, prev }: { current: number; prev: number | undefined }) {
   if (prev == null || prev === 0) return null
@@ -140,6 +175,7 @@ export function RecoveryValuePage() {
   const [region, setRegion] = useState<Region>('EU')
   const [prices, setPrices] = useState<CommodityPrice[]>([])
   const [prevPrices, setPrevPrices] = useState<Record<string, CommodityPrice>>({})
+  const [historyMap, setHistoryMap] = useState<Record<string, { v: number }[]>>({})
   const [nro, setNro] = useState<NroEstimate[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -158,12 +194,20 @@ export function RecoveryValuePage() {
 
       const latestPrices: Record<string, CommodityPrice>  = {}
       const prevPricesMap: Record<string, CommodityPrice> = {}
-      for (const p of priceRes.data ?? []) {
+      const hist: Record<string, CommodityPrice[]>        = {}
+      for (const p of (priceRes.data ?? []) as CommodityPrice[]) {
         if (!latestPrices[p.material_type])       latestPrices[p.material_type]  = p
         else if (!prevPricesMap[p.material_type]) prevPricesMap[p.material_type] = p
+        ;(hist[p.material_type] ??= []).push(p)
+      }
+      // Reverse to oldest-first for sparkline charts
+      const hMap: Record<string, { v: number }[]> = {}
+      for (const [mat, rows] of Object.entries(hist)) {
+        hMap[mat] = [...rows].reverse().map(r => ({ v: r.price_per_tonne }))
       }
       setPrices(Object.values(latestPrices))
       setPrevPrices(prevPricesMap)
+      setHistoryMap(hMap)
 
       const latestNro: Record<string, NroEstimate> = {}
       for (const n of nroRes.data ?? []) {
@@ -258,6 +302,7 @@ export function RecoveryValuePage() {
                     <th className="text-[10px] text-terminal-muted font-medium tracking-wide uppercase text-left py-2.5 pr-3">Component</th>
                     <SortableTh label="Price / t"   sortKey="price_per_tonne" sort={priceSort} onSort={priceToggle} className="text-right py-2.5 pr-3" />
                     <th className="text-[10px] text-terminal-muted font-medium tracking-wide uppercase text-right py-2.5 pr-3">Change</th>
+                    <th className="text-[10px] text-terminal-muted font-medium tracking-wide uppercase py-2.5 pr-3 w-24">Trend</th>
                     <SortableTh label="Source"      sortKey="source_name"     sort={priceSort} onSort={priceToggle} className="text-left py-2.5 pr-3" />
                     <SortableTh label="Price Date"  sortKey="price_date"      sort={priceSort} onSort={priceToggle} className="text-left py-2.5 pr-3" />
                     <SortableTh label="Confidence"  sortKey="confidence"      sort={priceSort} onSort={priceToggle} className="text-left py-2.5 pr-5" />
@@ -265,9 +310,9 @@ export function RecoveryValuePage() {
               </thead>
               <tbody>
                 {loading ? (
-                  Array.from({ length: 7 }).map((_, i) => <SkeletonTableRow key={i} cols={7} />)
+                  Array.from({ length: 7 }).map((_, i) => <SkeletonTableRow key={i} cols={8} />)
                 ) : sortedPrices.length === 0 ? (
-                  <EmptySection label="scrap price" />
+                  <EmptySection label="scrap price" cols={8} />
                 ) : (
                   sortedPrices.map(p => {
                     const mat  = p.material_type
@@ -291,6 +336,9 @@ export function RecoveryValuePage() {
                             ? <PriceDirection current={p.price_per_tonne} prev={prev.price_per_tonne} />
                             : <span className="text-[11px] font-mono text-terminal-border">—</span>
                           }
+                        </td>
+                        <td className="py-2 pr-3">
+                          <PriceSparkline data={historyMap[mat] ?? []} />
                         </td>
                         <td className="py-3 pr-3 text-terminal-muted font-mono">
                           {p?.source_name ?? '—'}
