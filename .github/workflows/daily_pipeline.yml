@@ -6,11 +6,10 @@ name: Daily Pipeline
 #   Step 2.  EEG-expiry promoter (DE)     → repowering_projects
 #   Step 3.  REPD planning promoter (UK)  → repowering_projects
 #   Step 4.  Airtable → repowering        → repowering_projects   (depends on Step 1)
-#   Step 5.  Procurement scrapers         → watch_events          (TED / FTS / SAM.gov)
-#   Step 6.  Trade-press RSS monitor      → watch_events
-#   Step 7.  Asset signals classifier     → asset_signals          (depends on Steps 2-4)
-#   Step 8.  Compute DCI publications     → dci_publications
-#   Step 9.  Compute NRO estimates        → nro_estimates
+#   Step 5.  Trade-press RSS monitor      → watch_events
+#   Step 6.  Asset signals classifier     → asset_signals          (depends on Steps 2-4)
+#   Step 7.  Compute DCI publications     → dci_publications
+#   Step 8.  Compute NRO estimates        → nro_estimates
 #
 # Each step writes to ingestion_runs telemetry. The Coverage overlay in the
 # Terminal shows the daily run health.
@@ -84,20 +83,8 @@ jobs:
         run: python promote_airtable_repowering.py
         continue-on-error: true
 
-      # ── Step 5 ── Procurement scrapers
-      - name: 5 · Procurement notices (TED / FTS / SAM.gov)
-        working-directory: ingestion
-        env:
-          SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          TED_API_KEY:               ${{ secrets.TED_API_KEY }}
-          FTS_API_KEY:               ${{ secrets.FTS_API_KEY }}
-          SAM_API_KEY:               ${{ secrets.SAM_API_KEY }}
-        run: python ingest_procurement.py --source all --days 90
-        continue-on-error: true
-
-      # ── Step 6 ── Trade-press RSS monitor
-      - name: 6 · Trade-press RSS
+      # ── Step 5 ── Trade-press RSS monitor
+      - name: 5 · Trade-press RSS
         working-directory: ingestion
         env:
           SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
@@ -105,8 +92,8 @@ jobs:
         run: python ingest_trade_press.py --days 14
         continue-on-error: true
 
-      # ── Step 7 ── Asset signals (depends on Steps 2-4)
-      - name: 7 · Recompute asset_signals
+      # ── Step 6 ── Asset signals (depends on Steps 2-4)
+      - name: 6 · Recompute asset_signals
         working-directory: ingestion
         env:
           SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
@@ -114,8 +101,8 @@ jobs:
         run: python compute_asset_signals.py
         continue-on-error: true
 
-      # ── Step 8 ── DCI publications (v1.1)
-      - name: 8 · Compute DCI publications
+      # ── Step 7 ── DCI publications (v1.1)
+      - name: 7 · Compute DCI publications
         working-directory: ingestion
         env:
           SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
@@ -123,8 +110,8 @@ jobs:
         run: python compute_dci.py
         continue-on-error: true
 
-      # ── Step 9 ── NRO estimates (v1.1)
-      - name: 9 · Compute NRO estimates
+      # ── Step 8 ── NRO estimates (v1.1)
+      - name: 8 · Compute NRO estimates
         working-directory: ingestion
         env:
           SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
