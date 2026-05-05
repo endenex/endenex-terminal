@@ -43,37 +43,126 @@ BATCH_SIZE = 200
 # ── Field mapping tables ────────────────────────────────────────────────────────
 
 ACTIVITY_CATEGORY: dict[str, str] = {
-    'Repowering':           'market',
-    'Decommissioning':      'market',
-    'Foundation Removal':   'market',
-    'Site Restoration':     'market',
-    'End-of-Life Planning': 'market',
-    'Blade/Recycling':      'supply_chain',
-    'Regulatory/Bonding':   'regulatory',
+    'Repowering':              'market',
+    'Decommissioning':         'market',
+    'Foundation Removal':      'market',
+    'Site Restoration':        'market',
+    'End-of-Life Planning':    'market',
+    'Blade/Recycling':         'supply_chain',
+    'Regulatory/Bonding':      'regulatory',
+    'Operator Announcement':   'market',
+    'Contractor News':         'supply_chain',
+    'Recycler Announcement':   'supply_chain',
+    'Provision Disclosure':    'regulatory',
+    'Policy':                  'regulatory',
+    'Trade Body':              'regulatory',
+    'Court Ruling':            'regulatory',
+    'Insolvency':              'market',
+    'Audit Guidance':          'regulatory',
+    'Tender':                  'market',
+    'Commodity':               'commodity',
+    'Capacity':                'supply_chain',
+    # Japan-specific
+    'FIT Expiry':              'regulatory',
+    'Post-FIT Decision':       'market',
+    'METI Disclosure':         'regulatory',
+    'Japan Cohort':            'market',
 }
 
 ACTIVITY_EVENT_TYPE: dict[str, str] = {
-    'Repowering':           'Repowering',
-    'Decommissioning':      'Decommissioning',
-    'Foundation Removal':   'Foundation removal',
-    'Site Restoration':     'Site restoration',
-    'End-of-Life Planning': 'End-of-life planning',
-    'Blade/Recycling':      'Blade / recycling',
-    'Regulatory/Bonding':   'Regulatory / bonding',
+    'Repowering':              'Repowering',
+    'Decommissioning':         'Decommissioning',
+    'Foundation Removal':      'Foundation removal',
+    'Site Restoration':        'Site restoration',
+    'End-of-Life Planning':    'End-of-life planning',
+    'Blade/Recycling':         'Blade / recycling',
+    'Regulatory/Bonding':      'Regulatory / bonding',
+    'Operator Announcement':   'Operator announcement',
+    'Contractor News':         'Contractor news',
+    'Recycler Announcement':   'Recycler announcement',
+    'Provision Disclosure':    'Provision disclosure',
+    'Policy':                  'Policy',
+    'Trade Body':              'Trade body',
+    'Court Ruling':            'Court ruling',
+    'Insolvency':              'Insolvency',
+    'Audit Guidance':          'Audit guidance',
+    'Tender':                  'Tender',
+    'Commodity':               'Commodity move',
+    'Capacity':                'Capacity signal',
+    'FIT Expiry':              'FIT expiry',
+    'Post-FIT Decision':       'Post-FIT decision',
+    'METI Disclosure':         'METI disclosure',
+    'Japan Cohort':            'Japan cohort',
 }
 
 MARKET_SCOPE: dict[str, str] = {
-    'UK':           'GB',
-    'Germany':      'DE',
-    'Spain':        'ES',
-    'France':       'FR',
-    'Denmark':      'DK',
-    'Other Europe': 'EU',
-    'Other US':     'US',
-    'Midwest US':   'US',
-    'Texas':        'US',
-    'Multiple':     'Global',
+    # Europe
+    'UK':              'GB',
+    'Germany':         'DE',
+    'Spain':           'ES',
+    'France':          'FR',
+    'Denmark':         'DK',
+    'Netherlands':     'NL',
+    'Sweden':          'SE',
+    'Italy':           'IT',
+    'Other Europe':    'EU',
+    'EU':              'EU',
+    # US
+    'Other US':        'US',
+    'Midwest US':      'US',
+    'Texas':           'US',
+    'California':      'US',
+    'US':              'US',
+    # Japan — previously missing
+    'Japan':           'JP',
+    'Other Japan':     'JP',
+    'JP':              'JP',
+    # Australia
+    'Australia':       'AU',
+    # Global
+    'Multiple':        'Global',
+    'Global':          'Global',
 }
+
+# ── Liability-impact tag derivation ────────────────────────────────────────────
+# Derive tags automatically from category + event_type.
+# These can be overridden by an explicit 'Liability Tags' field in Airtable.
+
+_LIABILITY_RULES: list[tuple[str, str, list[str]]] = [
+    # (category_match_or_*, event_type_fragment_or_*, tags)
+    ('regulatory', 'bond',       ['COST_UP']),
+    ('regulatory', 'policy',     ['POL']),
+    ('regulatory', 'disclosure', ['PROV']),
+    ('regulatory', 'METI',       ['POL', 'PROV']),
+    ('regulatory', 'FIT',        ['POL']),
+    ('regulatory', 'court',      ['COST_UP']),
+    ('regulatory', 'audit',      ['PROV']),
+    ('market',     'decommission', ['COST_UP']),
+    ('market',     'repower',    ['COST_UP']),
+    ('market',     'insolvency', ['COST_UP']),
+    ('market',     'provision',  ['PROV']),
+    ('supply_chain','recycl',    ['REC_UP']),
+    ('supply_chain','blade',     ['COST_UP']),
+    ('supply_chain','capacity',  ['CAP']),
+    ('supply_chain','contract',  ['CAP']),
+    ('commodity',  '',           ['REC_UP']),   # commodity moves → recovery signal
+]
+
+
+def derive_liability_tags(category: str, event_type: str) -> list[str]:
+    """Return liability-impact tags inferred from category and event_type."""
+    tags: set[str] = set()
+    cat_lc  = (category or '').lower()
+    evt_lc  = (event_type or '').lower()
+
+    for rule_cat, rule_frag, rule_tags in _LIABILITY_RULES:
+        if rule_cat != '*' and rule_cat not in cat_lc:
+            continue
+        if rule_frag and rule_frag.lower() not in evt_lc:
+            continue
+        tags.update(rule_tags)
+
+    return sorted(tags)
 
 RELEVANCE_CONFIDENCE: dict[str, str] = {
     'HIGH':   'High',
@@ -165,6 +254,13 @@ def map_record(rec: dict, source_id_map: dict[str, str]) -> dict | None:
     stakeholder = (f.get('Stakeholder Type') or '').strip()
     operator    = (f.get('Operator') or '').strip() or None
 
+    # Liability tags: use explicit Airtable field if present, else derive
+    explicit_tags = [
+        t.strip() for t in str(f.get('Liability Tags') or '').split(',')
+        if t.strip()
+    ]
+    liability_tags = explicit_tags if explicit_tags else derive_liability_tags(category, event_type)
+
     return {
         'airtable_record_id': rec['id'],
         'category':           category,
@@ -179,6 +275,7 @@ def map_record(rec: dict, source_id_map: dict[str, str]) -> dict | None:
         'asset_type':         (f.get('Asset Type') or '').strip() or None,
         'stakeholder_type':   stakeholder or None,
         'activity_types':     activity_types or None,
+        'liability_tags':     liability_tags,
         'event_date':         event_date,
         'source_id':          source_id,
         'source_url':         (f.get('URL') or '').strip() or None,
