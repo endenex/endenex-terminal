@@ -1,14 +1,7 @@
 // ── Home — Tab 01 ────────────────────────────────────────────────────────────
-// Six-panel 3×2 gateway grid.
+// Six-panel 3×2 gateway grid. Each panel is a live-data preview of one
+// downstream module, with a "click to open" affordance.
 // Spec: Product Brief v1.0 §6.1
-//
-// Layout:
-//   Top-left:     Spot DCI Indices      (DCI Dashboard)
-//   Top-centre:   Signal Tape           (Market Watch)
-//   Top-right:    Tightness & Conversion(PCM)
-//   Bottom-left:  Retirement Waves      (ARI)
-//   Bottom-centre:Commodity Reference   (SMI)
-//   Bottom-right: Portfolio Workspace   (Portfolio Analytics)
 
 import { useState, useEffect } from 'react'
 import { clsx } from 'clsx'
@@ -21,38 +14,108 @@ import { useWorkspace } from '@/context/WorkspaceContext'
 function fmtDate(val: string | null): string {
   if (!val) return '—'
   try {
-    return new Date(val).toLocaleDateString('en-GB', {
-      day: '2-digit', month: 'short',
-    })
+    return new Date(val).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
   } catch { return '—' }
 }
 
+function fmtCcy(n: number, sym: string): string {
+  if (Math.abs(n) >= 1_000_000) return `${sym}${(n/1_000_000).toFixed(2)}M`
+  if (Math.abs(n) >= 1_000)     return `${sym}${(n/1_000).toFixed(0)}k`
+  return `${sym}${Math.round(n)}`
+}
+
+const CCY_SYM: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', JPY: '¥' }
+
 // ── DCI Indices panel ─────────────────────────────────────────────────────────
 
-const DCI_INDICES = [
-  { label: 'DCI Wind Europe',        ccy: '€', id: 'dci_wind_eu'    },
-  { label: 'DCI Wind North America', ccy: '$', id: 'dci_wind_na'    },
-  { label: 'DCI Solar Europe',       ccy: '€', id: 'dci_solar_eu'   },
-  { label: 'DCI Solar North America',ccy: '$', id: 'dci_solar_na'   },
-  { label: 'DCI Solar Japan',        ccy: '¥', id: 'dci_solar_jp'   },
+interface DciRow {
+  series:           string
+  publication_date: string
+  index_value:      number | null
+  net_liability:    number | null
+  currency:         string
+}
+
+const DCI_INDICES: { label: string; ccy: string; series: string | null }[] = [
+  { label: 'DCI Wind Europe',         ccy: '€', series: 'dci_wind_europe'         },
+  { label: 'DCI Wind North America',  ccy: '$', series: 'dci_wind_north_america'  },
+  { label: 'DCI Solar Europe',        ccy: '€', series: 'dci_solar_europe'        },
+  { label: 'DCI Solar North America', ccy: '$', series: 'dci_solar_north_america' },
+  { label: 'DCI Solar Japan',         ccy: '¥', series: 'dci_solar_japan'         },
 ]
 
 function DciIndicesPanel() {
+  const [byS, setByS] = useState<Map<string, { latest: DciRow; prior: DciRow | null }>>(new Map())
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    supabase
+      .from('dci_publications')
+      .select('series, publication_date, index_value, net_liability, currency')
+      .eq('is_published', true)
+      .order('publication_date', { ascending: false })
+      .then(({ data }) => {
+        const map = new Map<string, { latest: DciRow; prior: DciRow | null }>()
+        for (const row of (data ?? []) as DciRow[]) {
+          const entry = map.get(row.series)
+          if (!entry) {
+            map.set(row.series, { latest: row, prior: null })
+          } else if (entry.prior == null) {
+            entry.prior = row
+          }
+        }
+        setByS(map)
+        setLoading(false)
+      })
+  }, [])
+
   return (
     <PanelShell sourceLabel="DCI Dashboard" title="Spot Indices" linkTo="dci">
       <div className="divide-y divide-border">
-        {DCI_INDICES.map(({ label, ccy }) => (
-          <div key={label} className="flex items-center justify-between px-4 py-3">
-            <div className="min-w-0">
-              <p className="text-[12px] font-semibold text-ink">{label}</p>
-              <p className="text-[10px] text-ink-3 mt-0.5">{ccy} / MW · Monthly cadence</p>
+        {DCI_INDICES.map(({ label, ccy, series }) => {
+          const entry = series ? byS.get(series) : null
+          const latest = entry?.latest
+          const prior  = entry?.prior
+          const sym    = latest?.currency ? CCY_SYM[latest.currency] ?? ccy : ccy
+
+          let pct: number | null = null
+          if (latest?.net_liability != null && prior?.net_liability && prior.net_liability !== 0) {
+            pct = ((latest.net_liability - prior.net_liability) / prior.net_liability) * 100
+          }
+
+          return (
+            <div key={label} className="flex items-center justify-between px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-[12px] font-semibold text-ink">{label}</p>
+                <p className="text-[10px] text-ink-3 mt-0.5">{ccy} / MW · Monthly cadence</p>
+              </div>
+              <div className="flex items-center gap-3 flex-shrink-0">
+                {loading ? (
+                  <span className="text-[10px] text-ink-4">Loading…</span>
+                ) : latest?.net_liability != null ? (
+                  <>
+                    <span className="text-[13px] font-semibold text-ink tabular-nums">
+                      {fmtCcy(latest.net_liability, sym)}
+                    </span>
+                    {pct != null && Math.abs(pct) >= 0.05 && (
+                      <span className={clsx(
+                        'text-[10px] font-semibold tabular-nums',
+                        pct > 0 ? 'text-down' : 'text-up'
+                      )}>
+                        {pct > 0 ? '▲' : '▼'}{Math.abs(pct).toFixed(1)}%
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <span className="text-[13px] font-semibold text-ink-3">—</span>
+                    <span className="text-[10px] text-ink-4">Phase 2</span>
+                  </>
+                )}
+              </div>
             </div>
-            <div className="flex items-center gap-3 flex-shrink-0">
-              <span className="text-[13px] font-semibold text-ink-3">—</span>
-              <span className="text-[10px] text-ink-4">Pending</span>
-            </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </PanelShell>
   )
@@ -156,27 +219,60 @@ function PcmTightnessPanel() {
 
 // ── Retirement Waves panel ────────────────────────────────────────────────────
 
+interface PipelineRow {
+  install_year: number
+  installed_gw: number
+}
+
+const HORIZONS = [
+  { years: 1,  label: 'Near-term'  },
+  { years: 3,  label: 'Medium-term' },
+  { years: 5,  label: '5-year'     },
+  { years: 10, label: '10-year'    },
+]
+
 function RetirementWavesPanel() {
+  const [installs, setInstalls] = useState<PipelineRow[]>([])
+  const [loading, setLoading]   = useState(true)
+  const todayYear = new Date().getFullYear()
+
+  useEffect(() => {
+    supabase
+      .from('wind_pipeline_annual_installations')
+      .select('install_year, installed_gw')
+      .eq('scope', 'onshore')
+      .then(({ data }) => {
+        setInstalls((data as PipelineRow[]) ?? [])
+        setLoading(false)
+      })
+  }, [])
+
+  // For each horizon, sum GW where install_year + 25 ≤ todayYear + horizon
+  const waves = HORIZONS.map(h => {
+    const cutoff = todayYear + h.years
+    const eolGw = installs
+      .filter(r => r.install_year + 25 <= cutoff && r.install_year + 25 >= todayYear)
+      .reduce((s, r) => s + Number(r.installed_gw), 0)
+    return { ...h, year: cutoff, gw: eolGw }
+  })
+
   return (
     <PanelShell sourceLabel="Asset Retirement Intelligence" title="Retirement Waves" linkTo="ari">
       <div className="px-4 py-4 space-y-2">
-        {[
-          { horizon: '1y',  label: 'Near-term (2025)',   value: '—' },
-          { horizon: '3y',  label: 'Medium-term (2028)', value: '—' },
-          { horizon: '5y',  label: '5-year (2030)',       value: '—' },
-          { horizon: '10y', label: '10-year (2035)',      value: '—' },
-        ].map(({ horizon, label, value }) => (
-          <div key={horizon} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+        {waves.map(w => (
+          <div key={w.years} className="flex items-center justify-between py-2 border-b border-border last:border-0">
             <div>
-              <p className="text-[11.5px] font-medium text-ink-2">{label}</p>
+              <p className="text-[11.5px] font-medium text-ink-2">{w.label} ({w.year})</p>
             </div>
             <div className="text-right">
-              <span className="text-[13px] font-semibold text-ink">{value}</span>
+              <span className="text-[13px] font-semibold text-ink tabular-nums">
+                {loading ? '…' : w.gw > 0 ? w.gw.toFixed(1) : '—'}
+              </span>
               <span className="text-[10px] text-ink-3 ml-1">GW</span>
             </div>
           </div>
         ))}
-        <p className="text-[10px] text-ink-4 pt-1">Onshore wind · EU + UK + US + JP</p>
+        <p className="text-[10px] text-ink-4 pt-1">Onshore wind · UK + US + CA · 25-yr design life</p>
       </div>
     </PanelShell>
   )
@@ -203,11 +299,11 @@ const MATERIAL_LABELS: Record<string, string> = {
 const MATERIAL_ORDER = ['steel_hms1', 'copper', 'aluminium', 'zinc', 'rare_earth']
 
 const SOURCE_LABELS: Record<string, string> = {
-  steel_hms1: 'Argus EU',
-  copper:     'LME',
-  aluminium:  'LME',
-  zinc:       'LME',
-  rare_earth: 'BMI',
+  steel_hms1: 'Fastmarkets EU',
+  copper:     'Argus Scrap',
+  aluminium:  'Argus Scrap',
+  zinc:       'LME-ref',
+  rare_earth: 'Argus NdPr',
 }
 
 function CommodityReferencePanel() {
@@ -235,7 +331,7 @@ function CommodityReferencePanel() {
           const bi = MATERIAL_ORDER.indexOf(b.material_type)
           return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi)
         })
-        setPrices(deduped)
+        setPrices(deduped.filter(p => MATERIAL_ORDER.includes(p.material_type)))
         setLoading(false)
       })
   }, [])
@@ -259,11 +355,11 @@ function CommodityReferencePanel() {
                 {MATERIAL_LABELS[row.material_type] ?? row.material_type}
               </p>
               <p className="text-[9.5px] text-ink-4">
-                {SOURCE_LABELS[row.material_type] ?? ''} · m/m
+                {SOURCE_LABELS[row.material_type] ?? ''} · scrap-basis
               </p>
             </div>
             <div className="text-right">
-              <p className="text-[12px] font-semibold text-ink">
+              <p className="text-[12px] font-semibold text-ink tabular-nums">
                 {new Intl.NumberFormat('en-GB', {
                   style: 'currency', currency: row.currency, maximumFractionDigits: 0,
                 }).format(row.price_per_tonne)}
@@ -280,29 +376,57 @@ function CommodityReferencePanel() {
 
 // ── Portfolio Workspace panel ─────────────────────────────────────────────────
 
+const STORAGE_KEY = 'endenex_portfolio_v1'
+
 function PortfolioWorkspacePanel() {
   const { openPanel } = useWorkspace()
+  const [siteCount, setSiteCount] = useState<number>(0)
+  const [totalMw,   setTotalMw]   = useState<number>(0)
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY)
+      if (!raw) return
+      const assets = JSON.parse(raw) as { capacity_mw: number }[]
+      setSiteCount(assets.length)
+      setTotalMw(assets.reduce((s, a) => s + (Number(a.capacity_mw) || 0), 0))
+    } catch { /* */ }
+  }, [])
+
+  const hasPortfolio = siteCount > 0
+
   return (
     <PanelShell sourceLabel="Portfolio Analytics" title="Workspace" linkTo="portfolio">
       <div className="px-5 py-6 flex flex-col items-center justify-center gap-4 h-full text-center">
         <div className="w-10 h-10 rounded-full bg-active flex items-center justify-center">
           <span className="text-teal text-lg">⊞</span>
         </div>
-        <div className="space-y-1">
-          <p className="text-[13px] font-semibold text-ink">No portfolio loaded</p>
-          <p className="text-[11.5px] text-ink-3 leading-relaxed max-w-[220px]">
-            Upload a CSV or enter assets manually to model decommissioning liability.
-          </p>
-        </div>
+        {hasPortfolio ? (
+          <div className="space-y-1">
+            <p className="text-[13px] font-semibold text-ink">{siteCount} site{siteCount !== 1 ? 's' : ''} loaded</p>
+            <p className="text-[11.5px] text-ink-3">
+              {totalMw >= 1000 ? `${(totalMw/1000).toFixed(1)} GW` : `${totalMw.toFixed(0)} MW`} portfolio capacity
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-1">
+            <p className="text-[13px] font-semibold text-ink">No portfolio loaded</p>
+            <p className="text-[11.5px] text-ink-3 leading-relaxed max-w-[220px]">
+              Upload a CSV or enter assets manually to model decommissioning liability.
+            </p>
+          </div>
+        )}
         <button
           onClick={() => openPanel('portfolio')}
           className="px-4 py-1.5 bg-teal text-white text-[11.5px] font-semibold rounded hover:bg-teal-deep transition-colors"
         >
-          Open Portfolio Analytics
+          {hasPortfolio ? 'Open Portfolio →' : 'Open Portfolio Analytics'}
         </button>
-        <button className="text-[10.5px] text-ink-4 hover:text-ink-3 transition-colors">
-          Skip — I'm not a portfolio user
-        </button>
+        {!hasPortfolio && (
+          <button className="text-[10.5px] text-ink-4 hover:text-ink-3 transition-colors">
+            Skip — I'm not a portfolio user
+          </button>
+        )}
       </div>
     </PanelShell>
   )
