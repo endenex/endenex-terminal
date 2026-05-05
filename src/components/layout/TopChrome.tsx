@@ -2,8 +2,9 @@
 // Dark navy strip — brand wordmark + five DCI index ticker.
 // Spec: Product Brief v1.0 §5.1
 //
-// Wired to dci_publications for europe_wind and us_wind.
-// Solar series are placeholders until those DCI series are published.
+// Wired to dci_publications for dci_wind_europe and dci_wind_north_america.
+// Solar series (europe / north_america / japan) are placeholders until the
+// solar DCI methodology is built.
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
@@ -20,19 +21,19 @@ interface DciTick {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const WIND_SERIES = ['europe_wind', 'us_wind'] as const
+const WIND_SERIES = ['dci_wind_europe', 'dci_wind_north_america'] as const
 
 const TICKER_CONFIG: {
   key:    string
   label:  string
   ccy:    string
-  series: string | null       // null = placeholder until schema exists
+  series: string | null       // null = placeholder until that DCI series is published
 }[] = [
-  { key: 'dci_wind_eu',  label: 'DCI WIND EU',   ccy: '€', series: 'europe_wind' },
-  { key: 'dci_wind_na',  label: 'DCI WIND NA',   ccy: '$', series: 'us_wind'     },
-  { key: 'dci_solar_eu', label: 'DCI SOLAR EU',  ccy: '€', series: null          },
-  { key: 'dci_solar_na', label: 'DCI SOLAR NA',  ccy: '$', series: null          },
-  { key: 'dci_solar_jp', label: 'DCI SOLAR JP',  ccy: '¥', series: null          },
+  { key: 'dci_wind_eu',  label: 'DCI WIND EU',   ccy: '€', series: 'dci_wind_europe'         },
+  { key: 'dci_wind_na',  label: 'DCI WIND NA',   ccy: '$', series: 'dci_wind_north_america'  },
+  { key: 'dci_solar_eu', label: 'DCI SOLAR EU',  ccy: '€', series: null                      },
+  { key: 'dci_solar_na', label: 'DCI SOLAR NA',  ccy: '$', series: null                      },
+  { key: 'dci_solar_jp', label: 'DCI SOLAR JP',  ccy: '¥', series: null                      },
 ]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

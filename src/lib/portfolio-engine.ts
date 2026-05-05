@@ -10,14 +10,21 @@ import type { PortfolioAsset, AssetClass } from '@/types/portfolio'
 
 // ── Inputs ────────────────────────────────────────────────────────────────────
 
+export type DciSeries =
+  | 'dci_wind_europe'          // EUR — covers EU + UK
+  | 'dci_wind_north_america'   // USD — covers US + CA
+  | 'dci_solar_europe'         // EUR — Phase 2
+  | 'dci_solar_north_america'  // USD — Phase 2
+  | 'dci_solar_japan'          // JPY — Phase 2
+
 export interface DciSnapshot {
-  series:             'europe_wind' | 'us_wind' | 'uk_wind' | 'eu_exuk_wind'
+  series:             DciSeries
   publication_date:   string
   index_value:        number | null
   net_liability:      number | null      // per MW in `currency`
   net_liability_low:  number | null
   net_liability_high: number | null
-  currency:           'EUR' | 'USD' | 'GBP'
+  currency:           'EUR' | 'USD' | 'GBP' | 'JPY'
   methodology_version: string | null
 }
 
@@ -80,21 +87,29 @@ export function compositeCountryMult(cc: string, mults: CountryMultipliers[]): n
 
 // ── Country routing ──────────────────────────────────────────────────────────
 
-// Maps an ISO 3166-1 alpha-2 country to (DCI series, NRO region).
+// Maps an ISO 3166-1 alpha-2 country to (DCI series, NRO region, native ccy).
+// Per the Endenex DCI index family:
+//   • Wind Europe (EUR) covers EU + UK (no separate UK series)
+//   • Wind North America (USD) covers US + CA + MX
+//   • All other geographies fall back to Wind Europe pending a regional methodology
+// NRO commodity region still uses the granular 3-region split (EU/GB/US) for
+// scrap-price sourcing — UK assets price scrap at GB market levels even though
+// their DCI series is the European composite.
 export function routeCountry(country: string): {
-  series: DciSnapshot['series']
+  series: DciSeries
   region: NroSnapshot['region']
   currency_native: 'EUR' | 'GBP' | 'USD'
 } {
   const c = country.toUpperCase()
-  if (c === 'GB' || c === 'IE') {
-    return { series: 'uk_wind', region: 'GB', currency_native: 'GBP' }
-  }
   if (c === 'US' || c === 'CA' || c === 'MX') {
-    return { series: 'us_wind', region: 'US', currency_native: 'USD' }
+    return { series: 'dci_wind_north_america', region: 'US', currency_native: 'USD' }
+  }
+  if (c === 'GB' || c === 'IE') {
+    // UK assets: use European DCI series, but scrap prices from GB market
+    return { series: 'dci_wind_europe', region: 'GB', currency_native: 'GBP' }
   }
   // Default: continental Europe
-  return { series: 'europe_wind', region: 'EU', currency_native: 'EUR' }
+  return { series: 'dci_wind_europe', region: 'EU', currency_native: 'EUR' }
 }
 
 // ── FX conversion ────────────────────────────────────────────────────────────
@@ -198,17 +213,15 @@ export function valueAsset(
   // ── Liability (DCI route) ─────────────────────────────────────────────────
   // v1.1: apply country composite multiplier to scale published series-level
   // liability (which is computed against the country anchor) to this asset's
-  // specific country. UK/IE → 1.0 (uk_wind already at GB rates), US/CA/MX → 1.0
-  // (us_wind already at US rates), continental EU sites get re-scaled from
-  // the DE proxy used by europe_wind to their specific country multiplier.
-  const series_anchor = route.series === 'uk_wind' ? 'GB'
-                      : route.series === 'us_wind' ? 'US'
-                      : 'DE'   // europe_wind anchored on DE
+  // specific country. dci_wind_north_america anchors on US (1.0), and
+  // dci_wind_europe anchors on DE — so a UK asset gets scaled from DE→GB,
+  // a Spain asset from DE→ES, etc.
+  const series_anchor = route.series === 'dci_wind_north_america' ? 'US' : 'DE'
   const anchor_mult = compositeCountryMult(series_anchor,        countryMults)
   const asset_mult  = compositeCountryMult(asset.country_code,   countryMults)
   const country_adj = anchor_mult > 0 ? asset_mult / anchor_mult : 1.0
 
-  const dci = dciByS[route.series] ?? dciByS['europe_wind']  // fallback
+  const dci = dciByS[route.series] ?? dciByS['dci_wind_europe']  // fallback
   let liab_native_per_mw_low: number | null = null
   let liab_native_per_mw_mid: number | null = null
   let liab_native_per_mw_high: number | null = null

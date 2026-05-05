@@ -202,9 +202,11 @@ export function MethodologyOverlay({ onClose }: { onClose: () => void }) {
                       <table className="w-full text-[11px]">
                         <thead><tr className="border-b border-border"><th className="text-left py-1 font-semibold text-ink-3">Series</th><th className="text-left py-1 font-semibold text-ink-3">Currency</th><th className="text-left py-1 font-semibold text-ink-3">Anchor</th></tr></thead>
                         <tbody>
-                          <tr className="border-b border-border"><td className="py-1.5">europe_wind</td><td>EUR</td><td>EU prices · DE multipliers</td></tr>
-                          <tr className="border-b border-border"><td className="py-1.5">uk_wind</td><td>GBP</td><td>UK baseline (sub-series of europe_wind)</td></tr>
-                          <tr><td className="py-1.5">us_wind</td><td>USD</td><td>US prices · US multipliers</td></tr>
+                          <tr className="border-b border-border"><td className="py-1.5">dci_wind_europe</td><td>EUR</td><td>EU + UK · DE multipliers anchor</td></tr>
+                          <tr className="border-b border-border"><td className="py-1.5">dci_wind_north_america</td><td>USD</td><td>US + CA · US multipliers anchor</td></tr>
+                          <tr className="border-b border-border"><td className="py-1.5">dci_solar_europe</td><td>EUR</td><td>Phase 2 — solar methodology in development</td></tr>
+                          <tr className="border-b border-border"><td className="py-1.5">dci_solar_north_america</td><td>USD</td><td>Phase 2 — solar methodology in development</td></tr>
+                          <tr><td className="py-1.5">dci_solar_japan</td><td>JPY</td><td>Phase 2 — solar methodology in development</td></tr>
                         </tbody>
                       </table>
                     </section>

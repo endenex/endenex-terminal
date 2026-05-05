@@ -11,6 +11,9 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { clsx } from 'clsx'
 import { ResponsiveContainer, AreaChart, Area, Tooltip } from 'recharts'
 import { supabase } from '@/lib/supabase'
+import { CommoditySparkGrid } from '@/components/charts/CommoditySparkGrid'
+import { MaterialDonut } from '@/components/charts/MaterialDonut'
+import { VintageCurveChart } from '@/components/charts/VintageCurveChart'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -190,6 +193,41 @@ function RegionTabs({ region, onChange }: { region: Region; onChange: (r: Region
   )
 }
 
+// ── Multi-region spark grid (Chart F) ─────────────────────────────────────────
+
+function MultiRegionSparkGrid() {
+  const [series, setSeries] = useState<{ material: string; region: string; currency: string; history: { date: string; price: number }[] }[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    supabase
+      .from('commodity_prices')
+      .select('material_type, region, price_per_tonne, currency, price_date')
+      .order('price_date', { ascending: false })
+      .then(({ data }) => {
+        const rows = (data ?? []) as { material_type: string; region: string; price_per_tonne: number; currency: string; price_date: string }[]
+        // Group by (material × region) → latest 13 prices
+        const grouped = new Map<string, { material: string; region: string; currency: string; history: { date: string; price: number }[] }>()
+        for (const r of rows) {
+          const key = `${r.material_type}|${r.region}`
+          if (!grouped.has(key)) {
+            grouped.set(key, { material: r.material_type, region: r.region, currency: r.currency, history: [] })
+          }
+          const entry = grouped.get(key)!
+          if (entry.history.length < 13) {
+            entry.history.push({ date: r.price_date, price: r.price_per_tonne })
+          }
+        }
+        setSeries(Array.from(grouped.values()))
+        setLoading(false)
+      })
+  }, [])
+
+  if (loading) return <div className="h-32 flex items-center justify-center text-[12px] text-ink-3">Loading commodity grid…</div>
+  return <CommoditySparkGrid series={series} regions={['EU','GB','US']} />
+}
+
 // ── 01 Commodity Refs ─────────────────────────────────────────────────────────
 
 function CommodityRefs() {
@@ -249,6 +287,14 @@ function CommodityRefs() {
       <RegionTabs region={region} onChange={setRegion} />
 
       <div className="flex-1 overflow-auto">
+        {/* Multi-region spark grid (Chart F) */}
+        <div className="p-5 border-b border-border">
+          <p className="text-[10px] font-semibold text-ink-3 uppercase tracking-wide mb-2">
+            13-month price trajectory · all regions
+          </p>
+          <MultiRegionSparkGrid />
+        </div>
+
         {/* Updated-at strip */}
         {updatedAt && (
           <div className="px-5 py-2 border-b border-border text-[10.5px] text-ink-4 bg-page flex items-center gap-2">
@@ -367,11 +413,49 @@ function NroEstimates() {
     return nro.reduce((max, n) => n.reference_date > max ? n.reference_date : max, nro[0].reference_date)
   }, [nro])
 
+  // ── Donut input: per-MW NRO mid by material (Chart D) ────────────────────
+  const donutSlices = useMemo(() => {
+    const PALETTE = ['#0A1628','#007B8A','#1C3D52','#4A9BAA','#C4863A','#2A7F8E','#6BAAB5']
+    return nro
+      .filter(n => n.net_per_mw_mid && n.net_per_mw_mid > 0)
+      .map((n, i) => ({
+        label: MATERIAL_LABELS[n.material_type] ?? n.material_type,
+        value: Number(n.net_per_mw_mid),
+        color: PALETTE[i % PALETTE.length],
+      }))
+      .sort((a, b) => b.value - a.value)
+  }, [nro])
+  const donutTotal = donutSlices.reduce((s, x) => s + x.value, 0)
+
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
       <RegionTabs region={region} onChange={setRegion} />
 
       <div className="flex-1 overflow-auto">
+        {/* Donut summary panel (Chart D) */}
+        <div className="grid grid-cols-2 gap-4 p-5 border-b border-border">
+          <div className="bg-panel border border-border rounded-lg p-4">
+            <p className="text-[10px] font-semibold text-ink-3 uppercase tracking-wide mb-2">
+              NRO attribution per MW · {region}
+            </p>
+            <MaterialDonut
+              slices={donutSlices}
+              total={donutTotal}
+              currency={currency}
+              centerLabel="Net / MW"
+              height={240}
+            />
+          </div>
+          <div className="bg-panel border border-border rounded-lg p-4 text-[11px] text-ink-2 leading-relaxed">
+            <p className="text-[10px] font-semibold text-ink-3 uppercase tracking-wide mb-2">Reading the donut</p>
+            <p>For a fleet-average MW of decommissioned wind capacity in {region}, this shows the contribution of each material to net recovery (after broker margin + contamination yield).</p>
+            <p className="mt-2 text-ink-3">
+              Bigger slice = bigger share of the recovery story. Steel typically dominates by mass; copper dominates by value per tonne.
+            </p>
+            {refDate && <p className="mt-3 text-ink-4 text-[10px]">Reference date: {fmtDate(refDate)}</p>}
+          </div>
+        </div>
+
         {/* Methodology note */}
         <div className="px-5 py-3 border-b border-border bg-page text-[10.5px] text-ink-4 flex items-center gap-2">
           <span className="text-teal">ⓘ</span>
@@ -516,8 +600,36 @@ function SolarLca() {
   const panelMap = new Map<string, number>()
   for (const r of panels) panelMap.set(`${r.material}|${r.vintage}`, r.intensity_t_per_mwp)
 
+  // Silver decline curve (Chart E) — convert t/MWp to kg/MW for readability
+  const silverPoints = (['pre2012','y2012','y2020'] as const).map(v => ({
+    vintage: v,
+    value: (panelMap.get(`silver|${v}`) ?? 0) * 1000,   // t → kg
+  }))
+  const siliconPoints = (['pre2012','y2012','y2020'] as const).map(v => ({
+    vintage: v,
+    value: panelMap.get(`silicon|${v}`) ?? 0,
+  }))
+
   return (
     <div className="flex-1 overflow-auto p-5 space-y-5">
+      {/* Vintage curve hero — silver collapse story (Chart E) */}
+      <div className="bg-panel border border-border rounded-lg p-4">
+        <div className="flex items-baseline justify-between mb-3">
+          <p className="text-[11px] font-semibold text-ink-2">Silver paste collapse · vintage curve</p>
+          <p className="text-[10px] text-ink-3">8× decline from BSF → PERC → TOPCon</p>
+        </div>
+        <VintageCurveChart
+          series={[
+            { name: 'Silver (kg/MW)', color: '#C5D9DE', points: silverPoints },
+            { name: 'Silicon (t/MWp)', color: '#9BB5BB', points: siliconPoints },
+          ]}
+          vintageLabels={SOLAR_VINTAGE_LABEL}
+          yLabel="intensity"
+          decimals={2}
+          height={220}
+        />
+      </div>
+
       {/* Vintage table */}
       <div className="bg-panel border border-border rounded-lg overflow-hidden">
         <div className="px-4 py-3 border-b border-border">
@@ -669,8 +781,38 @@ function BessLca() {
     byChem.set(r.chemistry, arr)
   }
 
+  // BESS chemistry-shift curve (Chart E) — show Co/Ni decline + Li rise
+  const cobaltPoints = (['pre2018','y2018','y2022'] as const).map(v => ({
+    vintage: v, value: intensMap.get(`cobalt|${v}`) ?? 0,
+  }))
+  const nickelPoints = (['pre2018','y2018','y2022'] as const).map(v => ({
+    vintage: v, value: intensMap.get(`nickel|${v}`) ?? 0,
+  }))
+  const lithiumPoints = (['pre2018','y2018','y2022'] as const).map(v => ({
+    vintage: v, value: intensMap.get(`lithium|${v}`) ?? 0,
+  }))
+
   return (
     <div className="flex-1 overflow-auto p-5 space-y-5">
+      {/* Chemistry shift hero (Chart E) */}
+      <div className="bg-panel border border-border rounded-lg p-4">
+        <div className="flex items-baseline justify-between mb-3">
+          <p className="text-[11px] font-semibold text-ink-2">NMC → LFP chemistry shift · vintage curve</p>
+          <p className="text-[10px] text-ink-3">Cobalt + nickel decline as LFP displaces NMC; lithium rises with longer-duration packs</p>
+        </div>
+        <VintageCurveChart
+          series={[
+            { name: 'Cobalt (t/MWh)',  color: '#8DC0C9', points: cobaltPoints },
+            { name: 'Nickel (t/MWh)',  color: '#4A9BAA', points: nickelPoints },
+            { name: 'Lithium (t/MWh)', color: '#2A7F8E', points: lithiumPoints },
+          ]}
+          vintageLabels={BESS_VINTAGE_LABEL}
+          yLabel="intensity"
+          decimals={2}
+          height={220}
+        />
+      </div>
+
       <div className="bg-panel border border-border rounded-lg overflow-hidden">
         <div className="px-4 py-3 border-b border-border">
           <p className="text-[11px] font-semibold text-ink-2">BESS material intensities (t/MWh) — vintage-bucketed</p>

@@ -18,7 +18,7 @@ import type { RepoweringProject, RepoweringStage } from '@/lib/types'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type SubTab = 'cohorts' | 'waves' | 'install_pipeline' | 'intent' | 'pipeline' | 'japan'
+type SubTab = 'cohorts' | 'waves' | 'install_pipeline' | 'asset_map' | 'intent' | 'pipeline' | 'japan'
 
 interface AssetRow {
   id:                  string
@@ -61,12 +61,13 @@ interface WatchEvent {
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const SUB_TABS: { id: SubTab; label: string }[] = [
-  { id: 'cohorts',         label: 'Fleet Cohorts' },
-  { id: 'waves',           label: 'Retirement Waves' },
+  { id: 'cohorts',          label: 'Fleet Cohorts' },
+  { id: 'waves',            label: 'Retirement Waves' },
   { id: 'install_pipeline', label: 'Installation Pipeline' },
-  { id: 'intent',          label: 'Retirement Intent' },
-  { id: 'pipeline',        label: 'Repowering Pipeline' },
-  { id: 'japan',           label: 'Japan Cohort' },
+  { id: 'asset_map',        label: 'Asset Map' },
+  { id: 'intent',           label: 'Retirement Intent' },
+  { id: 'pipeline',         label: 'Repowering Pipeline' },
+  { id: 'japan',            label: 'Japan Cohort' },
 ]
 
 // Design life assumptions per asset class (years)
@@ -1170,6 +1171,10 @@ function JapanCohort() {
 
 // ── 03 Installation Pipeline (wind_pipeline_annual_installations) ────────────
 
+import { InstallStackedArea } from '@/components/charts/InstallStackedArea'
+import { DecomWaveBars }      from '@/components/charts/DecomWaveBars'
+import { WorldAssetMap, type AssetPin } from '@/components/charts/WorldAssetMap'
+
 interface PipelineRow {
   country_code:  string
   sub_region:    string
@@ -1282,6 +1287,33 @@ function InstallationPipeline() {
         </div>
       </div>
 
+      {/* Stacked-area chart of installations (Chart G) — only when sub-regions exist */}
+      {country !== 'ALL' && subRegions.size > 1 && (
+        <div className="bg-panel border border-border rounded-lg overflow-hidden">
+          <div className="px-4 py-3 border-b border-border">
+            <p className="text-[11px] font-semibold text-ink-2">{country} installations by sub-region · stacked area</p>
+          </div>
+          <div className="p-4">
+            <InstallStackedArea
+              rows={filtered as { install_year: number; sub_region: string; installed_gw: number }[]}
+              regions={Array.from(subRegions.keys())}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Forward decommissioning wave (Chart H) */}
+      <div className="bg-panel border border-border rounded-lg overflow-hidden">
+        <div className="px-4 py-3 border-b border-border">
+          <p className="text-[11px] font-semibold text-ink-2">Forward decommissioning wave · {country === 'ALL' ? 'all regions' : country} · 25-yr design life</p>
+        </div>
+        <div className="p-4">
+          <DecomWaveBars
+            installs={filtered.map(r => ({ install_year: r.install_year, installed_gw: Number(r.installed_gw) }))}
+          />
+        </div>
+      </div>
+
       {/* Sparkline-ish table — installations by year */}
       <div className="bg-panel border border-border rounded-lg overflow-hidden">
         <div className="px-4 py-3 border-b border-border flex items-center justify-between">
@@ -1360,6 +1392,94 @@ function InstallationPipeline() {
   )
 }
 
+// ── 04 Asset Map (charts N + O) ──────────────────────────────────────────────
+
+const DESIGN_LIFE_FOR_MAP: Record<string, number> = {
+  onshore_wind:  25,
+  offshore_wind: 25,
+  solar_pv:      25,
+  bess:          15,
+}
+
+function AssetMap() {
+  const [pins, setPins] = useState<AssetPin[]>([])
+  const [metrics, setMetrics] = useState<{ country_code: string; value: number; label: string }[]>([])
+  const [mode, setMode] = useState<'dots' | 'choropleth'>('dots')
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    Promise.all([
+      supabase.from('assets')
+        .select('id, name, country_code, asset_class, capacity_mw, commissioning_date, latitude, longitude')
+        .not('latitude', 'is', null).not('longitude', 'is', null)
+        .limit(2000),
+      supabase.from('wind_pipeline_annual_installations')
+        .select('country_code, install_year, installed_gw').eq('scope', 'onshore'),
+    ]).then(([assetsRes, pipeRes]) => {
+      const assets = (assetsRes.data ?? []) as { id: string; name: string | null; country_code: string; asset_class: string; capacity_mw: number | null; commissioning_date: string | null; latitude: number | null; longitude: number | null }[]
+      setPins(assets.map(a => {
+        const commYr = a.commissioning_date ? parseInt(a.commissioning_date.slice(0, 4)) : null
+        const dl = DESIGN_LIFE_FOR_MAP[a.asset_class] ?? 25
+        return {
+          id: a.id, site_name: a.name, country_code: a.country_code,
+          lat: Number(a.latitude), lon: Number(a.longitude),
+          capacity_mw: a.capacity_mw, asset_class: a.asset_class,
+          eol_year: commYr ? commYr + dl : null,
+        }
+      }))
+      // Choropleth metric: GW reaching EOL within next 10 years per country
+      const today = new Date().getFullYear()
+      const byCountry = new Map<string, number>()
+      for (const r of (pipeRes.data ?? []) as { country_code: string; install_year: number; installed_gw: number }[]) {
+        const eol = r.install_year + 25
+        if (eol >= today && eol <= today + 10) {
+          byCountry.set(r.country_code, (byCountry.get(r.country_code) ?? 0) + Number(r.installed_gw))
+        }
+      }
+      setMetrics(Array.from(byCountry.entries()).map(([cc, v]) => ({
+        country_code: cc, value: v, label: `${v.toFixed(1)} GW EOL ≤ ${today + 10}`,
+      })))
+      setLoading(false)
+    })
+  }, [])
+
+  if (loading) return <div className="flex-1 flex items-center justify-center text-[12px] text-ink-3">Loading map…</div>
+
+  return (
+    <div className="flex-1 overflow-auto p-5 space-y-4">
+      <div className="flex items-center gap-4">
+        <div>
+          <p className="text-[10px] font-semibold text-ink-3 uppercase tracking-wide">Geographic Asset View</p>
+          <p className="text-[12px] text-ink-3">
+            {pins.length.toLocaleString('en-GB')} assets with coordinates · forward decommissioning density (10-yr horizon)
+          </p>
+        </div>
+        <div className="ml-auto flex items-center gap-1 bg-panel border border-border rounded p-0.5">
+          <button onClick={() => setMode('dots')}
+                  className={`px-2.5 py-1 text-[11px] font-semibold rounded transition-colors ${mode === 'dots' ? 'bg-teal text-white' : 'text-ink-3 hover:text-ink'}`}>
+            Asset pins
+          </button>
+          <button onClick={() => setMode('choropleth')}
+                  className={`px-2.5 py-1 text-[11px] font-semibold rounded transition-colors ${mode === 'choropleth' ? 'bg-teal text-white' : 'text-ink-3 hover:text-ink'}`}>
+            Liability density
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-panel border border-border rounded-lg overflow-hidden">
+        <WorldAssetMap pins={pins} metrics={metrics} mode={mode} height={520} />
+      </div>
+
+      <p className="text-[10px] text-ink-4">
+        Pin colour = EOL horizon (commissioning_date + 25-yr design life).
+        Choropleth shading = GW reaching EOL in the next 10 years per country.
+        Pinch / scroll to zoom; drag to pan. Hover for details.
+      </p>
+    </div>
+  )
+}
+
 export function RetirementPage() {
   const [subTab, setSubTab] = useState<SubTab>('cohorts')
 
@@ -1371,6 +1491,7 @@ export function RetirementPage() {
         {subTab === 'cohorts'          && <FleetCohorts />}
         {subTab === 'waves'            && <RetirementWaves />}
         {subTab === 'install_pipeline' && <InstallationPipeline />}
+        {subTab === 'asset_map'        && <AssetMap />}
         {subTab === 'intent'           && <RetirementIntent />}
         {subTab === 'pipeline'         && <RepoweringPipeline />}
         {subTab === 'japan'            && <JapanCohort />}

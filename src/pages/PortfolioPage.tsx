@@ -21,6 +21,7 @@ import {
   ifrsScheduleCsv, suretyPackCsv, boardMemoHtml, methodologyMd,
   toCsv, downloadCsv,
 } from '@/lib/portfolio-export'
+import { MaterialDonut, type DonutSlice } from '@/components/charts/MaterialDonut'
 
 // ── Local types ──────────────────────────────────────────────────────────────
 
@@ -479,6 +480,50 @@ function LiabilityModel({
           <p className="text-[24px] font-semibold text-ink tabular-nums mt-1">{fmt(rollup.pv_total, sym)}</p>
           <p className="text-[10px] text-ink-4 mt-0.5">@ {rollup.discount_rate_pct}% discount</p>
         </div>
+      </div>
+
+      {/* Composition donuts (Chart I) */}
+      <div className="grid grid-cols-3 gap-4">
+        {(() => {
+          const PALETTE = ['#0A1628','#007B8A','#1C3D52','#4A9BAA','#C4863A','#2A7F8E','#3D6E7A','#5A8A95','#6BAAB5','#9BB5BB']
+          const countrySlices: DonutSlice[] = Object.entries(rollup.by_country)
+            .sort((a, b) => b[1].net_mid - a[1].net_mid)
+            .map(([cc, v], i) => ({ label: cc, value: v.net_mid, color: PALETTE[i % PALETTE.length] }))
+          const classSlices: DonutSlice[] = Object.entries(rollup.by_class)
+            .sort((a, b) => b[1].net_mid - a[1].net_mid)
+            .map(([ac, v], i) => ({
+              label: ASSET_CLASS_LABELS[ac as AssetClass] ?? ac,
+              value: v.net_mid, color: PALETTE[i % PALETTE.length],
+            }))
+          // Retirement decade buckets
+          const decadeMap = new Map<string, number>()
+          for (const v of valuations) {
+            const decade = `${Math.floor(v.retirement_year / 10) * 10}s`
+            decadeMap.set(decade, (decadeMap.get(decade) ?? 0) + (v.net_obligation_mid ?? 0))
+          }
+          const decadeSlices: DonutSlice[] = Array.from(decadeMap.entries())
+            .sort((a, b) => a[0].localeCompare(b[0]))
+            .map(([decade, value], i) => ({ label: decade, value, color: PALETTE[(i + 4) % PALETTE.length] }))
+          return (
+            <>
+              <div className="bg-panel border border-border rounded-lg p-4">
+                <p className="text-[10px] font-semibold text-ink-3 uppercase tracking-wide mb-1">Net obligation by country</p>
+                <MaterialDonut slices={countrySlices} total={rollup.net_obligation_mid}
+                               currency={ccy} centerLabel="Total" height={220} />
+              </div>
+              <div className="bg-panel border border-border rounded-lg p-4">
+                <p className="text-[10px] font-semibold text-ink-3 uppercase tracking-wide mb-1">By asset class</p>
+                <MaterialDonut slices={classSlices} total={rollup.net_obligation_mid}
+                               currency={ccy} centerLabel="Total" height={220} />
+              </div>
+              <div className="bg-panel border border-border rounded-lg p-4">
+                <p className="text-[10px] font-semibold text-ink-3 uppercase tracking-wide mb-1">By retirement decade</p>
+                <MaterialDonut slices={decadeSlices} total={rollup.net_obligation_mid}
+                               currency={ccy} centerLabel="Total" height={220} />
+              </div>
+            </>
+          )
+        })()}
       </div>
 
       <div className="grid grid-cols-2 gap-4">

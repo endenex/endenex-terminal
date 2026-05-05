@@ -37,9 +37,12 @@ PIPELINE = 'compute_dci'
 
 # series → (commodity region, output currency, country anchor for multipliers)
 SERIES_CONFIG = {
-    'europe_wind': {'region': 'EU', 'currency': 'EUR', 'country_anchor': 'DE'},
-    'us_wind':     {'region': 'US', 'currency': 'USD', 'country_anchor': 'US'},
-    'uk_wind':     {'region': 'GB', 'currency': 'GBP', 'country_anchor': 'GB'},
+    # Wind series (live in v1.1)
+    'dci_wind_europe':         {'region': 'EU', 'currency': 'EUR', 'country_anchor': 'DE'},
+    'dci_wind_north_america':  {'region': 'US', 'currency': 'USD', 'country_anchor': 'US'},
+    # Solar series — Phase 2, separate methodology required (panel-mass scaling,
+    # silver-driven recovery, very different gross-cost rate card). Not computed
+    # by this pipeline yet.
 }
 
 # Material categories used by dci_publications cost-component columns

@@ -11,6 +11,7 @@ import { useState, useEffect } from 'react'
 import { clsx } from 'clsx'
 import { ExternalLink } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { BladePathwayBars } from '@/components/charts/BladePathwayBars'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -360,6 +361,15 @@ const GATE_FEE_TABLE: GateFeeRow[] = [
 ]
 
 function GateFees() {
+  const [pathwayRows, setPathwayRows] = useState<{ pathway: string; region: string; eur_per_tonne: number; basis: string | null }[]>([])
+  const [region, setRegion] = useState<'EU'|'GB'|'US'>('EU')
+
+  useEffect(() => {
+    supabase.from('blade_gate_fees')
+      .select('pathway, region, eur_per_tonne, basis')
+      .then(({ data }) => setPathwayRows(((data ?? []) as { pathway: string; region: string; eur_per_tonne: number; basis: string | null }[])))
+  }, [])
+
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
       {/* Info strip */}
@@ -369,6 +379,24 @@ function GateFees() {
           Gate fees are indicative ranges from industry sources and operator quotes. Not contractual.
           Actual fees vary by volume, location, and blade condition. Updated quarterly.
         </span>
+      </div>
+
+      {/* Pathway comparison chart (Chart J) */}
+      <div className="px-5 py-4 border-b border-border bg-page">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-[11px] font-semibold text-ink-2">Pathway gate-fee comparison · {region}</p>
+          <div className="flex items-center gap-1 bg-panel border border-border rounded p-0.5">
+            {(['EU','GB','US'] as const).map(r => (
+              <button key={r} onClick={() => setRegion(r)}
+                      className={`px-2.5 py-1 text-[10px] font-semibold rounded transition-colors ${region === r ? 'bg-teal text-white' : 'text-ink-3 hover:text-ink'}`}>
+                {r}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="bg-panel border border-border rounded-lg p-3">
+          <BladePathwayBars rows={pathwayRows} region={region} />
+        </div>
       </div>
 
       <div className="flex-1 overflow-auto">

@@ -95,7 +95,7 @@ export function ifrsScheduleCsv(valuations: AssetValuation[], rollup: PortfolioR
     ['As of', rollup.asof_date],
     ['Discount rate', `${rollup.discount_rate_pct}%`, 'p.a., applied as PV = obligation / (1+r)^n'],
     ['Liability source', 'Endenex DCI Spot v1.0'],
-    ['DCI routing', 'GB/IE → uk_wind; US/CA/MX → us_wind; rest → europe_wind'],
+    ['DCI routing', 'US/CA/MX → dci_wind_north_america; all other countries (incl. GB/IE) → dci_wind_europe'],
     ['NRO source', 'Endenex Recovery Model — commodity prices (LME/Fastmarkets/AMM) net of merchant markups, weighted by fleet-average LCA volumes'],
     ['Current portion', 'Years-to-retirement ≤ 1 → full obligation classified current; otherwise 0'],
     ['Non-current portion', 'Discounted present value of obligation due > 1 year out'],
@@ -377,9 +377,11 @@ Where:
 
 | Series | Country routing | Currency | Commodity region |
 |---|---|---|---|
-| europe_wind | DE, FR, ES, IT, NL, PL, DK, SE, etc. | EUR | EU |
-| uk_wind | GB, IE | GBP | GB |
-| us_wind | US, CA, MX | USD | US |
+| dci_wind_europe        | EU, UK, IE, all other ex-NA | EUR | EU (or GB for UK assets at scrap level) |
+| dci_wind_north_america | US, CA, MX                  | USD | US |
+| dci_solar_europe        | EU, UK (Phase 2)            | EUR | EU |
+| dci_solar_north_america | US, CA, MX (Phase 2)        | USD | US |
+| dci_solar_japan         | JP (Phase 2)                | JPY | n/a |
 
 ## NRO computation
 

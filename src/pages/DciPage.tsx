@@ -17,10 +17,17 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine,
 } from 'recharts'
 import { supabase } from '@/lib/supabase'
+import { DciCostWaterfall } from '@/components/charts/DciCostWaterfall'
+import { DciSeriesOverlay } from '@/components/charts/DciSeriesOverlay'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type DciSeries = 'europe_wind' | 'us_wind' | 'uk_wind' | 'eu_exuk_wind'
+type DciSeries =
+  | 'dci_wind_europe'
+  | 'dci_wind_north_america'
+  | 'dci_solar_europe'
+  | 'dci_solar_north_america'
+  | 'dci_solar_japan'
 
 interface DciPublication {
   id:                    string
@@ -49,19 +56,21 @@ interface DciPublication {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const HEADLINE_SERIES: { series: DciSeries; label: string; sublabel: string; currency: string }[] = [
-  { series: 'europe_wind', label: 'DCI Spot Europe Wind', sublabel: 'EUR / MW  ·  European onshore wind composite', currency: 'EUR' },
-  { series: 'us_wind',     label: 'DCI Spot US Wind',     sublabel: 'USD / MW  ·  US onshore wind', currency: 'USD' },
+const HEADLINE_SERIES: { series: DciSeries; label: string; sublabel: string; currency: string; status: 'live' | 'pending' }[] = [
+  { series: 'dci_wind_europe',         label: 'DCI Wind Europe',         sublabel: '€ / MW · Monthly cadence · EU + UK composite',  currency: 'EUR', status: 'live'    },
+  { series: 'dci_wind_north_america',  label: 'DCI Wind North America',  sublabel: '$ / MW · Monthly cadence · US + CA composite', currency: 'USD', status: 'live'    },
+  { series: 'dci_solar_europe',        label: 'DCI Solar Europe',        sublabel: '€ / MW · Monthly cadence',                       currency: 'EUR', status: 'pending' },
+  { series: 'dci_solar_north_america', label: 'DCI Solar North America', sublabel: '$ / MW · Monthly cadence',                       currency: 'USD', status: 'pending' },
+  { series: 'dci_solar_japan',         label: 'DCI Solar Japan',         sublabel: '¥ / MW · Monthly cadence',                       currency: 'JPY', status: 'pending' },
 ]
 
+// Series available for the chart switcher — only live ones
 const SUB_SERIES: { series: DciSeries; label: string }[] = [
-  { series: 'europe_wind',  label: 'Europe Wind' },
-  { series: 'us_wind',      label: 'US Wind' },
-  { series: 'uk_wind',      label: 'UK sub-series' },
-  { series: 'eu_exuk_wind', label: 'EU ex-UK sub-series' },
+  { series: 'dci_wind_europe',        label: 'Wind Europe' },
+  { series: 'dci_wind_north_america', label: 'Wind North America' },
 ]
 
-const CURRENCY_SYMBOL: Record<string, string> = { EUR: '€', USD: '$', GBP: '£' }
+const CURRENCY_SYMBOL: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', JPY: '¥' }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -115,66 +124,56 @@ function HeadlineCard({
   loading:   boolean
 }) {
   const sym = CURRENCY_SYMBOL[seriesDef.currency] ?? ''
+  const pending = seriesDef.status === 'pending'
 
   return (
-    <div className="flex-1 border border-border rounded-lg bg-panel p-6 min-w-0 shadow-panel">
-      <div className="mb-4">
-        <div className="text-[9.5px] font-semibold text-ink-4 uppercase tracking-widest mb-0.5">
+    <div className="border border-border rounded-lg bg-panel p-4 min-w-0 shadow-panel">
+      <div className="mb-3">
+        <div className="text-[10px] font-semibold text-ink uppercase tracking-wide leading-tight">
           {seriesDef.label}
         </div>
-        <div className="text-[11px] text-ink-3">{seriesDef.sublabel}</div>
+        <div className="text-[10px] text-ink-3 mt-0.5">{seriesDef.sublabel}</div>
       </div>
 
-      {loading ? (
-        <div className="space-y-3 animate-pulse">
-          <div className="h-10 w-40 bg-page rounded" />
-          <div className="h-4 w-28 bg-page rounded" />
-        </div>
-      ) : latest == null ? (
-        <div className="space-y-2">
-          <div className="text-[36px] font-semibold text-border tabular-nums leading-none">—</div>
-          <p className="text-[11.5px] text-ink-3 leading-relaxed max-w-xs mt-2">
-            First publication pending. The index will appear once the methodology is complete and the first observation is entered.
+      {pending ? (
+        <div className="space-y-1">
+          <div className="text-[24px] font-semibold text-border tabular-nums leading-none">—</div>
+          <p className="text-[10px] text-ink-4 leading-relaxed mt-1">
+            Phase 2 — solar methodology in development
           </p>
         </div>
+      ) : loading ? (
+        <div className="space-y-2 animate-pulse">
+          <div className="h-7 w-24 bg-page rounded" />
+          <div className="h-3 w-20 bg-page rounded" />
+        </div>
+      ) : latest == null ? (
+        <div className="space-y-1">
+          <div className="text-[24px] font-semibold text-border tabular-nums leading-none">—</div>
+          <p className="text-[10px] text-ink-4">First publication pending</p>
+        </div>
       ) : (
-        <div className="space-y-4">
-          {/* Index value */}
-          <div className="flex items-end gap-4">
-            <div>
-              <div className="text-[9.5px] font-semibold text-ink-4 uppercase tracking-widest mb-1">Index</div>
-              <div className="text-[36px] font-semibold text-ink tabular-nums leading-none">
-                {fmtIndex(latest.index_value)}
-              </div>
+        <div className="space-y-2">
+          <div className="flex items-end gap-2">
+            <div className="text-[24px] font-semibold text-ink tabular-nums leading-none">
+              {fmtIndex(latest.index_value)}
             </div>
-            <div className="pb-1">
+            <div className="pb-0.5">
               <Direction current={latest.index_value} prior={prior?.index_value ?? null} />
             </div>
           </div>
-
-          {/* Net liability + metadata */}
-          <div className="grid grid-cols-2 gap-4 pt-4 border-t border-border">
-            <div>
-              <div className="text-[9.5px] font-semibold text-ink-4 uppercase tracking-widest mb-1">Net liability</div>
-              <div className="text-[18px] font-semibold text-ink tabular-nums">
-                {fmtMoney(latest.net_liability, latest.currency)}
-                <span className="text-[11px] text-ink-3 font-normal ml-1">/MW</span>
-              </div>
-              {latest.net_liability_low != null && latest.net_liability_high != null && (
-                <div className="text-[11px] text-ink-3 mt-0.5 tabular-nums">
-                  {sym}{Math.round(latest.net_liability_low).toLocaleString('en-GB')} –{' '}
-                  {sym}{Math.round(latest.net_liability_high).toLocaleString('en-GB')}
-                </div>
-              )}
-            </div>
-            <div>
-              <div className="text-[9.5px] font-semibold text-ink-4 uppercase tracking-widest mb-1">Published</div>
-              <div className="text-[13px] font-medium text-ink-2">{fmtDate(latest.publication_date)}</div>
-              {latest.methodology_version && (
-                <div className="text-[11px] text-ink-3 mt-0.5">v{latest.methodology_version}</div>
-              )}
-            </div>
+          <div className="text-[11px] tabular-nums">
+            <span className="text-ink-3">Net </span>
+            <span className="text-ink font-semibold">
+              {fmtMoney(latest.net_liability, latest.currency)}
+            </span>
+            <span className="text-[10px] text-ink-3 ml-0.5">/MW</span>
           </div>
+          {latest.net_liability_low != null && latest.net_liability_high != null && (
+            <div className="text-[10px] text-ink-4 tabular-nums">
+              {sym}{Math.round(latest.net_liability_low).toLocaleString('en-GB')} – {sym}{Math.round(latest.net_liability_high).toLocaleString('en-GB')}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -363,7 +362,7 @@ function ComponentTable({ pub, loading }: { pub: DciPublication | null; loading:
 export function DciPage() {
   const [history,     setHistory]     = useState<DciPublication[]>([])
   const [loading,     setLoading]     = useState(true)
-  const [chartSeries, setChartSeries] = useState<DciSeries>('europe_wind')
+  const [chartSeries, setChartSeries] = useState<DciSeries>('dci_wind_europe')
 
   useEffect(() => {
     supabase
@@ -393,8 +392,8 @@ export function DciPage() {
     return map
   }, [history])
 
-  const breakdownPub = latestByS['europe_wind'] ?? latestByS['us_wind'] ?? null
-  const latestPub    = latestByS['europe_wind'] ?? latestByS['us_wind']
+  const breakdownPub = latestByS['dci_wind_europe'] ?? latestByS['dci_wind_north_america'] ?? null
+  const latestPub    = latestByS['dci_wind_europe'] ?? latestByS['dci_wind_north_america']
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -419,8 +418,8 @@ export function DciPage() {
       <div className="flex-1 overflow-auto">
         <div className="p-5 space-y-4">
 
-          {/* ── Headline cards ─────────────────────────────────────────── */}
-          <div className="flex gap-4">
+          {/* ── Headline cards (5-card lineup) ─────────────────────────── */}
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
             {HEADLINE_SERIES.map(s => (
               <HeadlineCard
                 key={s.series}
@@ -430,6 +429,36 @@ export function DciPage() {
                 loading={loading}
               />
             ))}
+          </div>
+
+          {/* ── Series comparison overlay (Chart B) ──────────────────────── */}
+          <div className="border border-border rounded-lg bg-panel overflow-hidden shadow-panel">
+            <div className="px-5 py-3 border-b border-border">
+              <span className="text-[9.5px] font-semibold text-ink-4 uppercase tracking-widest">
+                Series comparison · indexed to base = 100
+              </span>
+            </div>
+            <div className="px-5 py-4">
+              <DciSeriesOverlay history={history} />
+            </div>
+          </div>
+
+          {/* ── Cost waterfall (Chart A) ────────────────────────────────── */}
+          <div className="border border-border rounded-lg bg-panel overflow-hidden shadow-panel">
+            <div className="px-5 py-3 border-b border-border flex items-center gap-2">
+              <span className="text-[9.5px] font-semibold text-ink-4 uppercase tracking-widest">
+                Cost waterfall — Gross → Recovery → Disposal → Net
+              </span>
+              {breakdownPub && (
+                <span className="text-[11px] text-ink-3 ml-1">
+                  · {HEADLINE_SERIES.find(s => s.series === breakdownPub.series)?.label}
+                  · {fmtDate(breakdownPub.publication_date)}
+                </span>
+              )}
+            </div>
+            <div className="px-5 py-4">
+              <DciCostWaterfall pub={breakdownPub} />
+            </div>
           </div>
 
           {/* ── Index chart ─────────────────────────────────────────────── */}
