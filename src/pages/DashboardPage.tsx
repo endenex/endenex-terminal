@@ -1,308 +1,233 @@
-import { useState, useEffect, useMemo } from 'react'
+// ── Home — Tab 01 ────────────────────────────────────────────────────────────
+// Six-panel 3×2 gateway grid.
+// Spec: Product Brief v1.0 §6.1
+//
+// Layout:
+//   Top-left:     Spot DCI Indices      (DCI Dashboard)
+//   Top-centre:   Signal Tape           (Market Watch)
+//   Top-right:    Tightness & Conversion(PCM)
+//   Bottom-left:  Retirement Waves      (ARI)
+//   Bottom-centre:Commodity Reference   (SMI)
+//   Bottom-right: Portfolio Workspace   (Portfolio Analytics)
+
+import { useState, useEffect } from 'react'
 import { clsx } from 'clsx'
 import { supabase } from '@/lib/supabase'
-import { TopBar } from '@/components/layout/TopBar'
+import { PanelShell } from '@/components/ui/PanelShell'
 import { useWorkspace } from '@/context/WorkspaceContext'
-import type { PanelId } from '@/components/layout/AppShell'
-import { SkeletonFeedRow, SkeletonPriceRow, SkeletonCompactRow, SkeletonBar } from '@/components/ui/Skeleton'
 
-// ── Types ──────────────────────────────────────────────────────────────────────
-
-type WatchCategory = 'market' | 'regulatory' | 'commodity' | 'supply_chain'
-
-interface WatchEvent {
-  id: string
-  category: WatchCategory
-  event_type: string
-  scope: string
-  headline: string
-  notes: string | null
-  event_date: string
-  confidence: 'High' | 'Medium' | 'Low'
-  source_count: number
-  watch_sources: { name: string } | null
-}
-
-interface CommodityRow {
-  material_type: string
-  price_per_tonne: number
-  currency: string
-  price_date: string
-}
-
-interface RetirementRow {
-  id: string
-  project_name: string
-  country_code: string
-  stage: string
-  capacity_mw: number | null
-  developer: string | null
-  stage_date: string | null
-}
-
-interface StageBucket {
-  stage: string
-  count: number
-}
-
-// ── Constants ──────────────────────────────────────────────────────────────────
-
-const CATEGORY_PILL: Record<WatchCategory, string> = {
-  market:       'bg-blue-900/30 text-blue-400 border border-blue-700/50',
-  regulatory:   'bg-amber-900/30 text-amber-400 border border-amber-700/50',
-  commodity:    'bg-teal-900/30 text-teal-400 border border-teal-700/50',
-  supply_chain: 'bg-violet-900/30 text-violet-400 border border-violet-700/50',
-}
-
-const CATEGORY_LABEL: Record<WatchCategory, string> = {
-  market:       'Market',
-  regulatory:   'Regulatory',
-  commodity:    'Commodity',
-  supply_chain: 'Supply Chain',
-}
-
-const MATERIAL_LABELS: Record<string, string> = {
-  steel_hms1:      'Steel HMS 1',
-  steel_hms2:      'Steel HMS 2',
-  steel_cast_iron: 'Cast Iron',
-  steel_stainless: 'Stainless',
-  copper:          'Copper',
-  aluminium:       'Aluminium',
-  rare_earth:      'Rare Earths',
-}
-
-const MATERIAL_ORDER = [
-  'steel_hms1', 'steel_hms2', 'steel_cast_iron', 'steel_stainless',
-  'copper', 'aluminium', 'rare_earth',
-]
-
-type RvRegion = 'EU' | 'GB' | 'US'
-const RV_REGIONS: { code: RvRegion; label: string; currency: string }[] = [
-  { code: 'EU', label: 'EU', currency: 'EUR' },
-  { code: 'GB', label: 'GB', currency: 'GBP' },
-  { code: 'US', label: 'US', currency: 'USD' },
-]
-
-const STAGE_LABELS: Record<string, string> = {
-  announced:             'Announced',
-  application_submitted: 'Application',
-  application_approved:  'Approved',
-  permitted:             'Permitted',
-  ongoing:               'Ongoing',
-}
-
-const CONFIDENCE_COLOUR: Record<string, string> = {
-  High:   'text-emerald-400',
-  Medium: 'text-amber-400',
-  Low:    'text-red-400',
-}
-
-// ── Helpers ────────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmtDate(val: string | null): string {
   if (!val) return '—'
   try {
-    return new Date(val).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
+    return new Date(val).toLocaleDateString('en-GB', {
+      day: '2-digit', month: 'short',
+    })
   } catch { return '—' }
 }
 
-function fmtPrice(val: number, currency: string): string {
-  return new Intl.NumberFormat('en-GB', {
-    style: 'currency', currency,
-    maximumFractionDigits: 0,
-  }).format(val)
-}
+// ── DCI Indices panel ─────────────────────────────────────────────────────────
 
-// ── Shared panel shell ─────────────────────────────────────────────────────────
+const DCI_INDICES = [
+  { label: 'DCI Wind Europe',        ccy: '€', id: 'dci_wind_eu'    },
+  { label: 'DCI Wind North America', ccy: '$', id: 'dci_wind_na'    },
+  { label: 'DCI Solar Europe',       ccy: '€', id: 'dci_solar_eu'   },
+  { label: 'DCI Solar North America',ccy: '$', id: 'dci_solar_na'   },
+  { label: 'DCI Solar Japan',        ccy: '¥', id: 'dci_solar_jp'   },
+]
 
-function Panel({
-  label,
-  panelId,
-  action,
-  asOf,
-  viewLabel = 'View all →',
-  children,
-  loading,
-  className,
-}: {
-  label:      string
-  panelId:    PanelId
-  action?:    React.ReactNode
-  asOf?:      string | null      // "as of" date string shown right of label
-  viewLabel?: string
-  children:   React.ReactNode
-  className?: string
-}) {
-  const { openPanel } = useWorkspace()
+function DciIndicesPanel() {
   return (
-    <div className={clsx('flex flex-col border border-terminal-border rounded bg-terminal-surface overflow-hidden', className)}>
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-terminal-border flex-shrink-0 gap-3 min-w-0">
-        <div className="flex items-center gap-2 min-w-0 overflow-hidden">
-          <span className="text-[10px] text-terminal-muted tracking-widest uppercase whitespace-nowrap flex-shrink-0">{label}</span>
-          {asOf && (
-            <span className="text-[10px] font-mono text-terminal-border whitespace-nowrap truncate">
-              · {asOf}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          {action}
-          <button
-            onClick={() => openPanel(panelId)}
-            className="text-[10px] text-terminal-teal hover:underline transition-colors whitespace-nowrap"
-          >
-            {viewLabel}
-          </button>
-        </div>
-      </div>
-      {children}
-    </div>
-  )
-}
-
-// ── Planned-module panel (no live data) ────────────────────────────────────────
-
-function PlannedPanel({
-  label,
-  panelId,
-  description,
-  signals,
-}: {
-  label: string
-  panelId: PanelId
-  description: string
-  signals: string[]
-}) {
-  const { openPanel } = useWorkspace()
-  return (
-    <div className="flex flex-col border border-terminal-border rounded bg-terminal-surface overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-terminal-border flex-shrink-0">
-        <span className="text-[10px] text-terminal-muted tracking-widest uppercase">{label}</span>
-        <button
-          onClick={() => openPanel(panelId)}
-          className="text-[10px] text-terminal-teal hover:underline transition-colors"
-        >
-          View →
-        </button>
-      </div>
-      <div className="px-4 py-4 space-y-3">
-        <p className="text-xs text-terminal-muted leading-relaxed">{description}</p>
-        <div className="space-y-1.5">
-          {signals.map(s => (
-            <div key={s} className="flex items-start gap-2">
-              <div className="w-1 h-1 rounded-full bg-terminal-border mt-1.5 flex-shrink-0" />
-              <span className="text-[11px] font-mono text-terminal-muted">{s}</span>
+    <PanelShell sourceLabel="DCI Dashboard" title="Spot Indices" linkTo="dci">
+      <div className="divide-y divide-border">
+        {DCI_INDICES.map(({ label, ccy }) => (
+          <div key={label} className="flex items-center justify-between px-4 py-3">
+            <div className="min-w-0">
+              <p className="text-[12px] font-semibold text-ink">{label}</p>
+              <p className="text-[10px] text-ink-3 mt-0.5">{ccy} / MW · Monthly cadence</p>
             </div>
-          ))}
-        </div>
+            <div className="flex items-center gap-3 flex-shrink-0">
+              <span className="text-[13px] font-semibold text-ink-3">—</span>
+              <span className="text-[10px] text-ink-4">Pending</span>
+            </div>
+          </div>
+        ))}
       </div>
-    </div>
+    </PanelShell>
   )
 }
 
-// ── Watch feed ─────────────────────────────────────────────────────────────────
+// ── Signal Tape panel ─────────────────────────────────────────────────────────
 
-function WatchFeed() {
-  const [events, setEvents] = useState<WatchEvent[]>([])
+type WatchCategory = 'market' | 'regulatory' | 'commodity' | 'supply_chain'
+
+interface WatchEvent {
+  id:         string
+  category:   WatchCategory
+  headline:   string
+  event_date: string
+  confidence: string
+}
+
+const CATEGORY_PILL: Record<WatchCategory, string> = {
+  market:       'bg-blue-50 text-blue-700 border border-blue-200',
+  regulatory:   'bg-amber-50 text-amber-700 border border-amber-200',
+  commodity:    'bg-teal-50 text-teal-700 border border-teal-200',
+  supply_chain: 'bg-violet-50 text-violet-700 border border-violet-200',
+}
+const CATEGORY_LABEL: Record<WatchCategory, string> = {
+  market: 'Market', regulatory: 'Regulatory',
+  commodity: 'Commodity', supply_chain: 'Supply Chain',
+}
+
+function SignalTapePanel() {
+  const [events, setEvents]   = useState<WatchEvent[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     supabase
       .from('watch_events')
-      .select('id, category, event_type, scope, headline, notes, event_date, confidence, source_count, watch_sources(name)')
+      .select('id, category, headline, event_date, confidence')
       .eq('is_duplicate', false)
       .order('event_date', { ascending: false })
-      .limit(12)
-      .then(({ data }) => {
-        setEvents((data as WatchEvent[]) ?? [])
-        setLoading(false)
-      })
+      .limit(5)
+      .then(({ data }) => { setEvents((data as WatchEvent[]) ?? []); setLoading(false) })
   }, [])
 
-  const latestDate = events.length > 0 ? fmtDate(events[0].event_date) : null
-
   return (
-    <Panel label="Market Watch" panelId="watch" asOf={latestDate}>
-      <div className="divide-y divide-terminal-border overflow-auto">
+    <PanelShell sourceLabel="Market Watch" title="Signal Tape" linkTo="watch">
+      <div className="divide-y divide-border">
         {loading ? (
-          Array.from({ length: 6 }).map((_, i) => <SkeletonFeedRow key={i} />)
+          Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="px-4 py-3 space-y-1.5 animate-pulse">
+              <div className="h-3 bg-page rounded w-1/3" />
+              <div className="h-3.5 bg-page rounded w-3/4" />
+            </div>
+          ))
         ) : events.length === 0 ? (
-          <p className="px-5 py-8 text-xs text-terminal-muted text-center">
-            No events yet — feed updates daily.
-          </p>
+          <p className="px-4 py-6 text-[12px] text-ink-3 text-center">Feed updates daily</p>
         ) : events.map(ev => (
-          <div key={ev.id} className="px-5 py-4">
-            {/* Meta strip */}
-            <div className="flex items-center gap-2 mb-2 flex-wrap">
-              <span className="text-[11px] font-mono text-terminal-muted">{fmtDate(ev.event_date)}</span>
-              <span className="text-terminal-border">·</span>
-              <span className={clsx('text-[10px] font-mono px-1.5 py-0.5 rounded', CATEGORY_PILL[ev.category])}>
+          <div key={ev.id} className="px-4 py-3">
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="text-[10px] text-ink-3">{fmtDate(ev.event_date)}</span>
+              <span className={clsx('text-[9.5px] font-semibold px-1.5 py-px rounded', CATEGORY_PILL[ev.category])}>
                 {CATEGORY_LABEL[ev.category]}
               </span>
-              <span className="text-[11px] text-terminal-muted">{ev.event_type}</span>
-              <div className="ml-auto flex items-center gap-2 flex-shrink-0">
-                <span className="text-[11px] font-mono text-terminal-muted">{ev.scope}</span>
-                <span className={clsx('text-[11px] font-mono', CONFIDENCE_COLOUR[ev.confidence])}>
-                  {ev.confidence}
-                </span>
-              </div>
             </div>
-            {/* Headline */}
-            <p className="text-[13px] font-semibold text-terminal-text leading-snug tracking-tight">
-              {ev.headline}
-            </p>
-            {ev.notes && (
-              <p className="mt-1.5 text-xs text-terminal-muted leading-relaxed line-clamp-2">
-                {ev.notes}
-              </p>
-            )}
+            <p className="text-[12px] font-medium text-ink leading-snug">{ev.headline}</p>
           </div>
         ))}
       </div>
-    </Panel>
+    </PanelShell>
   )
 }
 
-// ── Recovery Value ─────────────────────────────────────────────────────────────
+// ── PCM Tightness panel ───────────────────────────────────────────────────────
 
-function PriceDirection({ current, prev }: { current: number; prev: number | undefined }) {
-  if (prev == null || prev === 0) return null
-  const pct = ((current - prev) / prev) * 100
-  if (Math.abs(pct) < 0.05) return null
-  const up = pct > 0
+function PcmTightnessPanel() {
+  const { openPanel } = useWorkspace()
   return (
-    <span className={`text-[10px] font-mono ml-1 ${up ? 'text-emerald-400' : 'text-red-400'}`}>
-      {up ? '▲' : '▼'}{Math.abs(pct).toFixed(1)}%
-    </span>
+    <PanelShell sourceLabel="Processing Capacity Monitor" title="Tightness & Conversion" linkTo="pcm">
+      <div className="px-4 py-6 flex flex-col items-center justify-center gap-3 h-full">
+        <p className="text-[12px] text-ink-3 text-center leading-relaxed">
+          Capacity tightness metrics across five processing categories.
+        </p>
+        <div className="space-y-2 w-full">
+          {['Composite Blade Processing', 'Metals Recovery', 'PV Module Recycling'].map(cat => (
+            <div key={cat} className="flex items-center justify-between py-1.5 border-b border-border last:border-0">
+              <span className="text-[11.5px] font-medium text-ink-2">{cat}</span>
+              <span className="text-[10px] text-ink-4 font-medium px-2 py-0.5 bg-page rounded border border-border">
+                T{cat === 'Composite Blade Processing' ? '1' : '2'}
+              </span>
+            </div>
+          ))}
+        </div>
+        <button
+          onClick={() => openPanel('pcm')}
+          className="text-[11px] text-teal font-medium hover:underline"
+        >
+          Open PCM →
+        </button>
+      </div>
+    </PanelShell>
   )
 }
 
-function RecoveryValuePanel() {
-  const [region, setRegion] = useState<RvRegion>('EU')
-  const [prices, setPrices] = useState<CommodityRow[]>([])
-  const [prevMap, setPrevMap] = useState<Record<string, number>>({})
+// ── Retirement Waves panel ────────────────────────────────────────────────────
+
+function RetirementWavesPanel() {
+  return (
+    <PanelShell sourceLabel="Asset Retirement Intelligence" title="Retirement Waves" linkTo="ari">
+      <div className="px-4 py-4 space-y-2">
+        {[
+          { horizon: '1y',  label: 'Near-term (2025)',   value: '—' },
+          { horizon: '3y',  label: 'Medium-term (2028)', value: '—' },
+          { horizon: '5y',  label: '5-year (2030)',       value: '—' },
+          { horizon: '10y', label: '10-year (2035)',      value: '—' },
+        ].map(({ horizon, label, value }) => (
+          <div key={horizon} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+            <div>
+              <p className="text-[11.5px] font-medium text-ink-2">{label}</p>
+            </div>
+            <div className="text-right">
+              <span className="text-[13px] font-semibold text-ink">{value}</span>
+              <span className="text-[10px] text-ink-3 ml-1">GW</span>
+            </div>
+          </div>
+        ))}
+        <p className="text-[10px] text-ink-4 pt-1">Onshore wind · EU + UK + US + JP</p>
+      </div>
+    </PanelShell>
+  )
+}
+
+// ── Commodity Reference panel ─────────────────────────────────────────────────
+
+interface CommodityRow {
+  material_type:  string
+  price_per_tonne: number
+  currency:       string
+  price_date:     string
+  region:         string
+}
+
+const MATERIAL_LABELS: Record<string, string> = {
+  steel_hms1: 'Steel HMS 1',
+  copper:     'Copper',
+  aluminium:  'Aluminium',
+  zinc:       'Zinc',
+  rare_earth: 'Nd-Pr Oxide',
+}
+
+const MATERIAL_ORDER = ['steel_hms1', 'copper', 'aluminium', 'zinc', 'rare_earth']
+
+const SOURCE_LABELS: Record<string, string> = {
+  steel_hms1: 'Argus EU',
+  copper:     'LME',
+  aluminium:  'LME',
+  zinc:       'LME',
+  rare_earth: 'BMI',
+}
+
+function CommodityReferencePanel() {
+  const [prices, setPrices]   = useState<CommodityRow[]>([])
   const [loading, setLoading] = useState(true)
 
-  const currency = RV_REGIONS.find(r => r.code === region)?.currency ?? 'EUR'
-
   useEffect(() => {
-    setLoading(true)
     supabase
       .from('commodity_prices')
-      .select('material_type, price_per_tonne, currency, price_date')
-      .eq('region', region)
+      .select('material_type, price_per_tonne, currency, price_date, region')
+      .eq('region', 'EU')
       .order('price_date', { ascending: false })
       .then(({ data }) => {
         if (!data) { setLoading(false); return }
-        const seen   = new Set<string>()
-        const prev: Record<string, number> = {}
+        const seen = new Set<string>()
         const deduped: CommodityRow[] = []
         for (const row of data as CommodityRow[]) {
           if (!seen.has(row.material_type)) {
             seen.add(row.material_type)
             deduped.push(row)
-          } else if (!(row.material_type in prev)) {
-            prev[row.material_type] = row.price_per_tonne
           }
         }
         deduped.sort((a, b) => {
@@ -311,380 +236,92 @@ function RecoveryValuePanel() {
           return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi)
         })
         setPrices(deduped)
-        setPrevMap(prev)
         setLoading(false)
       })
-  }, [region])
-
-  const latestPriceDate = prices.length > 0
-    ? fmtDate([...prices].sort((a, b) => b.price_date.localeCompare(a.price_date))[0].price_date)
-    : null
-
-  const regionTabs = (
-    <div className="flex items-center gap-0 flex-1">
-      {RV_REGIONS.map(r => (
-        <button
-          key={r.code}
-          onClick={() => setRegion(r.code)}
-          className={clsx(
-            'px-2.5 py-1 text-[10px] font-mono rounded transition-colors',
-            region === r.code
-              ? 'bg-terminal-teal/15 text-terminal-teal'
-              : 'text-terminal-muted hover:text-terminal-text'
-          )}
-        >
-          {r.label}
-        </button>
-      ))}
-    </div>
-  )
+  }, [])
 
   return (
-    <Panel label="Recovery Value" panelId="materials" action={regionTabs} asOf={latestPriceDate}>
-      <div className="divide-y divide-terminal-border">
+    <PanelShell sourceLabel="Secondary Materials Intelligence" title="Commodity Reference" linkTo="smi">
+      <div className="divide-y divide-border">
         {loading ? (
-          Array.from({ length: 7 }).map((_, i) => <SkeletonPriceRow key={i} />)
+          Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="flex items-center justify-between px-4 py-2.5 animate-pulse">
+              <div className="h-3 bg-page rounded w-28" />
+              <div className="h-3 bg-page rounded w-20" />
+            </div>
+          ))
         ) : prices.length === 0 ? (
-          <p className="px-4 py-5 text-xs text-terminal-muted text-center">
-            No prices for {region} yet.
-          </p>
+          <p className="px-4 py-6 text-[12px] text-ink-3 text-center">Price data pending</p>
         ) : prices.map(row => (
           <div key={row.material_type} className="flex items-center justify-between px-4 py-2.5">
-            <span className="text-xs text-terminal-text">
-              {MATERIAL_LABELS[row.material_type] ?? row.material_type}
-            </span>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <span className="text-xs font-mono text-terminal-text">
-                {fmtPrice(row.price_per_tonne, currency)}<span className="text-terminal-muted text-[10px]"> /t</span>
-              </span>
-              <PriceDirection current={row.price_per_tonne} prev={prevMap[row.material_type]} />
-            </div>
-          </div>
-        ))}
-      </div>
-    </Panel>
-  )
-}
-
-// ── Asset Retirement Pipeline ──────────────────────────────────────────────────
-
-function RetirementPanel() {
-  const [stages, setStages] = useState<StageBucket[]>([])
-  const [recent, setRecent] = useState<RetirementRow[]>([])
-  const [loading, setLoading] = useState(true)
-  const [lastReviewed, setLastReviewed] = useState<string | null>(null)
-
-  useEffect(() => {
-    Promise.all([
-      supabase.from('repowering_projects').select('stage'),
-      supabase
-        .from('repowering_projects')
-        .select('id, project_name, country_code, stage, capacity_mw, developer, stage_date')
-        .order('stage_date', { ascending: false })
-        .limit(5),
-      supabase
-        .from('repowering_projects')
-        .select('last_reviewed')
-        .order('last_reviewed', { ascending: false })
-        .limit(1)
-        .single(),
-    ]).then(([stageRes, recentRes, reviewedRes]) => {
-      const tally: Record<string, number> = {}
-      for (const row of (stageRes.data ?? []) as { stage: string }[]) {
-        tally[row.stage] = (tally[row.stage] ?? 0) + 1
-      }
-      const ORDER = ['announced', 'application_submitted', 'application_approved', 'permitted', 'ongoing']
-      setStages(ORDER.map(s => ({ stage: s, count: tally[s] ?? 0 })))
-      setRecent((recentRes.data as RetirementRow[]) ?? [])
-      const reviewedDate = (reviewedRes.data as { last_reviewed: string } | null)?.last_reviewed ?? null
-      setLastReviewed(reviewedDate)
-      setLoading(false)
-    })
-  }, [])
-
-  const total = stages.reduce((s, r) => s + r.count, 0)
-
-  return (
-    <Panel
-      label="Asset Retirement Pipeline"
-      panelId="retirement"
-      asOf={lastReviewed ? fmtDate(lastReviewed) : null}
-    >
-      {loading ? (
-        <div className="divide-y divide-terminal-border">
-          {Array.from({ length: 5 }).map((_, i) => <SkeletonCompactRow key={i} />)}
-        </div>
-      ) : <div>
-        {/* Stage summary */}
-        {total > 0 && (
-          <div className="flex items-center gap-4 px-4 py-3 border-b border-terminal-border flex-wrap">
-            {stages.filter(s => s.count > 0).map(({ stage, count }) => (
-              <div key={stage} className="flex flex-col items-center min-w-0">
-                <span className="text-sm font-semibold text-terminal-text leading-none">{count}</span>
-                <span className="text-[10px] font-mono text-terminal-muted mt-1 whitespace-nowrap">
-                  {STAGE_LABELS[stage] ?? stage}
-                </span>
-              </div>
-            ))}
-            <span className="ml-auto text-[10px] font-mono text-terminal-muted">{total} total</span>
-          </div>
-        )}
-        {/* Recent projects */}
-        <div className="divide-y divide-terminal-border">
-          {recent.map(p => (
-            <div key={p.id} className="flex items-center justify-between px-4 py-2.5 gap-3">
-              <div className="min-w-0">
-                <p className="text-xs font-medium text-terminal-text truncate">{p.project_name}</p>
-                <p className="text-[10px] font-mono text-terminal-muted mt-0.5">
-                  {p.country_code}{p.capacity_mw != null ? ` · ${p.capacity_mw} MW` : ''}{p.developer ? ` · ${p.developer}` : ''}
-                </p>
-              </div>
-              <div className="flex flex-col items-end flex-shrink-0 gap-0.5">
-                <span className="text-[10px] font-mono text-terminal-teal bg-terminal-teal/10 px-1.5 py-0.5 rounded">
-                  {STAGE_LABELS[p.stage] ?? p.stage}
-                </span>
-                <span className="text-[10px] font-mono text-terminal-muted">{fmtDate(p.stage_date)}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>}
-    </Panel>
-  )
-}
-
-// ── DCI Status ─────────────────────────────────────────────────────────────────
-
-function DciStatusPanel() {
-  const { openPanel } = useWorkspace()
-  const indices = [
-    { index: 'DCI Europe · Spot', ccy: 'EUR / MW', status: 'Methodology in build' },
-    { index: 'DCI US · Spot',     ccy: 'USD / MW', status: 'Methodology in build' },
-    { index: 'DCI Forward',       ccy: 'EUR & USD', status: 'Phase 2' },
-    { index: 'DCI Reserve',       ccy: '—',        status: 'Phase 2' },
-  ]
-  return (
-    <div className="flex flex-col border border-terminal-border rounded bg-terminal-surface overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-terminal-border flex-shrink-0">
-        <span className="text-[10px] text-terminal-muted tracking-widest uppercase">Decommissioning Cost Index</span>
-        <button
-          onClick={() => openPanel('dci')}
-          className="text-[10px] text-terminal-teal hover:underline transition-colors"
-        >
-          View →
-        </button>
-      </div>
-      <div className="divide-y divide-terminal-border">
-        {indices.map(({ index, ccy, status }) => (
-          <div key={index} className="flex items-center justify-between px-4 py-2.5">
             <div>
-              <p className="text-xs font-mono text-terminal-text">{index}</p>
-              <p className="text-[10px] text-terminal-muted">{ccy}</p>
+              <p className="text-[11.5px] font-semibold text-ink-2">
+                {MATERIAL_LABELS[row.material_type] ?? row.material_type}
+              </p>
+              <p className="text-[9.5px] text-ink-4">
+                {SOURCE_LABELS[row.material_type] ?? ''} · m/m
+              </p>
             </div>
-            <span className="text-[10px] font-mono text-terminal-muted">{status}</span>
+            <div className="text-right">
+              <p className="text-[12px] font-semibold text-ink">
+                {new Intl.NumberFormat('en-GB', {
+                  style: 'currency', currency: row.currency, maximumFractionDigits: 0,
+                }).format(row.price_per_tonne)}
+                <span className="text-[10px] font-normal text-ink-3">/t</span>
+              </p>
+              <p className="text-[9.5px] text-ink-4">{fmtDate(row.price_date)}</p>
+            </div>
           </div>
         ))}
       </div>
-    </div>
+    </PanelShell>
   )
 }
 
-// ── DCI summary banner ─────────────────────────────────────────────────────────
+// ── Portfolio Workspace panel ─────────────────────────────────────────────────
 
-interface DciPub {
-  series:           string
-  publication_date: string
-  index_value:      number | null
-  net_liability:    number | null
-  currency:         string
-}
-
-const DCI_SERIES = [
-  { series: 'europe_wind', label: 'DCI Spot Europe Wind', ccy: 'EUR' },
-  { series: 'us_wind',     label: 'DCI Spot US Wind',     ccy: 'USD' },
-]
-
-const CCY_SYM: Record<string, string> = { EUR: '€', USD: '$', GBP: '£' }
-
-function DciSummaryBanner() {
+function PortfolioWorkspacePanel() {
   const { openPanel } = useWorkspace()
-  const [pubs, setPubs]     = useState<DciPub[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    supabase
-      .from('dci_publications')
-      .select('series, publication_date, index_value, net_liability, currency')
-      .eq('is_published', true)
-      .in('series', ['europe_wind', 'us_wind'])
-      .order('publication_date', { ascending: false })
-      .then(({ data }) => { setPubs((data as DciPub[]) ?? []); setLoading(false) })
-  }, [])
-
-  // Latest and prior per series for direction
-  const latest = useMemo(() => {
-    const m: Record<string, DciPub> = {}
-    for (const p of pubs) if (!m[p.series]) m[p.series] = p
-    return m
-  }, [pubs])
-  const prior = useMemo(() => {
-    const seen = new Set<string>()
-    const m:    Record<string, DciPub> = {}
-    for (const p of pubs) {
-      if (!seen.has(p.series)) { seen.add(p.series); continue }
-      if (!m[p.series]) m[p.series] = p
-    }
-    return m
-  }, [pubs])
-
-  const hasPubs = Object.keys(latest).length > 0
-
   return (
-    <div className="border border-terminal-border rounded bg-terminal-surface overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-5 py-3 border-b border-terminal-border bg-terminal-black">
-        <div className="flex items-center gap-3">
-          <div className="w-1.5 h-1.5 rounded-full bg-terminal-teal flex-shrink-0" />
-          <span className="text-[10px] font-mono text-terminal-muted tracking-widest uppercase">
-            Decommissioning Cost Index
-          </span>
-          <span className="text-[10px] font-mono text-terminal-border">·</span>
-          <span className="text-[10px] font-mono text-terminal-muted">Onshore Wind · Base = 100</span>
+    <PanelShell sourceLabel="Portfolio Analytics" title="Workspace" linkTo="portfolio">
+      <div className="px-5 py-6 flex flex-col items-center justify-center gap-4 h-full text-center">
+        <div className="w-10 h-10 rounded-full bg-active flex items-center justify-center">
+          <span className="text-teal text-lg">⊞</span>
+        </div>
+        <div className="space-y-1">
+          <p className="text-[13px] font-semibold text-ink">No portfolio loaded</p>
+          <p className="text-[11.5px] text-ink-3 leading-relaxed max-w-[220px]">
+            Upload a CSV or enter assets manually to model decommissioning liability.
+          </p>
         </div>
         <button
-          onClick={() => openPanel('dci')}
-          className="text-[10px] text-terminal-teal hover:underline transition-colors"
+          onClick={() => openPanel('portfolio')}
+          className="px-4 py-1.5 bg-teal text-white text-[11.5px] font-semibold rounded hover:bg-teal-deep transition-colors"
         >
-          Full DCI →
+          Open Portfolio Analytics
+        </button>
+        <button className="text-[10.5px] text-ink-4 hover:text-ink-3 transition-colors">
+          Skip — I'm not a portfolio user
         </button>
       </div>
-
-      {/* Series values */}
-      <div className="grid grid-cols-2 divide-x divide-terminal-border">
-        {DCI_SERIES.map(({ series, label, ccy }) => {
-          const l = latest[series]
-          const p = prior[series]
-          const sym = CCY_SYM[ccy] ?? ''
-          let direction: React.ReactNode = null
-          if (l?.index_value != null && p?.index_value != null && p.index_value !== 0) {
-            const pct = ((l.index_value - p.index_value) / p.index_value) * 100
-            if (Math.abs(pct) >= 0.01) {
-              const up = pct > 0
-              // For a cost index: up = red (bad for liability holders), down = green
-              direction = (
-                <span className={`text-xs font-mono ${up ? 'text-red-400' : 'text-emerald-400'}`}>
-                  {up ? '▲' : '▼'}{Math.abs(pct).toFixed(1)}%
-                </span>
-              )
-            }
-          }
-
-          return (
-            <div key={series} className="px-6 py-5">
-              <div className="text-[10px] font-mono text-terminal-muted tracking-widest uppercase mb-3">
-                {label}
-              </div>
-              {loading ? (
-                <div className="space-y-2">
-                  <SkeletonBar className="h-8 w-28" />
-                  <SkeletonBar className="h-4 w-36" />
-                </div>
-              ) : !hasPubs || !l ? (
-                <div className="space-y-1">
-                  <div className="text-2xl font-semibold font-mono text-terminal-border">—</div>
-                  <p className="text-[11px] text-terminal-muted">First publication pending</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <div className="flex items-end gap-3">
-                    <span className="text-2xl font-semibold font-mono text-terminal-text">
-                      {l.index_value?.toFixed(2) ?? '—'}
-                    </span>
-                    {direction}
-                  </div>
-                  <div className="flex items-center gap-4 text-[11px] font-mono text-terminal-muted">
-                    {l.net_liability != null && (
-                      <span>
-                        <span className="text-terminal-text">
-                          {sym}{Math.round(l.net_liability).toLocaleString('en-GB')}
-                        </span>
-                        <span className="unit">/MW</span>
-                      </span>
-                    )}
-                    <span>{fmtDate(l.publication_date)}</span>
-                  </div>
-                </div>
-              )}
-            </div>
-          )
-        })}
-      </div>
-    </div>
+    </PanelShell>
   )
 }
 
-// ── Main page ──────────────────────────────────────────────────────────────────
+// ── Main page ─────────────────────────────────────────────────────────────────
 
 export function DashboardPage() {
   return (
-    <div className="flex flex-col flex-1 min-h-0 overflow-auto">
-      <TopBar
-        title="Endenex Terminal"
-        subtitle="Institutional intelligence for ageing clean energy assets"
-      />
+    <div className="h-full p-4 grid grid-cols-3 grid-rows-2 gap-3">
+      {/* Row 1 */}
+      <DciIndicesPanel />
+      <SignalTapePanel />
+      <PcmTightnessPanel />
 
-      <div className="flex-1 p-4 space-y-3 min-h-0 overflow-auto">
-
-        {/* ── DCI — full width, top prominence ───────────────────── */}
-        <DciSummaryBanner />
-
-        {/*
-          Three-column grid below the DCI banner:
-            Left  (flex-1):  Market Watch feed
-            Mid   (340px):   Recovery Value + Retirement pipeline
-            Right (280px):   Blade Waste + Portfolio
-        */}
-        <div className="grid grid-cols-[1fr_340px_280px] gap-3 items-start">
-
-          {/* ── Left: Watch feed ──────────────────────────────────── */}
-          <WatchFeed />
-
-          {/* ── Centre: Recovery Value + Retirement ──────────────── */}
-          <div className="flex flex-col gap-3">
-            <RecoveryValuePanel />
-            <RetirementPanel />
-          </div>
-
-          {/* ── Right: Blades + Portfolio ─────────────────────────── */}
-          <div className="flex flex-col gap-3">
-            <PlannedPanel
-              label="Blade Waste Intelligence"
-              panelId="blades"
-              description="GRP and composite blade volumes by region and year, recycling pathway availability, and end-of-life cost modelling."
-              signals={[
-                'Blade inventory by region and turbine model',
-                'GRP / composite volume estimates',
-                'Recycling pathway availability by geography',
-                'End-of-life cost modelling',
-                'Processor and contractor directory',
-              ]}
-            />
-            <PlannedPanel
-              label="Portfolio Analytics"
-              panelId="portfolio"
-              description="Model aggregate decommissioning liability exposure, attribute NRO by site, run sensitivity scenarios, and export for boards, lenders, and sureties."
-              signals={[
-                'Portfolio upload and site configuration',
-                'Aggregate liability vs DCI benchmark',
-                'NRO attribution by site and material',
-                'Sensitivity analysis — price and timing',
-                'Board memo and surety pack export',
-              ]}
-            />
-          </div>
-
-        </div>
-      </div>
+      {/* Row 2 */}
+      <RetirementWavesPanel />
+      <CommodityReferencePanel />
+      <PortfolioWorkspacePanel />
     </div>
   )
 }

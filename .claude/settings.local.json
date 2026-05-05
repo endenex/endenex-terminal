@@ -37,7 +37,9 @@
       "Read(//tmp/**)",
       "Bash(curl -sIL \"https://ens.dk/media/7828/download\")",
       "Bash(curl -sL \"https://ens.dk/media/7828/download\" -o /tmp/ens_wind.xlsx)",
-      "Bash(pip3 index *)"
+      "Bash(pip3 index *)",
+      "Bash(git -C /Users/alexg/Desktop/endenex/Terminal add -A)",
+      "Bash(git -C /Users/alexg/Desktop/endenex/Terminal commit -m ' *)"
     ]
   }
 }

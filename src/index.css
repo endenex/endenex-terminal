@@ -4,123 +4,80 @@
 
 @layer base {
   body {
-    @apply font-sans antialiased bg-terminal-black text-terminal-text;
+    @apply font-sans antialiased bg-page text-ink;
     font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1, 'tnum' 1;
     font-variant-numeric: tabular-nums;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
-    letter-spacing: -0.01em;  /* Bloomberg/IBKR: tight, dense type */
+    letter-spacing: -0.01em;
   }
 
-  /* Tabular nums everywhere — keeps data columns aligned without monospace */
+  /* Tabular nums everywhere — column alignment without monospace */
   * {
     font-variant-numeric: tabular-nums;
-    font-feature-settings: 'tnum' 1;
+    font-feature-settings: 'tnum' 1, 'cv11' 1;
   }
 }
 
-/* ── Dockview theme — terminal palette ──────────────────────────────────────── */
+/* ── Panel chrome ──────────────────────────────────────────────────────────── */
+
+.panel-shell {
+  @apply bg-panel border border-border rounded shadow-panel transition-shadow duration-150;
+}
+.panel-shell:hover {
+  @apply shadow-panel-md;
+}
+
+.panel-titlebar {
+  @apply flex items-center justify-between px-3 py-2 border-b border-border bg-titlebar flex-shrink-0;
+}
+
+/* ── Dockview overrides (kept in case dockview used in Phase 2) ────────────── */
 
 .endenex-dockview {
-  --dv-background-color:                                   #0D1117;
-  --dv-group-view-background-color:                        #0D1117;
-  --dv-tabs-and-actions-container-background-color:        #161B22;
-  --dv-tabs-and-actions-container-height:                  34px;
-  --dv-tab-height:                                         34px;
-
-  /* Active group — visible tab */
-  --dv-activegroup-visiblepanel-tab-background-color:      #0D1117;
-  --dv-activegroup-visiblepanel-tab-color:                 #E6EDF3;
-  /* Active group — hidden tabs */
-  --dv-activegroup-hiddenpanel-tab-background-color:       #161B22;
-  --dv-activegroup-hiddenpanel-tab-color:                  #7D8590;
-  /* Inactive group */
-  --dv-inactivegroup-visiblepanel-tab-background-color:    #161B22;
-  --dv-inactivegroup-visiblepanel-tab-color:               #7D8590;
-  --dv-inactivegroup-hiddenpanel-tab-background-color:     #161B22;
-  --dv-inactivegroup-hiddenpanel-tab-color:                #4D5562;
-
-  --dv-tab-divider-color:                                  #21262D;
-  --dv-separator-border:                                   #21262D;
-  --dv-paneview-header-border-color:                       #21262D;
-  --dv-drag-over-background-color:                         rgba(0, 123, 138, 0.08);
-  --dv-drag-over-border-color:                             #007B8A;
-  --dv-overlay-z-index:                                    999;
-  --dv-tab-border-width:                                   1px;
-  --dv-tab-close-icon:                                     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%237D8590' d='M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.749.749 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.749.749 0 1 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06z'/%3E%3C/svg%3E");
+  --dv-background-color:                            #F4F5F7;
+  --dv-group-view-background-color:                 #F4F5F7;
+  --dv-tabs-and-actions-container-background-color: #FFFFFF;
+  --dv-tabs-and-actions-container-height:           34px;
+  --dv-tab-height:                                  34px;
+  --dv-activegroup-visiblepanel-tab-background-color: #F4F5F7;
+  --dv-activegroup-visiblepanel-tab-color:          #0A1628;
+  --dv-activegroup-hiddenpanel-tab-background-color:#FFFFFF;
+  --dv-activegroup-hiddenpanel-tab-color:           #6B7585;
+  --dv-tab-divider-color:                           #E5E8EC;
+  --dv-separator-border:                            #E5E8EC;
+  --dv-drag-over-background-color:                  rgba(0,123,138,0.06);
+  --dv-drag-over-border-color:                      #007B8A;
 }
 
-/* Tab bar — visible so panels can be dragged to create splits */
-.endenex-dockview .dv-tabs-and-actions-container {
-  background: var(--dv-tabs-and-actions-container-background-color);
-  border-bottom: 1px solid #21262D;
-}
-
-/* Tab typography */
-.endenex-dockview .dv-tab {
-  font-family: 'Inter', sans-serif;
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  padding: 0 16px;
-  border-right: 1px solid #21262D;
-}
-
-/* Active tab bottom indicator */
-.endenex-dockview .dv-tab.active-tab {
-  border-bottom: 2px solid #007B8A;
-}
-
-/* Resize handle */
-.endenex-dockview .dv-sash-container .dv-sash {
-  background: #21262D;
-}
-.endenex-dockview .dv-sash-container .dv-sash:hover,
-.endenex-dockview .dv-sash-container .dv-sash.active {
-  background: #007B8A;
-}
-
-/* Drop target overlay */
-.endenex-dockview .dv-drop-target .dv-drop-target-anchor {
-  background: rgba(0, 123, 138, 0.12);
-  border: 1px solid #007B8A;
-}
-
-/* ── Floating panel windows ─────────────────────────────────────────────────── */
+/* ── Number and unit helpers ────────────────────────────────────────────────── */
 
 /*
-  Dockview floating groups render as absolutely-positioned overlays.
-  Style them like detached terminal windows with a border + shadow.
-*/
-.endenex-dockview .dv-floating-group {
-  border: 1px solid #007B8A !important;
-  border-radius: 4px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(0, 123, 138, 0.2);
-  overflow: hidden;
-}
-
-/* ── Font discipline ────────────────────────────────────────────────────────── */
-
-/*
-  Bloomberg/IBKR convention:
-  - All text: Inter — clean proportional sans-serif throughout
-  - Numeric alignment: tabular-nums via font-feature-settings (no monospace needed)
-  - Unit suffixes: dimmed, slightly smaller
-
-  .num   — numeric value (tabular-nums, no font switch)
-  .unit  — unit suffix (dimmed, 90% size)
+  .num  — any numeric data value (tabular-nums, medium weight)
+  .unit — currency / unit suffix (tertiary colour, 85% size)
+  .delta-up / .delta-down — directional move indicators
 */
 
 .num {
   font-variant-numeric: tabular-nums;
-  font-feature-settings: 'tnum' 1;
+  font-feature-settings: 'tnum' 1, 'cv11' 1;
   font-weight: 500;
 }
 
 .unit {
   font-size: 0.85em;
   font-weight: 400;
-  color: #7D8590;
-  margin-left: 0.2em;
+  color: #6B7585;
+  margin-left: 0.1em;
   letter-spacing: 0;
 }
+
+.delta-up   { color: #1F8A5C; }
+.delta-down { color: #B53C3C; }
+
+/* ── Scrollbar (light theme) ────────────────────────────────────────────────── */
+
+::-webkit-scrollbar       { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #D0D5DB; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #98A1AE; }

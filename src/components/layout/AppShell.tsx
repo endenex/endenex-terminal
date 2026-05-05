@@ -1,11 +1,17 @@
-import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
-import { useUser } from '@clerk/clerk-react'
-import { DockviewReact, DockviewReadyEvent, DockviewApi, IDockviewPanelProps } from 'dockview'
-import 'dockview/dist/styles/dockview.css'
-import { NavBar } from './NavBar'
-import { StatusBar } from './StatusBar'
+// ── AppShell ────────────────────────────────────────────────────────────────
+// Fixed panel layout — dockview removed per Product Brief v1.0 §10.1.
+// Floating draggable panels are Phase 2 (§10.2).
+
+import { useState, useCallback, useMemo } from 'react'
+import { TopChrome }        from './TopChrome'
+import { TabNav }           from './TabNav'
+import { WorkspaceControls } from './WorkspaceControls'
+import { BottomFooter }     from './BottomFooter'
 import { WorkspaceContext } from '@/context/WorkspaceContext'
 import { PANELS, type PanelId } from '@/config/panels'
+
+// ── Page components ──────────────────────────────────────────────────────────
+
 import { DashboardPage }  from '@/pages/DashboardPage'
 import { DciPage }        from '@/pages/DciPage'
 import { RetirementPage } from '@/pages/RetirementPage'
@@ -14,121 +20,54 @@ import { BladesPage }     from '@/pages/BladesPage'
 import { WatchPage }      from '@/pages/WatchPage'
 import { PortfolioPage }  from '@/pages/PortfolioPage'
 
-export type { PanelId }  // re-export so existing imports still resolve
+// Re-export PanelId for legacy imports
+export type { PanelId }
 
-const COMPONENTS: Record<string, React.FC<IDockviewPanelProps>> = {
-  home:       () => <DashboardPage />,
-  dci:        () => <DciPage />,
-  retirement: () => <RetirementPage />,
-  materials:  () => <MaterialsPage />,
-  blades:     () => <BladesPage />,
-  watch:      () => <WatchPage />,
-  portfolio:  () => <PortfolioPage />,
+const PAGE: Record<PanelId, React.FC> = {
+  home:      DashboardPage,
+  dci:       DciPage,
+  ari:       RetirementPage,
+  smi:       MaterialsPage,
+  pcm:       BladesPage,
+  portfolio: PortfolioPage,
+  watch:     WatchPage,
 }
 
-const LAYOUT_PREFIX = 'endenex-layout'
-
-function layoutKey(userId: string) {
-  return `${LAYOUT_PREFIX}-${userId}`
-}
-
-function defaultLayout(api: DockviewApi) {
-  const ids = Object.keys(PANELS) as PanelId[]
-  api.addPanel({ id: ids[0], component: ids[0], title: PANELS[ids[0]].title })
-  for (let i = 1; i < ids.length; i++) {
-    api.addPanel({
-      id:        ids[i],
-      component: ids[i],
-      title:     PANELS[ids[i]].title,
-      position:  { referencePanel: ids[0], direction: 'within' },
-    })
-  }
-  api.getPanel('home')?.api.setActive()
-}
-
-// ── AppShell ───────────────────────────────────────────────────────────────────
+// ── AppShell ─────────────────────────────────────────────────────────────────
 
 export function AppShell() {
-  const { user } = useUser()
+  const [activeTab, setActiveTab] = useState<PanelId>('home')
 
-  // Keep userId in a ref so stable callbacks can read the latest value
-  const userIdRef = useRef<string>('default')
-  useEffect(() => {
-    if (user?.id) userIdRef.current = user.id
-  }, [user?.id])
+  const openPanel = useCallback((id: PanelId) => setActiveTab(id), [])
 
-  const [api, setApi] = useState<DockviewApi | null>(null)
-  const apiRef        = useRef<DockviewApi | null>(null)
+  const ctxValue = useMemo(
+    () => ({ activeTab, openPanel }),
+    [activeTab, openPanel],
+  )
 
-  const onReady = useCallback((event: DockviewReadyEvent) => {
-    apiRef.current = event.api
-    setApi(event.api)
-
-    // ── Restore saved layout (per user) or fall back to default ──────────────
-    const key   = layoutKey(userIdRef.current)
-    const saved = localStorage.getItem(key)
-    let restored = false
-
-    if (saved) {
-      try {
-        event.api.fromJSON(JSON.parse(saved))
-        restored = true
-      } catch {
-        // Saved layout is stale/corrupt — clear it and use default
-        localStorage.removeItem(key)
-      }
-    }
-
-    if (!restored) defaultLayout(event.api)
-
-    // ── Debounced save on every layout change ─────────────────────────────────
-    let saveTimer: ReturnType<typeof setTimeout>
-    event.api.onDidLayoutChange(() => {
-      clearTimeout(saveTimer)
-      saveTimer = setTimeout(() => {
-        try {
-          const k = layoutKey(userIdRef.current)
-          localStorage.setItem(k, JSON.stringify(event.api.toJSON()))
-        } catch { /* storage full or unavailable */ }
-      }, 800)
-    })
-  }, [])  // stable — reads userIdRef via ref
-
-  const openPanel = useCallback((id: PanelId) => {
-    const a = apiRef.current
-    if (!a) return
-    const existing = a.getPanel(id)
-    if (existing) { existing.api.setActive(); return }
-    a.addPanel({ id, component: id, title: PANELS[id].title })
-  }, [])
-
-  // Reset layout: clear saved state and re-apply default
-  const resetLayout = useCallback(() => {
-    const a = apiRef.current
-    if (!a) return
-    localStorage.removeItem(layoutKey(userIdRef.current))
-
-    // Close all panels then re-apply default
-    a.panels.forEach(p => p.api.close())
-    defaultLayout(a)
-  }, [])
-
-  const ctxValue = useMemo(() => ({ openPanel }), [openPanel])
+  const ActivePage = PAGE[activeTab]
 
   return (
     <WorkspaceContext.Provider value={ctxValue}>
-      <div className="flex flex-col h-screen bg-terminal-black">
-        <NavBar api={api} onOpen={openPanel} onReset={resetLayout} />
-        {/* overflow:visible so floating panels can extend near the edges */}
-        <div className="flex-1 min-h-0 relative">
-          <DockviewReact
-            className="endenex-dockview"
-            components={COMPONENTS}
-            onReady={onReady}
-            floatingGroupBounds="boundedWithinViewport"
-          />
-        </div>
-        <StatusBar />
+      <div className="flex flex-col h-screen overflow-hidden bg-page">
+
+        {/* Dark navy top chrome — wordmark + DCI ticker */}
+        <TopChrome />
+
+        {/* Light tab navigation — 7 tabs with role labels */}
+        <TabNav active={activeTab} onSelect={setActiveTab} />
+
+        {/* Workspace controls strip — layout presets + utility actions */}
+        <WorkspaceControls />
+
+        {/* Active tab content */}
+        <main className="flex-1 min-h-0 overflow-auto bg-page">
+          <ActivePage />
+        </main>
+
+        {/* Utility footer — Alerts · Methodology · Coverage · Account · Logout */}
+        <BottomFooter />
+
       </div>
     </WorkspaceContext.Provider>
   )

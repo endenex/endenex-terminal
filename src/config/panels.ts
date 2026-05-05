@@ -1,14 +1,52 @@
-// ── Panel registry ─────────────────────────────────────────────────────────────
-// Kept in its own file to avoid circular imports between AppShell and NavBar.
+// ── Tab / panel registry ────────────────────────────────────────────────────
+// Order matches Product Brief v1.0 §4.1 exactly.
 
-export type PanelId = 'home' | 'dci' | 'retirement' | 'materials' | 'blades' | 'watch' | 'portfolio'
+export type PanelId = 'home' | 'dci' | 'ari' | 'smi' | 'pcm' | 'portfolio' | 'watch'
 
-export const PANELS: Record<PanelId, { title: string }> = {
-  home:       { title: 'Home' },
-  dci:        { title: 'DCI' },
-  retirement: { title: 'Asset Retirement' },
-  materials:  { title: 'Recovery Value' },
-  blades:     { title: 'Blade Intelligence' },
-  watch:      { title: 'Market Watch' },
-  portfolio:  { title: 'Portfolio' },
+export interface PanelMeta {
+  title:     string
+  role:      string
+  roleColor: 'default' | 'product' | 'moat'
 }
+
+export const PANELS: Record<PanelId, PanelMeta> = {
+  home: {
+    title:     'Home',
+    role:      'Dashboard',
+    roleColor: 'default',
+  },
+  dci: {
+    title:     'DCI Dashboard',
+    role:      'Product',
+    roleColor: 'product',
+  },
+  ari: {
+    title:     'Asset Retirement Intelligence',
+    role:      'Module',
+    roleColor: 'default',
+  },
+  smi: {
+    title:     'Secondary Materials Intelligence',
+    role:      'Module',
+    roleColor: 'default',
+  },
+  pcm: {
+    title:     'Processing Capacity Monitor',
+    role:      'Module · Moat spine',
+    roleColor: 'moat',
+  },
+  portfolio: {
+    title:     'Portfolio Analytics',
+    role:      'Product',
+    roleColor: 'product',
+  },
+  watch: {
+    title:     'Market Watch',
+    role:      'Module',
+    roleColor: 'default',
+  },
+}
+
+export const PANEL_ORDER: PanelId[] = [
+  'home', 'dci', 'ari', 'smi', 'pcm', 'portfolio', 'watch',
+]

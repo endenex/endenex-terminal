@@ -1,11 +1,13 @@
 import { createContext, useContext } from 'react'
-import type { PanelId } from '@/components/layout/AppShell'
+import type { PanelId } from '@/config/panels'
 
 interface WorkspaceContextValue {
-  openPanel: (id: PanelId) => void
+  activeTab:  PanelId
+  openPanel:  (id: PanelId) => void
 }
 
 export const WorkspaceContext = createContext<WorkspaceContextValue>({
+  activeTab: 'home',
   openPanel: () => {},
 })
 

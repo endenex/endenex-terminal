@@ -16,15 +16,15 @@ const ALLOWED_EMAILS: Set<string> = new Set([
 function AccessDenied() {
   const { user } = useUser()
   return (
-    <div className="flex flex-col items-center justify-center h-screen bg-[#0A0E13] gap-6 font-mono">
+    <div className="flex flex-col items-center justify-center h-screen bg-chrome-bg gap-6">
       <div className="text-center space-y-2">
-        <p className="text-xs tracking-widest text-terminal-muted uppercase">Access Restricted</p>
-        <p className="text-sm text-terminal-text">
+        <p className="text-[11px] tracking-widest text-chrome-muted uppercase">Access Restricted</p>
+        <p className="text-[13px] text-chrome-text">
           {user?.primaryEmailAddress?.emailAddress} is not authorised to access this terminal.
         </p>
       </div>
       <SignOutButton>
-        <button className="text-xs text-terminal-teal hover:underline">Sign out</button>
+        <button className="text-[12px] text-teal hover:underline">Sign out</button>
       </SignOutButton>
     </div>
   )
