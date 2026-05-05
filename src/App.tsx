@@ -8,14 +8,10 @@ import { SignUpPage } from '@/pages/SignUpPage'
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
 if (!PUBLISHABLE_KEY) throw new Error('Missing Clerk publishable key')
 
-// Comma-separated list of permitted email addresses.
-// Set VITE_ALLOWED_EMAILS in .env.local — e.g. alex@endenex.com
-const ALLOWED_EMAILS: Set<string> = new Set(
-  (import.meta.env.VITE_ALLOWED_EMAILS ?? '')
-    .split(',')
-    .map((e: string) => e.trim().toLowerCase())
-    .filter(Boolean)
-)
+// Hardcoded allowlist — extend when additional users are onboarded
+const ALLOWED_EMAILS: Set<string> = new Set([
+  'alex@endenex.com',
+])
 
 function AccessDenied() {
   const { user } = useUser()
