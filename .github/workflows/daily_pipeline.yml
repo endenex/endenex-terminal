@@ -8,8 +8,9 @@ name: Daily Pipeline
 #   Step 4.  Airtable → repowering        → repowering_projects   (depends on Step 1)
 #   Step 5.  Trade-press RSS monitor      → watch_events
 #   Step 6.  Asset signals classifier     → asset_signals          (depends on Steps 2-4)
-#   Step 7.  Compute DCI publications     → dci_publications
-#   Step 8.  Compute NRO estimates        → nro_estimates
+#   Step 7.  Fetch LME / COMEX scrap      → commodity_prices       (yfinance + scrap-discount)
+#   Step 8.  Compute DCI publications     → dci_publications        (depends on Step 7)
+#   Step 9.  Compute NRO estimates        → nro_estimates           (depends on Step 7)
 #
 # Each step writes to ingestion_runs telemetry. The Coverage overlay in the
 # Terminal shows the daily run health.
@@ -101,8 +102,17 @@ jobs:
         run: python compute_asset_signals.py
         continue-on-error: true
 
-      # ── Step 7 ── DCI publications (v1.1)
-      - name: 7 · Compute DCI publications
+      # ── Step 7 ── LME / COMEX scrap-basis price refresh
+      - name: 7 · Fetch LME/COMEX scrap prices
+        working-directory: ingestion
+        env:
+          SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python fetch_lme_scrap_prices.py
+        continue-on-error: true
+
+      # ── Step 8 ── DCI publications (v1.1, uses fresh prices from Step 7)
+      - name: 8 · Compute DCI publications
         working-directory: ingestion
         env:
           SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
@@ -110,8 +120,8 @@ jobs:
         run: python compute_dci.py
         continue-on-error: true
 
-      # ── Step 8 ── NRO estimates (v1.1)
-      - name: 8 · Compute NRO estimates
+      # ── Step 9 ── NRO estimates (v1.1, uses fresh prices from Step 7)
+      - name: 9 · Compute NRO estimates
         working-directory: ingestion
         env:
           SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
