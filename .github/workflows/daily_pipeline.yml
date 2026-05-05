@@ -8,9 +8,10 @@ name: Daily Pipeline
 #   Step 4.  Airtable → repowering        → repowering_projects   (depends on Step 1)
 #   Step 5.  Trade-press RSS monitor      → watch_events
 #   Step 6.  Asset signals classifier     → asset_signals          (depends on Steps 2-4)
-#   Step 7.  Fetch LME / COMEX scrap      → commodity_prices       (yfinance + scrap-discount)
-#   Step 8.  Compute DCI publications     → dci_publications        (depends on Step 7)
-#   Step 9.  Compute NRO estimates        → nro_estimates           (depends on Step 7)
+#   Step 7.  Fetch ECB FX rates           → fx_rates                (free, no key)
+#   Step 8.  Fetch LME / COMEX scrap      → commodity_prices        (yfinance, uses Step 7 FX)
+#   Step 9.  Compute DCI publications     → dci_publications        (uses Steps 7-8)
+#   Step 10. Compute NRO estimates        → nro_estimates           (uses Steps 7-8)
 #
 # Each step writes to ingestion_runs telemetry. The Coverage overlay in the
 # Terminal shows the daily run health.
@@ -18,6 +19,10 @@ name: Daily Pipeline
 # Schedule: 06:00 UTC daily = 06:00 GMT / 07:00 BST.
 # Picked to land BEFORE London business hours so figures are fresh when teams
 # arrive at their desks.
+#
+# Note: ECB publishes FX at ~16:00 CET (15:00 UTC). The 06:00 UTC run picks up
+# YESTERDAY's ECB rates (today's aren't out yet). That's the standard
+# institutional convention — IFRS uses prior-day close anyway.
 #
 # `continue-on-error: true` on every step ensures one failure (e.g. a flaky
 # trade-press RSS feed) doesn't block downstream steps.
@@ -102,8 +107,17 @@ jobs:
         run: python compute_asset_signals.py
         continue-on-error: true
 
-      # ── Step 7 ── LME / COMEX scrap-basis price refresh
-      - name: 7 · Fetch LME/COMEX scrap prices
+      # ── Step 7 ── ECB FX rates (free, no key)
+      - name: 7 · Fetch ECB FX rates
+        working-directory: ingestion
+        env:
+          SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python fetch_fx_rates.py
+        continue-on-error: true
+
+      # ── Step 8 ── LME / COMEX scrap-basis price refresh (uses Step 7 FX)
+      - name: 8 · Fetch LME/COMEX scrap prices
         working-directory: ingestion
         env:
           SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
@@ -111,8 +125,8 @@ jobs:
         run: python fetch_lme_scrap_prices.py
         continue-on-error: true
 
-      # ── Step 8 ── DCI publications (v1.1, uses fresh prices from Step 7)
-      - name: 8 · Compute DCI publications
+      # ── Step 9 ── DCI publications (v1.1, uses fresh prices from Step 8)
+      - name: 9 · Compute DCI publications
         working-directory: ingestion
         env:
           SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
@@ -120,8 +134,8 @@ jobs:
         run: python compute_dci.py
         continue-on-error: true
 
-      # ── Step 9 ── NRO estimates (v1.1, uses fresh prices from Step 7)
-      - name: 9 · Compute NRO estimates
+      # ── Step 10 ── NRO estimates (v1.1, uses fresh prices from Step 8)
+      - name: 10 · Compute NRO estimates
         working-directory: ingestion
         env:
           SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}

@@ -68,11 +68,20 @@ SCRAP_DISCOUNTS = {
     ('aluminium', 'EU'): 0.68,    # 65-70% of LME
     ('aluminium', 'GB'): 0.62,    # 60-65% of LME
     ('aluminium', 'US'): 0.78,    # 75-80% of LME
+    ('zinc',      'EU'): 0.65,    # ~65% of LME zinc, thin market
+    ('zinc',      'GB'): 0.65,    # ~65% of LME zinc
+    ('zinc',      'US'): 0.60,    # ~60% of LME zinc
 }
 
 # COMEX → LME conversion (LME copper trades at ~5% discount to COMEX historically;
 # methodology assumes parity for simplicity, but we apply the small adjustment)
 COMEX_TO_LME_RATIO = 0.95
+
+# LME zinc proxy: Yahoo Finance has no liquid zinc futures ticker, so we
+# derive LME zinc from LME aluminium using the historical ratio observed
+# at methodology base period (April 2026: LME zinc ~$2,400 / LME alum ~$2,400 ≈ 1.0,
+# but UK rates show £1,900 zinc vs £1,700 alum ≈ 1.12). Use 1.10 as mid.
+LME_ZINC_OVER_ALUM_RATIO = 1.10
 
 
 # ── Yahoo Finance fetch ─────────────────────────────────────────────────────────
@@ -99,7 +108,7 @@ def _fetch_close(ticker: str) -> float | None:
         return None
 
 
-def fetch_benchmarks() -> dict[str, float]:
+def fetch_benchmarks() -> dict[str, float | None]:
     """Returns dict of benchmark → USD/tonne (or None if fetch failed)."""
     log.info('Fetching primary-metal benchmarks via yfinance…')
 
@@ -112,10 +121,26 @@ def fetch_benchmarks() -> dict[str, float]:
     ali = _fetch_close('ALI=F')
     lme_alum_usd_t = ali * LB_TO_TONNE if ali else None
 
+    # LME zinc — try a few Yahoo tickers; if none work, derive as proxy from aluminium
+    lme_zinc_usd_t: float | None = None
+    zinc_via_proxy = False
+    for ticker in ['ZNC=F', 'ZN=F']:
+        z = _fetch_close(ticker)
+        if z and 0.5 < z < 5.0:   # USD/lb sanity check
+            lme_zinc_usd_t = z * LB_TO_TONNE
+            log.info(f'  zinc fetched directly via {ticker}')
+            break
+    if lme_zinc_usd_t is None and lme_alum_usd_t is not None:
+        lme_zinc_usd_t = lme_alum_usd_t * LME_ZINC_OVER_ALUM_RATIO
+        zinc_via_proxy = True
+        log.info(f'  zinc derived as proxy: LME alum × {LME_ZINC_OVER_ALUM_RATIO}')
+
     return {
         'lme_copper_usd_t':   lme_copper_usd_t,
         'comex_copper_usd_t': comex_copper_usd_t,
         'lme_alum_usd_t':     lme_alum_usd_t,
+        'lme_zinc_usd_t':     lme_zinc_usd_t,
+        'zinc_via_proxy':     zinc_via_proxy,
     }
 
 
@@ -165,7 +190,12 @@ def build_rows(benchmarks: dict, fx: dict, asof: date) -> list[dict]:
         ('aluminium', 'EU', 'lme_alum_usd_t',     'EUR', 'Argus Scrap Markets — EEA Aluminium Old Cast',    'Old cast/mixed (~68% of LME)'),
         ('aluminium', 'GB', 'lme_alum_usd_t',     'GBP', 'Argus Scrap Markets — UK Aluminium Old Cast',     'Old cast/mixed (~62% of LME)'),
         ('aluminium', 'US', 'lme_alum_usd_t',     'USD', 'AMM Midwest Aluminium Shredded',                  'Midwest shredded dealer (~78% of LME)'),
+        ('zinc',      'EU', 'lme_zinc_usd_t',     'EUR', 'EEA Old Zinc Dealer (LME-referenced)',            'Old zinc scrap (~65% of LME)'),
+        ('zinc',      'GB', 'lme_zinc_usd_t',     'GBP', 'UK Old Zinc Dealer (LME-referenced)',             'Old zinc scrap (~65% of LME)'),
+        ('zinc',      'US', 'lme_zinc_usd_t',     'USD', 'AMM US Old Zinc Midwest Dealer',                  'Old zinc scrap (~60% of LME)'),
     ]
+
+    zinc_proxy = benchmarks.get('zinc_via_proxy', False)
 
     for material, region, bench_key, ccy, source_label, grade in plan:
         bench_usd_t = benchmarks.get(bench_key)
@@ -177,19 +207,25 @@ def build_rows(benchmarks: dict, fx: dict, asof: date) -> list[dict]:
         discount     = SCRAP_DISCOUNTS.get((material, region), 0.75)
         scrap_price  = round(bench_in_ccy * discount, 0)
 
+        # Mark zinc as Low confidence + Modelled if derived via proxy
+        is_proxy   = (material == 'zinc' and zinc_proxy)
+        confidence = 'Low'      if is_proxy else 'Medium'
+        suffix     = ' (proxy: derived from LME aluminium)' if is_proxy \
+                     else ' (Endenex scrap-discount from LME/COMEX)'
+
         rows.append({
             'material_type':   material,
             'region':          region,
             'price_per_tonne': scrap_price,
             'currency':        ccy,
             'price_date':      asof.isoformat(),
-            'source_name':     source_label + ' (Endenex scrap-discount from LME/COMEX)',
+            'source_name':     source_label + suffix,
             'source_url':      'https://finance.yahoo.com/',
             'is_scrap_basis':  True,
             'publisher_grade': grade,
             'source_type':     'Market Data — Endenex scrap-discount methodology',
             'source_date':     asof.isoformat(),
-            'confidence':      'Medium',
+            'confidence':      confidence,
             'derivation':      'Modelled',
             'last_reviewed':   asof.isoformat(),
         })
