@@ -1,0 +1,132 @@
+name: Daily Pipeline
+
+# One coherent daily run that refreshes everything operators expect to be live:
+#
+#   Step 1.  Airtable Watch sync          → watch_events
+#   Step 2.  EEG-expiry promoter (DE)     → repowering_projects
+#   Step 3.  REPD planning promoter (UK)  → repowering_projects
+#   Step 4.  Airtable → repowering        → repowering_projects   (depends on Step 1)
+#   Step 5.  Procurement scrapers         → watch_events          (TED / FTS / SAM.gov)
+#   Step 6.  Trade-press RSS monitor      → watch_events
+#   Step 7.  Asset signals classifier     → asset_signals          (depends on Steps 2-4)
+#   Step 8.  Compute DCI publications     → dci_publications
+#   Step 9.  Compute NRO estimates        → nro_estimates
+#
+# Each step writes to ingestion_runs telemetry. The Coverage overlay in the
+# Terminal shows the daily run health.
+#
+# Schedule: 06:00 UTC daily = 06:00 GMT / 07:00 BST.
+# Picked to land BEFORE London business hours so figures are fresh when teams
+# arrive at their desks.
+#
+# `continue-on-error: true` on every step ensures one failure (e.g. a flaky
+# trade-press RSS feed) doesn't block downstream steps.
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    # Manual trigger from the Actions tab — useful for ad-hoc backfills.
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: ingestion/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r ingestion/requirements.txt
+
+      # ── Step 1 ── Airtable curated intelligence
+      - name: 1 · Airtable Watch sync
+        working-directory: ingestion
+        env:
+          AIRTABLE_TOKEN:            ${{ secrets.AIRTABLE_TOKEN }}
+          AIRTABLE_BASE_ID:          ${{ secrets.AIRTABLE_BASE_ID }}
+          AIRTABLE_TABLE_ID:         ${{ secrets.AIRTABLE_TABLE_ID }}
+          SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python sync_airtable_watch.py
+        continue-on-error: true
+
+      # ── Step 2 ── EEG-expiry promoter (DE)
+      - name: 2 · Promote EEG-expiring DE assets
+        working-directory: ingestion
+        env:
+          SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python promote_eeg_repowering.py
+        continue-on-error: true
+
+      # ── Step 3 ── REPD planning status (UK)
+      - name: 3 · Promote REPD planning-status
+        working-directory: ingestion
+        env:
+          SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python promote_repd_repowering.py
+        continue-on-error: true
+
+      # ── Step 4 ── Airtable → repowering (depends on Step 1)
+      - name: 4 · Promote Airtable Watch → repowering_projects
+        working-directory: ingestion
+        env:
+          SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python promote_airtable_repowering.py
+        continue-on-error: true
+
+      # ── Step 5 ── Procurement scrapers
+      - name: 5 · Procurement notices (TED / FTS / SAM.gov)
+        working-directory: ingestion
+        env:
+          SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TED_API_KEY:               ${{ secrets.TED_API_KEY }}
+          FTS_API_KEY:               ${{ secrets.FTS_API_KEY }}
+          SAM_API_KEY:               ${{ secrets.SAM_API_KEY }}
+        run: python ingest_procurement.py --source all --days 90
+        continue-on-error: true
+
+      # ── Step 6 ── Trade-press RSS monitor
+      - name: 6 · Trade-press RSS
+        working-directory: ingestion
+        env:
+          SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python ingest_trade_press.py --days 14
+        continue-on-error: true
+
+      # ── Step 7 ── Asset signals (depends on Steps 2-4)
+      - name: 7 · Recompute asset_signals
+        working-directory: ingestion
+        env:
+          SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python compute_asset_signals.py
+        continue-on-error: true
+
+      # ── Step 8 ── DCI publications (v1.1)
+      - name: 8 · Compute DCI publications
+        working-directory: ingestion
+        env:
+          SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python compute_dci.py
+        continue-on-error: true
+
+      # ── Step 9 ── NRO estimates (v1.1)
+      - name: 9 · Compute NRO estimates
+        working-directory: ingestion
+        env:
+          SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python compute_nro.py

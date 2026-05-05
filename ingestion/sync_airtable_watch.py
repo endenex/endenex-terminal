@@ -368,53 +368,77 @@ def mark_duplicates(records: list[dict]) -> list[dict]:
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 
+def _log_run(client, status: str, written: int, error: str | None = None, notes: str = ''):
+    """Write a row to ingestion_runs telemetry so the Data Health overlay sees it."""
+    try:
+        client.table('ingestion_runs').insert({
+            'pipeline':           'sync_airtable_watch',
+            'status':             status,
+            'started_at':         f'{date.today()}T00:00:00Z',
+            'finished_at':        f'{date.today()}T00:00:01Z',
+            'records_written':    written,
+            'source_attribution': 'Airtable curated intelligence feed',
+            'notes':              notes,
+            'error_message':      error,
+        }).execute()
+    except Exception as e:
+        log.warning(f'Failed to write ingestion_runs telemetry: {e}')
+
+
 def main():
     log.info('=== Airtable → Watch sync starting ===')
     client = get_supabase_client()
-
-    # 1. Fetch from Airtable
-    log.info('Fetching records from Airtable…')
-    raw = fetch_airtable_records()
-    log.info(f'Fetched {len(raw)} records')
-
-    # 2. Sync sources
-    source_names = {
-        (r.get('fields', {}).get('Source') or '').strip()
-        for r in raw
-        if (r.get('fields', {}).get('Source') or '').strip()
-    }
-    log.info(f'Syncing {len(source_names)} sources…')
-    source_id_map = sync_sources(client, source_names)
-
-    # 3. Map records
-    mapped: list[dict] = []
-    skipped = 0
-    for rec in raw:
-        row = map_record(rec, source_id_map)
-        if row:
-            mapped.append(row)
-        else:
-            skipped += 1
-    log.info(f'Mapped {len(mapped)} records ({skipped} skipped — missing title or date)')
-
-    # 4. Deduplicate
-    log.info('Running deduplication…')
-    mapped     = mark_duplicates(mapped)
-    dup_count  = sum(1 for r in mapped if r.get('is_duplicate'))
-    log.info(f'{dup_count} duplicates flagged, {len(mapped) - dup_count} canonical events')
-
-    # 5. Upsert to Supabase
-    log.info('Upserting to watch_events…')
     total = 0
-    for i in range(0, len(mapped), BATCH_SIZE):
-        batch = mapped[i:i + BATCH_SIZE]
-        client.table('watch_events').upsert(
-            batch, on_conflict='airtable_record_id'
-        ).execute()
-        total += len(batch)
-        log.info(f'  Batch {i // BATCH_SIZE + 1}: {len(batch)} records ({total} total)')
+    dup_count = 0
 
-    log.info(f'=== Sync complete: {total} records upserted, {dup_count} marked as duplicates ===')
+    try:
+        # 1. Fetch from Airtable
+        log.info('Fetching records from Airtable…')
+        raw = fetch_airtable_records()
+        log.info(f'Fetched {len(raw)} records')
+
+        # 2. Sync sources
+        source_names = {
+            (r.get('fields', {}).get('Source') or '').strip()
+            for r in raw
+            if (r.get('fields', {}).get('Source') or '').strip()
+        }
+        log.info(f'Syncing {len(source_names)} sources…')
+        source_id_map = sync_sources(client, source_names)
+
+        # 3. Map records
+        mapped: list[dict] = []
+        skipped = 0
+        for rec in raw:
+            row = map_record(rec, source_id_map)
+            if row:
+                mapped.append(row)
+            else:
+                skipped += 1
+        log.info(f'Mapped {len(mapped)} records ({skipped} skipped — missing title or date)')
+
+        # 4. Deduplicate
+        log.info('Running deduplication…')
+        mapped     = mark_duplicates(mapped)
+        dup_count  = sum(1 for r in mapped if r.get('is_duplicate'))
+        log.info(f'{dup_count} duplicates flagged, {len(mapped) - dup_count} canonical events')
+
+        # 5. Upsert to Supabase
+        log.info('Upserting to watch_events…')
+        for i in range(0, len(mapped), BATCH_SIZE):
+            batch = mapped[i:i + BATCH_SIZE]
+            client.table('watch_events').upsert(
+                batch, on_conflict='airtable_record_id'
+            ).execute()
+            total += len(batch)
+            log.info(f'  Batch {i // BATCH_SIZE + 1}: {len(batch)} records ({total} total)')
+
+        log.info(f'=== Sync complete: {total} records upserted, {dup_count} marked as duplicates ===')
+        _log_run(client, 'success', total, notes=f'{dup_count} duplicates flagged')
+    except Exception as e:
+        log.exception('Airtable sync failed')
+        _log_run(client, 'failure', total, error=str(e))
+        raise
 
 
 if __name__ == '__main__':
