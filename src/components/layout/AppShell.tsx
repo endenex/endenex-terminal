@@ -117,13 +117,15 @@ export function AppShell() {
 
   return (
     <WorkspaceContext.Provider value={ctxValue}>
-      <div className="flex flex-col h-screen overflow-hidden bg-terminal-black">
+      <div className="flex flex-col h-screen bg-terminal-black">
         <NavBar api={api} onOpen={openPanel} onReset={resetLayout} />
-        <div className="flex-1 min-h-0">
+        {/* overflow:visible so floating panels can extend near the edges */}
+        <div className="flex-1 min-h-0 relative">
           <DockviewReact
             className="endenex-dockview"
             components={COMPONENTS}
             onReady={onReady}
+            floatingGroupBounds="boundedWithinViewport"
           />
         </div>
         <StatusBar />
