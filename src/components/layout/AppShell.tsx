@@ -5,6 +5,7 @@ import 'dockview/dist/styles/dockview.css'
 import { NavBar } from './NavBar'
 import { StatusBar } from './StatusBar'
 import { WorkspaceContext } from '@/context/WorkspaceContext'
+import { PANELS, type PanelId } from '@/config/panels'
 import { DashboardPage }  from '@/pages/DashboardPage'
 import { DciPage }        from '@/pages/DciPage'
 import { RetirementPage } from '@/pages/RetirementPage'
@@ -13,19 +14,7 @@ import { BladesPage }     from '@/pages/BladesPage'
 import { WatchPage }      from '@/pages/WatchPage'
 import { PortfolioPage }  from '@/pages/PortfolioPage'
 
-// ── Panel registry ─────────────────────────────────────────────────────────────
-
-export type PanelId = 'home' | 'dci' | 'retirement' | 'materials' | 'blades' | 'watch' | 'portfolio'
-
-export const PANELS: Record<PanelId, { title: string }> = {
-  home:       { title: 'Home' },
-  dci:        { title: 'DCI' },
-  retirement: { title: 'Asset Retirement' },
-  materials:  { title: 'Recovery Value' },
-  blades:     { title: 'Blade Intelligence' },
-  watch:      { title: 'Market Watch' },
-  portfolio:  { title: 'Portfolio' },
-}
+export type { PanelId }  // re-export so existing imports still resolve
 
 const COMPONENTS: Record<string, React.FC<IDockviewPanelProps>> = {
   home:       () => <DashboardPage />,

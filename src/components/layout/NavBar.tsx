@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { clsx } from 'clsx'
 import { useClerk, useUser } from '@clerk/clerk-react'
 import type { DockviewApi } from 'dockview'
-import { PANELS, type PanelId } from './AppShell'
+import { PANELS, type PanelId } from '@/config/panels'
 
 const ALL_PANELS = Object.keys(PANELS) as PanelId[]
 
