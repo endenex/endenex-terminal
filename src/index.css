@@ -9,9 +9,10 @@
     font-variant-numeric: tabular-nums;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+    letter-spacing: -0.01em;  /* Bloomberg/IBKR: tight, dense type */
   }
 
-  /* Ensure tabular nums everywhere — critical for aligned financial data */
+  /* Tabular nums everywhere — keeps data columns aligned without monospace */
   * {
     font-variant-numeric: tabular-nums;
     font-feature-settings: 'tnum' 1;
@@ -89,23 +90,24 @@
 
 /*
   Bloomberg/IBKR convention:
-  - Labels, headings, prose: Inter (proportional, default)
-  - All numeric values: monospace + tabular-nums (already global via *)
-  - Unit suffixes (MW, /t, %, EUR, USD…): slightly dimmed, 90% font-size
+  - All text: Inter — clean proportional sans-serif throughout
+  - Numeric alignment: tabular-nums via font-feature-settings (no monospace needed)
+  - Unit suffixes: dimmed, slightly smaller
 
-  .num       — numeric value in a data cell (applies font-mono)
-  .unit      — unit suffix following a number (dimmed, smaller)
+  .num   — numeric value (tabular-nums, no font switch)
+  .unit  — unit suffix (dimmed, 90% size)
 */
 
 .num {
-  font-family: ui-monospace, 'Cascadia Code', 'Fira Mono', monospace;
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
+  font-weight: 500;
 }
 
 .unit {
-  font-family: ui-monospace, 'Cascadia Code', 'Fira Mono', monospace;
-  font-size: 0.9em;
-  color: #7D8590;  /* terminal-muted */
-  margin-left: 0.15em;
+  font-size: 0.85em;
+  font-weight: 400;
+  color: #7D8590;
+  margin-left: 0.2em;
+  letter-spacing: 0;
 }

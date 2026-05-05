@@ -29,7 +29,7 @@ export default {
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
-        mono: ['"IBM Plex Mono"', 'monospace'],
+        mono: ['Inter', 'system-ui', 'sans-serif'],  // no code fonts — tabular-nums handles alignment
       },
     },
   },
