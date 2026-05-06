@@ -32,7 +32,8 @@ interface WatchEvent {
   category:        WatchCategory
   event_type:      string
   scope:           string
-  headline:        string
+  headline:           string
+  headline_rewritten: string | null
   notes:           string | null
   site_name:       string | null
   developer:       string | null
@@ -306,7 +307,10 @@ function SignalTapePanel() {
                     </span>
                   </div>
                 </div>
-                <p className="text-[12.5px] font-semibold text-ink leading-snug">{ev.headline}</p>
+                <p className="text-[12.5px] font-semibold text-ink leading-snug"
+                   title={ev.headline_rewritten ? `original: ${ev.headline}` : undefined}>
+                  {ev.headline_rewritten ?? ev.headline}
+                </p>
                 {ev.notes && <p className="text-[11.5px] text-ink-3 leading-snug line-clamp-2 mt-0.5">{ev.notes}</p>}
                 {entity && (
                   <div className="flex items-center gap-1.5 mt-1">
@@ -330,7 +334,10 @@ function SignalTapePanel() {
               <button onClick={() => setSelected(null)} className="text-ink-3 hover:text-ink text-[14px] leading-none">×</button>
             </div>
             <div className="p-2.5 space-y-2 text-[11.5px]">
-              <p className="font-semibold text-ink leading-snug">{selected.headline}</p>
+              <p className="font-semibold text-ink leading-snug"
+                 title={selected.headline_rewritten ? `original: ${selected.headline}` : undefined}>
+                {selected.headline_rewritten ?? selected.headline}
+              </p>
               {selected.liability_tags?.length > 0 && <LiabilityTags tags={selected.liability_tags} />}
               <div className="grid grid-cols-2 gap-1.5 text-[11px]">
                 {[

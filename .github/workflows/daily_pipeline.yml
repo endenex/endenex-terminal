@@ -16,6 +16,10 @@ name: Daily Pipeline
 #   Step 12. BLM ROW polygons sync        → blm_row_polygons        (state-office ArcGIS)
 #   Step 13. Federal-land flag compute    → us_wind_assets.is_federal_land  (depends on 11+12)
 #   Step 14. Companies House iXBRL sync   → ch_filings + ch_provisions      (UK SPVs / operators)
+#   Step 15. ARO PDF + LLM extraction     → aro_pdf_filings + aro_extractions (review queue)
+#   Step 16. Headline rewriter (LLM)      → watch_events.headline_rewritten  (FT/Bloomberg grade)
+#   Step 17. Planning-apps PlanIt fetch   → planning_applications  (UK SPV bridge)
+#   Step 18. Operator IR PDF extraction   → ir_pdf_filings + aro_extractions (group-level ARO)
 #
 # Each step writes to ingestion_runs telemetry. The Coverage overlay in the
 # Terminal shows the daily run health.
@@ -184,4 +188,68 @@ jobs:
           SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python sync_companies_house_ixbrl.py
+        continue-on-error: true
+
+      # ── Step 15 ── ARO PDF + LLM extraction → aro_pdf_filings + aro_extractions
+      # For each watched UK operator: download latest annual-accounts PDF,
+      # locate decom-relevant pages via keyword filter, hand to Claude with
+      # forced tool-use, persist structured extraction for manual review.
+      # Cost: ~$0.002 per filing on Claude Haiku.
+      # Skip if ANTHROPIC_API_KEY not configured.
+      - name: 15 · ARO PDF + LLM extraction
+        if: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+        working-directory: ingestion
+        env:
+          CH_API_KEY:                ${{ secrets.CH_API_KEY }}
+          ANTHROPIC_API_KEY:         ${{ secrets.ANTHROPIC_API_KEY }}
+          SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python extract_aro_from_pdfs.py
+        continue-on-error: true
+
+      # ── Step 16 ── Headline rewriter (FT/Bloomberg editorial grade)
+      # For every new watch_events row from the Airtable sync + trade-press
+      # RSS scraper, ask Claude to either (a) rewrite the headline into
+      # FT/Bloomberg house style, or (b) decide the original is already
+      # FT-grade and leave it. Idempotent — picks up only un-rewritten rows.
+      # Cost: ~$0.0001 per headline on Haiku → ~$7/year.
+      - name: 16 · Signal Tape headline rewriter
+        if: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+        working-directory: ingestion
+        env:
+          ANTHROPIC_API_KEY:         ${{ secrets.ANTHROPIC_API_KEY }}
+          SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python rewrite_headlines.py
+        continue-on-error: true
+
+      # ── Step 17 ── Planning-applications fetcher (PlanIt aggregator)
+      # For every operational onshore-wind project in repd_project_extras,
+      # query PlanIt for the planning application. Caches the applicant
+      # name (= the SPV) into planning_applications. Idempotent — only
+      # hits PlanIt for refs not already cached.
+      # Free public API; we pace 1.0s per request.
+      - name: 17 · Planning-applications fetcher
+        working-directory: ingestion
+        env:
+          SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python fetch_planning_applications.py --limit 200
+        continue-on-error: true
+
+      # ── Step 18 ── Operator IR PDF → ARO extraction
+      # For each curated operator in operator_ir_sources with a populated
+      # latest_ar_url, download the consolidated annual report, locate
+      # Provisions/PP&E/Policy notes, hand to Claude with forced tool-use,
+      # persist into aro_extractions (linked via ir_pdf_filing_id).
+      # Cost: ~$0.005 per operator on Claude Haiku (text-layer PDFs only,
+      # no vision needed). Skip if ANTHROPIC_API_KEY not configured.
+      - name: 18 · Operator IR ARO extraction
+        if: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+        working-directory: ingestion
+        env:
+          ANTHROPIC_API_KEY:         ${{ secrets.ANTHROPIC_API_KEY }}
+          SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python extract_aro_from_operator_ir.py
         continue-on-error: true
