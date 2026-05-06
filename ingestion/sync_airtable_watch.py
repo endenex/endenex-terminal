@@ -86,13 +86,21 @@ ACTIVITY_EVENT_TYPE: dict[str, str] = {
     'Court Ruling':            'Court ruling',
     'Insolvency':              'Insolvency',
     'Audit Guidance':          'Audit guidance',
-    'Tender':                  'Tender',
+    'Tender':                  'Decommissioning tender',
     'Commodity':               'Commodity move',
     'Capacity':                'Capacity signal',
     'FIT Expiry':              'FIT expiry',
     'Post-FIT Decision':       'Post-FIT decision',
     'METI Disclosure':         'METI disclosure',
     'Japan Cohort':            'Japan cohort',
+}
+
+# When Activity Type is one of these AND a 'Contractor' value is set in Airtable,
+# the event_type is promoted to the corresponding award type so it appears in the
+# Decom Mandates panel.
+AWARD_PROMOTION: dict[str, str] = {
+    'Decommissioning': 'Decommissioning award',
+    'Repowering':      'Repowering award',
 }
 
 MARKET_SCOPE: dict[str, str] = {
@@ -253,6 +261,24 @@ def map_record(rec: dict, source_id_map: dict[str, str]) -> dict | None:
 
     stakeholder = (f.get('Stakeholder Type') or '').strip()
     operator    = (f.get('Operator') or '').strip() or None
+    contractor  = (f.get('Contractor') or '').strip() or None
+
+    # Mandate promotion: if Activity Type is Decommissioning/Repowering AND a
+    # Contractor is named, promote event_type to the corresponding award type so
+    # the row appears in the Decom Mandates panel.
+    if contractor and primary in AWARD_PROMOTION:
+        event_type = AWARD_PROMOTION[primary]
+
+    # Field routing:
+    #   developer    = asset owner (Operator field)
+    #   company_name = counterparty (Contractor field if set, else operator if
+    #                  Stakeholder Type indicates non-operator)
+    if contractor:
+        developer    = operator
+        company_name = contractor
+    else:
+        developer    = operator if stakeholder == 'Operator' else None
+        company_name = operator if stakeholder != 'Operator' else None
 
     # Liability tags: use explicit Airtable field if present, else derive
     explicit_tags = [
@@ -269,8 +295,8 @@ def map_record(rec: dict, source_id_map: dict[str, str]) -> dict | None:
         'headline':           headline,
         'notes':              (f.get('Summary') or '').strip() or None,
         'site_name':          (f.get('Asset Name') or '').strip() or None,
-        'developer':          operator if stakeholder == 'Operator' else None,
-        'company_name':       operator if stakeholder != 'Operator' else None,
+        'developer':          developer,
+        'company_name':       company_name,
         'capacity_mw':        parse_capacity(f.get('Capacity MW')),
         'asset_type':         (f.get('Asset Type') or '').strip() or None,
         'stakeholder_type':   stakeholder or None,
