@@ -1,8 +1,16 @@
 // ── Market Watch — Tab 07 ────────────────────────────────────────────────────
 // 4 panels in a 12-col grid, viewport-fit (no full-width content):
 //   Row 1: Signal Tape (col-8) · Decom Mandates (col-4)
-//   Row 2: Provision Disclosures (col-6) · Capacity Signals (col-6)
-// Commodity Refs lives in SMI module — removed from here to avoid duplication.
+//   Row 2: Provisions (col-6) · Bond/Guarantee Disclosures (col-6)
+//
+// ARO disclosures split into TWO panels by disclosure style (per discussion):
+//   Provisions  — pure-play operators publishing IAS 37 / ASC 410 / CSRD provision figures
+//   Bonds       — investment-entity YieldCos publishing per-site decom guarantees
+// Strict asset_class taxonomy (onshore_wind / offshore_wind / solar_pv / bess) — never mixed.
+//
+// Removed from this module:
+//   Commodity Refs   — duplicated SMI module
+//   Capacity Signals — duplicated Signal Tape (supply_chain category surfaces there)
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { clsx } from 'clsx'
@@ -60,14 +68,23 @@ const CATEGORY_LABEL: Record<WatchCategory, string> = {
   market: 'MKT', regulatory: 'REG', commodity: 'CMD', supply_chain: 'SC',
 }
 
+// Directional liability tags. Up/down reflects the implied direction of the
+// underlying balance: provisions recognised vs released, recovery economics
+// improving vs deteriorating.
+//
+// CAP_UP / CAP_DN deliberately omitted: capacity-direction tags weren't
+// adding analytical value over the row's existing event_type — every
+// "Decommissioning" row is by definition CAP-down; tagging it again was
+// redundant. Provision and recovery direction remain because they carry
+// information not already in the event_type.
 const LIABILITY_TAG_STYLE: Record<string, { label: string; className: string }> = {
-  COST_UP: { label: 'COST▲', className: 'bg-red-50 text-red-700 border border-red-200' },
-  COST_DN: { label: 'COST▼', className: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
-  REC_UP:  { label: 'REC▲',  className: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
-  REC_DN:  { label: 'REC▼',  className: 'bg-red-50 text-red-700 border border-red-200' },
-  CAP:     { label: 'CAP',   className: 'bg-teal-50 text-teal-700 border border-teal-200' },
-  POL:     { label: 'POL',   className: 'bg-amber-50 text-amber-700 border border-amber-200' },
-  PROV:    { label: 'PROV',  className: 'bg-violet-50 text-violet-700 border border-violet-200' },
+  COST_UP:  { label: 'COST▲', className: 'bg-red-50 text-red-700 border border-red-200' },
+  COST_DN:  { label: 'COST▼', className: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
+  PROV_UP:  { label: 'PROV▲', className: 'bg-violet-100 text-violet-800 border border-violet-300' },
+  PROV_DN:  { label: 'PROV▼', className: 'bg-violet-50 text-violet-700 border border-violet-200' },
+  REC_UP:   { label: 'REC▲',  className: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
+  REC_DN:   { label: 'REC▼',  className: 'bg-red-50 text-red-700 border border-red-200' },
+  POL:      { label: 'POL',   className: 'bg-amber-50 text-amber-700 border border-amber-200' },
 }
 
 const CONFIDENCE_STYLE: Record<string, string> = {
@@ -577,69 +594,72 @@ function DecomMandatesPanel() {
 
 // ── 03 Provision Disclosures panel ────────────────────────────────────────────
 //
-// Operator ARO disclosures aggregated from public annual report filings.
-// Wind-attributable provisions are derived from total ARO × wind capacity share.
-// All figures are indicative, sourced from FY2023 / FY2024 reports.
+// Reads from aro_provisions — pure-play single-asset-class operators that
+// publish a consolidated ARO provision under IAS 37 / ASC 410 / CSRD.
+// Strict asset_class filtering keeps onshore wind, offshore wind, solar PV
+// and BESS separate (per-MW figures cannot be mixed across these).
 
-interface DisclosureRow {
-  operator:        string
-  ticker:          string
-  jurisdiction:    string
-  framework:       'IFRS' | 'CSRD' | 'US-GAAP' | 'METI'
-  fy:              string
-  total_aro_m:     number          // total decommissioning provision (€M)
-  wind_aro_m:      number | null   // wind-attributable subset (€M)
-  wind_mw:         number | null   // disclosed wind capacity (MW)
-  per_mw_k:        number | null   // implied €k/MW
-  trend:           'up' | 'down' | 'flat'
-  source_url:      string
-  source_doc:      string
-  confidence:      'High' | 'Medium' | 'Low'
+interface AroProvisionRow {
+  id:                string
+  operator:          string
+  ticker:            string | null
+  jurisdiction:      string
+  asset_class:       'onshore_wind' | 'offshore_wind' | 'solar_pv' | 'bess'
+  framework:         'IFRS' | 'CSRD' | 'US-GAAP' | 'METI'
+  fy:                string
+  total_aro_m:       number
+  currency:          string
+  capacity_mw:       number | null
+  per_mw_k:          number | null
+  attribution:       'disclosed' | 'derived'
+  attribution_notes: string | null
+  source_name:       string
+  source_url:        string
+  filing_page:       number | null
+  notes:             string | null
 }
 
-const DISCLOSURES: DisclosureRow[] = [
-  { operator: 'Ørsted',            ticker: 'ORSTED.CO', jurisdiction: 'DK', framework: 'CSRD',    fy: 'FY2024', total_aro_m: 1850, wind_aro_m: 1850, wind_mw: 15800, per_mw_k: 117, trend: 'up',   source_url: 'https://orsted.com/en/investors', source_doc: 'Annual Report 2024 · Note 5.4',  confidence: 'High'   },
-  { operator: 'Iberdrola',         ticker: 'IBE.MC',    jurisdiction: 'ES', framework: 'CSRD',    fy: 'FY2024', total_aro_m: 2780, wind_aro_m: 1240, wind_mw: 21600, per_mw_k: 57,  trend: 'up',   source_url: 'https://iberdrola.com/investors', source_doc: 'Consolidated Acc. 2024 · Note 23', confidence: 'High'   },
-  { operator: 'RWE',               ticker: 'RWE.DE',    jurisdiction: 'DE', framework: 'CSRD',    fy: 'FY2024', total_aro_m: 9420, wind_aro_m: 980,  wind_mw: 11200, per_mw_k: 87,  trend: 'flat', source_url: 'https://rwe.com/en/investor-relations', source_doc: 'Annual Report 2024 · §32',     confidence: 'High'   },
-  { operator: 'Vattenfall',        ticker: '—',         jurisdiction: 'SE', framework: 'IFRS',    fy: 'FY2024', total_aro_m: 4200, wind_aro_m: 520,  wind_mw: 5400,  per_mw_k: 96,  trend: 'up',   source_url: 'https://group.vattenfall.com/investors', source_doc: 'Annual & Sustain. Report 2024',   confidence: 'High'   },
-  { operator: 'EnBW',              ticker: 'EBK.DE',    jurisdiction: 'DE', framework: 'CSRD',    fy: 'FY2024', total_aro_m: 1620, wind_aro_m: 380,  wind_mw: 4100,  per_mw_k: 93,  trend: 'up',   source_url: 'https://enbw.com/investors', source_doc: 'Integrated Report 2024 · §29',         confidence: 'Medium' },
-  { operator: 'EDF',               ticker: 'EDF.PA',    jurisdiction: 'FR', framework: 'IFRS',    fy: 'FY2024', total_aro_m: 71500,wind_aro_m: 410,  wind_mw: 4200,  per_mw_k: 98,  trend: 'flat', source_url: 'https://edf.fr/en/finance', source_doc: 'URD 2024 · Note 26',                   confidence: 'Medium' },
-  { operator: 'EDP Renováveis',    ticker: 'EDPR.LS',   jurisdiction: 'PT', framework: 'IFRS',    fy: 'FY2024', total_aro_m: 1190, wind_aro_m: 1080, wind_mw: 14600, per_mw_k: 74,  trend: 'up',   source_url: 'https://edpr.com/en/investors', source_doc: 'Annual Report 2024 · Note 27',     confidence: 'High'   },
-  { operator: 'Enel Green Power',  ticker: 'ENEL.MI',   jurisdiction: 'IT', framework: 'CSRD',    fy: 'FY2024', total_aro_m: 1820, wind_aro_m: 920,  wind_mw: 14100, per_mw_k: 65,  trend: 'flat', source_url: 'https://enel.com/investors', source_doc: 'Annual Report 2024 · §11.4',          confidence: 'Medium' },
-  { operator: 'SSE',               ticker: 'SSE.L',     jurisdiction: 'GB', framework: 'IFRS',    fy: 'FY24',   total_aro_m: 1080, wind_aro_m: 670,  wind_mw: 5400,  per_mw_k: 124, trend: 'up',   source_url: 'https://sse.com/investors', source_doc: 'Annual Report FY24 · Note 26',          confidence: 'High'   },
-  { operator: 'ScottishPower',     ticker: '—',         jurisdiction: 'GB', framework: 'IFRS',    fy: 'FY2024', total_aro_m: 410,  wind_aro_m: 360,  wind_mw: 3200,  per_mw_k: 113, trend: 'up',   source_url: 'https://scottishpower.com/financial', source_doc: 'CH iXBRL filing 2024',           confidence: 'Medium' },
-  { operator: 'Engie',             ticker: 'ENGI.PA',   jurisdiction: 'FR', framework: 'IFRS',    fy: 'FY2024', total_aro_m: 6200, wind_aro_m: 510,  wind_mw: 5800,  per_mw_k: 88,  trend: 'flat', source_url: 'https://engie.com/en/finance', source_doc: 'URD 2024 · Note 5.16',              confidence: 'Medium' },
-  { operator: 'NextEra Energy',    ticker: 'NEE',       jurisdiction: 'US', framework: 'US-GAAP', fy: 'FY2024', total_aro_m: 2840, wind_aro_m: 1980, wind_mw: 24600, per_mw_k: 80,  trend: 'up',   source_url: 'https://investor.nexteraenergy.com', source_doc: '10-K 2024 · ASC 410',          confidence: 'High'   },
-  { operator: 'Avangrid',          ticker: 'AGR',       jurisdiction: 'US', framework: 'US-GAAP', fy: 'FY2024', total_aro_m: 720,  wind_aro_m: 590,  wind_mw: 8100,  per_mw_k: 73,  trend: 'flat', source_url: 'https://avangrid.com/investors', source_doc: '10-K 2024 · Note 7',               confidence: 'High'   },
-  { operator: 'Pattern Energy',    ticker: '—',         jurisdiction: 'US', framework: 'US-GAAP', fy: 'FY2024', total_aro_m: 380,  wind_aro_m: 380,  wind_mw: 5500,  per_mw_k: 69,  trend: 'up',   source_url: 'https://patternenergy.com',     source_doc: 'Indicative · private',              confidence: 'Low'    },
-  { operator: 'Eurus Energy',      ticker: '—',         jurisdiction: 'JP', framework: 'METI',    fy: 'FY2024', total_aro_m: 92,   wind_aro_m: 92,   wind_mw: 1340,  per_mw_k: 69,  trend: 'flat', source_url: 'https://eurus-energy.com',      source_doc: 'METI Mandatory Reserve filing',     confidence: 'Medium' },
-]
-
-const FRAMEWORK_PILL: Record<DisclosureRow['framework'], string> = {
+const FRAMEWORK_PILL: Record<AroProvisionRow['framework'], string> = {
   'IFRS':    'bg-sky-50 text-sky-700 border-sky-200',
   'CSRD':    'bg-violet-50 text-violet-700 border-violet-200',
   'US-GAAP': 'bg-amber-50 text-amber-700 border-amber-200',
   'METI':    'bg-teal-50 text-teal-700 border-teal-200',
 }
 
-type DiscFilter = 'all' | DisclosureRow['framework']
+type AssetClassFilter = 'all' | 'onshore_wind' | 'offshore_wind' | 'solar_pv' | 'bess'
 
-const FRAMEWORK_FILTERS: { code: DiscFilter; label: string }[] = [
-  { code: 'all',     label: 'All' },
-  { code: 'IFRS',    label: 'IFRS' },
-  { code: 'CSRD',    label: 'CSRD' },
-  { code: 'US-GAAP', label: 'US-GAAP' },
-  { code: 'METI',    label: 'METI' },
+const ASSET_CLASS_FILTERS: { code: AssetClassFilter; label: string }[] = [
+  { code: 'all',           label: 'All'      },
+  { code: 'onshore_wind',  label: 'On-Wind'  },
+  { code: 'offshore_wind', label: 'Off-Wind' },
+  { code: 'solar_pv',      label: 'Solar'    },
+  { code: 'bess',          label: 'BESS'     },
 ]
 
-function DisclosuresPanel() {
-  const [filter, setFilter] = useState<DiscFilter>('all')
+const ASSET_CLASS_LABEL_SHORT: Record<AroProvisionRow['asset_class'], string> = {
+  'onshore_wind':  'On-Wind',
+  'offshore_wind': 'Off-Wind',
+  'solar_pv':      'Solar',
+  'bess':          'BESS',
+}
 
-  const rows = filter === 'all' ? DISCLOSURES : DISCLOSURES.filter(d => d.framework === filter)
+const CCY_SYMBOL: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', DKK: 'kr', JPY: '¥', AUD: 'A$' }
 
-  const totalWindAro = rows.reduce((s, r) => s + (r.wind_aro_m ?? 0), 0)
-  const totalWindMw  = rows.reduce((s, r) => s + (r.wind_mw ?? 0), 0)
-  const fleetAvgPerMw = totalWindMw > 0 ? (totalWindAro * 1000) / totalWindMw : 0
+function ProvisionsPanel() {
+  const [filter, setFilter]   = useState<AssetClassFilter>('all')
+  const [rows, setRows]       = useState<AroProvisionRow[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    supabase.from('aro_provisions').select('*').order('total_aro_m', { ascending: false })
+      .then(({ data }) => {
+        setRows((data as AroProvisionRow[]) ?? [])
+        setLoading(false)
+      })
+  }, [])
+
+  const filtered = filter === 'all' ? rows : rows.filter(r => r.asset_class === filter)
 
   return (
     <Panel
@@ -649,7 +669,7 @@ function DisclosuresPanel() {
       meta={
         <>
           <div className="flex items-center bg-canvas border border-border rounded-sm p-px">
-            {FRAMEWORK_FILTERS.map(f => (
+            {ASSET_CLASS_FILTERS.map(f => (
               <button key={f.code} onClick={() => setFilter(f.code)}
                       className={clsx(
                         'px-1.5 py-0.5 text-[10px] font-bold tracking-wide rounded-sm uppercase',
@@ -659,129 +679,797 @@ function DisclosuresPanel() {
               </button>
             ))}
           </div>
-          <span className="text-[10.5px] text-ink-4 tabular-nums">{rows.length}</span>
+          <span className="text-[10.5px] text-ink-4 tabular-nums">{filtered.length}</span>
         </>
       }>
       <div className="flex flex-col h-full">
-        {/* Aggregates strip */}
-        <div className="flex-shrink-0 border-b border-border bg-canvas grid grid-cols-3 divide-x divide-border">
-          <div className="px-2.5 py-1.5">
-            <div className="text-[9.5px] font-semibold text-ink-4 uppercase tracking-wide">Wind ARO Σ</div>
-            <div className="text-[13px] font-semibold text-ink tabular-nums leading-none mt-0.5">€{(totalWindAro/1000).toFixed(2)}bn</div>
-          </div>
-          <div className="px-2.5 py-1.5">
-            <div className="text-[9.5px] font-semibold text-ink-4 uppercase tracking-wide">Wind MW Σ</div>
-            <div className="text-[13px] font-semibold text-ink tabular-nums leading-none mt-0.5">{(totalWindMw/1000).toFixed(1)} GW</div>
-          </div>
-          <div className="px-2.5 py-1.5">
-            <div className="text-[9.5px] font-semibold text-ink-4 uppercase tracking-wide">Fleet €k/MW</div>
-            <div className="text-[13px] font-semibold text-amber tabular-nums leading-none mt-0.5">{fleetAvgPerMw.toFixed(0)}</div>
-          </div>
-        </div>
-
-        {/* Disclosures table */}
         <div className="flex-1 min-h-0 overflow-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-titlebar border-b border-border sticky top-0 z-10">
-                <th className="px-2 py-1 text-left text-[9.5px] font-semibold text-ink-3 uppercase tracking-wide">Operator</th>
-                <th className="px-2 py-1 text-left text-[9.5px] font-semibold text-ink-3 uppercase tracking-wide">Reg</th>
-                <th className="px-2 py-1 text-right text-[9.5px] font-semibold text-ink-3 uppercase tracking-wide">Wind ARO</th>
-                <th className="px-2 py-1 text-right text-[9.5px] font-semibold text-ink-3 uppercase tracking-wide">€k/MW</th>
-                <th className="px-2 py-1 text-left text-[9.5px] font-semibold text-ink-3 uppercase tracking-wide">FY</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(r => (
-                <tr key={r.operator}
-                    className="border-b border-border/70 hover:bg-raised cursor-pointer"
-                    title={r.source_doc}>
-                  <td className="px-2 py-0.5">
-                    <div className="text-[11.5px] text-ink font-semibold leading-tight truncate">{r.operator}</div>
-                    <div className="text-[9.5px] text-ink-4 leading-tight">
-                      {r.jurisdiction}{r.ticker !== '—' && ` · ${r.ticker}`}
-                    </div>
-                  </td>
-                  <td className="px-2 py-0.5">
-                    <span className={clsx('text-[9.5px] font-bold px-1 py-px rounded-sm border tracking-wide', FRAMEWORK_PILL[r.framework])}>
-                      {r.framework}
-                    </span>
-                  </td>
-                  <td className="px-2 py-0.5 text-right">
-                    <div className="text-[11.5px] tabular-nums text-down font-semibold leading-tight">
-                      {r.wind_aro_m != null ? `€${r.wind_aro_m >= 1000 ? `${(r.wind_aro_m/1000).toFixed(1)}bn` : `${r.wind_aro_m}M`}` : '—'}
-                    </div>
-                    <div className="text-[9.5px] text-ink-4 leading-tight tabular-nums">
-                      of €{r.total_aro_m >= 1000 ? `${(r.total_aro_m/1000).toFixed(1)}bn` : `${r.total_aro_m}M`}
-                    </div>
-                  </td>
-                  <td className="px-2 py-0.5 text-right">
-                    <span className="text-[11.5px] tabular-nums text-ink font-semibold">
-                      {r.per_mw_k != null ? r.per_mw_k : '—'}
-                    </span>
-                    <span className={clsx(
-                      'text-[9.5px] ml-0.5 tabular-nums',
-                      r.trend === 'up' ? 'text-down' : r.trend === 'down' ? 'text-up' : 'text-ink-4',
-                    )}>
-                      {r.trend === 'up' ? '▲' : r.trend === 'down' ? '▼' : '·'}
-                    </span>
-                  </td>
-                  <td className="px-2 py-0.5 text-[10.5px] tabular-nums text-ink-3">{r.fy}</td>
+          {loading ? (
+            <div className="px-3 py-4 text-[12px] text-ink-3 text-center">Loading…</div>
+          ) : filtered.length === 0 ? (
+            <div className="px-3 py-6 text-[11.5px] text-ink-3 text-center leading-snug">
+              No verified provision-style disclosures yet.<br />
+              <span className="text-ink-4">Pure-play operators (Ørsted offshore-wind, EDPR, etc.) pending ingestion via Airtable curation.</span>
+            </div>
+          ) : (
+            <table className="w-full">
+              <thead>
+                <tr className="bg-titlebar border-b border-border sticky top-0 z-10">
+                  <th className="px-2 py-1 text-left text-[9.5px] font-semibold text-ink-3 uppercase tracking-wide">Operator</th>
+                  <th className="px-2 py-1 text-left text-[9.5px] font-semibold text-ink-3 uppercase tracking-wide">Class</th>
+                  <th className="px-2 py-1 text-right text-[9.5px] font-semibold text-ink-3 uppercase tracking-wide">ARO</th>
+                  <th className="px-2 py-1 text-right text-[9.5px] font-semibold text-ink-3 uppercase tracking-wide">k/MW</th>
+                  <th className="px-2 py-1 text-left text-[9.5px] font-semibold text-ink-3 uppercase tracking-wide">FY</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filtered.map(r => {
+                  const sym = CCY_SYMBOL[r.currency] ?? r.currency
+                  return (
+                    <tr key={r.id} className="border-b border-border/70 hover:bg-raised">
+                      <td className="px-2 py-0.5">
+                        <div className="text-[11.5px] text-ink font-semibold leading-tight truncate">{r.operator}</div>
+                        <div className="text-[9.5px] text-ink-4 leading-tight">
+                          {r.jurisdiction}{r.ticker && ` · ${r.ticker}`} · <span className={clsx('font-bold', FRAMEWORK_PILL[r.framework].split(' ')[1])}>{r.framework}</span>
+                        </div>
+                      </td>
+                      <td className="px-2 py-0.5">
+                        <span className="text-[10px] font-bold px-1 py-px rounded-sm border tracking-wide bg-canvas text-ink-2 border-border">
+                          {ASSET_CLASS_LABEL_SHORT[r.asset_class]}
+                        </span>
+                      </td>
+                      <td className="px-2 py-0.5 text-right">
+                        {r.total_aro_m === 0 ? (
+                          <>
+                            <div className="text-[10.5px] uppercase tracking-wide text-amber-700 font-bold leading-tight" title={r.attribution_notes ?? ''}>
+                              No ARO
+                            </div>
+                            <div className="text-[9px] text-ink-4 leading-tight">recognised</div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="text-[11.5px] tabular-nums text-down font-semibold leading-tight">
+                              {sym}{r.total_aro_m >= 1000 ? `${(r.total_aro_m/1000).toFixed(1)}bn` : `${r.total_aro_m}M`}
+                            </div>
+                            <div className="text-[9px] text-ink-4 leading-tight">
+                              {r.attribution === 'disclosed' ? 'DISC' : 'DRV'}
+                            </div>
+                          </>
+                        )}
+                      </td>
+                      <td className="px-2 py-0.5 text-right text-[11px] tabular-nums text-ink">
+                        {r.total_aro_m === 0 ? <span className="text-ink-4">—</span> :
+                         r.per_mw_k != null ? r.per_mw_k.toFixed(0) : '—'}
+                      </td>
+                      <td className="px-2 py-0.5">
+                        <a href={r.source_url + (r.filing_page ? `#page=${r.filing_page}` : '')}
+                           target="_blank" rel="noopener noreferrer"
+                           onClick={e => e.stopPropagation()}
+                           className="flex items-center gap-1 text-[10.5px] text-teal hover:text-teal-bright hover:underline">
+                          {r.fy} <ExternalLink size={9} />
+                        </a>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
         </div>
 
         <div className="flex-shrink-0 border-t border-border px-2.5 py-1 text-[9.5px] text-ink-4 leading-snug">
-          Indicative · derived from FY24 annual reports · per-MW = (wind_aro / wind_capacity)
+          Pure-play operators only · IAS 37 / ASC 410 / CSRD provisions · onshore vs offshore never mixed
         </div>
       </div>
     </Panel>
   )
 }
 
-// ── 04 Capacity Signals panel (live, supply_chain category) ───────────────────
+// ── 04 Bond / Guarantee Disclosures panel ───────────────────────────────────
+//
+// Reads from aro_bonds — site-level decommissioning bonds and counter-indemnities
+// posted by investment-entity YieldCos (Greencoat UK Wind, NextEnergy Solar
+// Fund, Bluefield, Foresight, Gore Street). Click an operator row to expand
+// the per-site breakdown.
 
-function CapacitySignalsPanel() {
-  const [events, setEvents] = useState<WatchEvent[]>([])
+interface AroBondRow {
+  id:                    string
+  operator:              string
+  operator_ticker:       string | null
+  jurisdiction:          string
+  fy:                    string
+  site_name:             string
+  site_asset_class:      'onshore_wind' | 'offshore_wind' | 'solar_pv' | 'bess'
+  site_country:          string | null
+  site_capacity_mw:      number | null
+  ownership_pct:         number | null
+  beneficiary:           string
+  beneficiary_type:      string | null
+  bond_currency:         string
+  bond_amount_thousands: number
+  bond_instrument:       string | null
+  purpose_pure_decom:    boolean
+  purpose_notes:         string | null
+  source_name:           string
+  source_url:            string
+  filing_page:           number | null
+}
+
+interface BondOperatorAgg {
+  operator:        string
+  operator_ticker: string | null
+  jurisdiction:    string
+  fy:              string
+  asset_classes:   Set<AroBondRow['site_asset_class']>
+  total_thousands: number
+  pure_decom_thousands: number
+  currency:        string
+  site_count:      number
+  rows:            AroBondRow[]
+}
+
+// ── BLM US Federal Lands (multi-asset) data shapes ───────────────────────────
+// Sourced from blm_renewable_sites_summary_v + blm_renewable_sites_v (curated
+// list of well-known BLM-permitted wind/solar/BESS sites). Conceptually
+// different from operator-posted aro_bonds: regulator-implied statutory
+// minimum vs DCI-derived economic liability.
+
+type BlmAssetClass = 'onshore_wind' | 'solar_pv' | 'bess'
+
+interface BlmAssetClassSummary {
+  asset_class:                       BlmAssetClass
+  site_count:                        number
+  total_turbines:                    number | null
+  total_capacity_mw:                 number
+  sum_statutory_min_bond_usd:        number | null
+}
+
+interface BlmSiteRow {
+  blm_serial:                  string
+  project_name:                string
+  operator:                    string | null
+  asset_class:                 BlmAssetClass
+  state:                       string
+  capacity_mw:                 number
+  turbine_count:               number | null
+  commissioning_year:          number | null
+  citation_source:             string
+  citation_url:                string | null
+  notes:                       string | null
+  statutory_min_bond_usd:      number | null
+  statutory_basis:             string | null
+}
+
+// Companies House iXBRL extraction (migration 026)
+interface ChDecomProvisionRow {
+  company_number: string
+  company_name:   string
+  parent_group:   string | null
+  asset_class:    string | null
+  capacity_mw:    number | null
+  period_end:     string
+  value_gbp:      number
+  concept_name:   string
+  concept_label:  string | null
+  taxonomy:       string | null
+  date_filed:     string | null
+  document_url:   string | null
+}
+
+function BondsPanel() {
+  const [filter, setFilter]   = useState<AssetClassFilter>('all')
+  const [bonds, setBonds]     = useState<AroBondRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [expanded, setExpanded] = useState<string | null>(null)
+  const [blmSummaries, setBlmSummaries] = useState<BlmAssetClassSummary[]>([])
+  const [blmSites,     setBlmSites]     = useState<BlmSiteRow[]>([])
+  const [chProvisions, setChProvisions] = useState<ChDecomProvisionRow[]>([])
 
   useEffect(() => {
-    supabase.from('watch_events')
-      .select('id, headline, event_type, scope, capacity_mw, event_date, confidence')
-      .eq('category', 'supply_chain')
-      .eq('is_duplicate', false)
-      .order('event_date', { ascending: false })
-      .limit(20)
-      .then(({ data }) => { setEvents((data as WatchEvent[]) ?? []); setLoading(false) })
+    setLoading(true)
+    let alive = true
+
+    // aro_bonds — always required
+    ;(async () => {
+      try {
+        const { data, error } = await supabase.from('aro_bonds').select('*')
+          .order('operator', { ascending: true })
+          .order('bond_amount_thousands', { ascending: false })
+        if (!alive) return
+        if (error) console.warn('aro_bonds query failed:', error.message)
+        setBonds((data as AroBondRow[]) ?? [])
+      } catch (e) {
+        console.error('aro_bonds query threw:', e)
+      } finally {
+        if (alive) setLoading(false)
+      }
+    })()
+
+    // BLM Federal Lands per-asset-class summary (migration 025)
+    ;(async () => {
+      try {
+        const { data, error } = await supabase
+          .from('blm_renewable_sites_summary_v').select('*')
+        if (!alive) return
+        if (error) console.info('blm_renewable_sites_summary_v not available (run migration 025):', error.message)
+        setBlmSummaries((data as unknown as BlmAssetClassSummary[]) ?? [])
+      } catch (e) {
+        console.info('BLM summaries skipped:', e)
+      }
+    })()
+
+    // BLM Federal Lands per-site detail (migration 025)
+    ;(async () => {
+      try {
+        const { data, error } = await supabase.from('blm_renewable_sites_v').select('*')
+          .order('statutory_min_bond_usd', { ascending: false })
+        if (!alive) return
+        if (error) console.info('blm_renewable_sites_v not available:', error.message)
+        setBlmSites((data as unknown as BlmSiteRow[]) ?? [])
+      } catch (e) {
+        console.info('BLM sites skipped:', e)
+      }
+    })()
+
+    // Companies House iXBRL — latest decom-flavoured provision per company (migration 026)
+    ;(async () => {
+      try {
+        const { data, error } = await supabase
+          .from('ch_latest_decom_provision_v').select('*')
+          .order('value_gbp', { ascending: false, nullsFirst: false })
+        if (!alive) return
+        if (error) console.info('ch_latest_decom_provision_v not available (run migration 026):', error.message)
+        setChProvisions((data as unknown as ChDecomProvisionRow[]) ?? [])
+      } catch (e) {
+        console.info('CH provisions skipped:', e)
+      }
+    })()
+
+    return () => { alive = false }
   }, [])
 
+  // Apply asset-class filter at the row level
+  const filteredBonds = filter === 'all'
+    ? bonds
+    : bonds.filter(b => b.site_asset_class === filter)
+
+  // Aggregate by operator (counts UNIQUE site_names, not bond rows)
+  const operators: BondOperatorAgg[] = (() => {
+    const map = new Map<string, BondOperatorAgg>()
+    for (const b of filteredBonds) {
+      const key = `${b.operator}|${b.fy}`
+      let agg = map.get(key)
+      if (!agg) {
+        agg = {
+          operator: b.operator, operator_ticker: b.operator_ticker,
+          jurisdiction: b.jurisdiction, fy: b.fy,
+          asset_classes: new Set(), total_thousands: 0, pure_decom_thousands: 0,
+          currency: b.bond_currency, site_count: 0, rows: [],
+        }
+        map.set(key, agg)
+      }
+      agg.asset_classes.add(b.site_asset_class)
+      agg.total_thousands += b.bond_amount_thousands
+      if (b.purpose_pure_decom) agg.pure_decom_thousands += b.bond_amount_thousands
+      agg.rows.push(b)
+    }
+    // Compute unique site count across all rows
+    for (const agg of map.values()) {
+      agg.site_count = new Set(agg.rows.map(r => `${r.site_name}|${r.site_asset_class}`)).size
+    }
+    return Array.from(map.values()).sort((a, b) => b.total_thousands - a.total_thousands)
+  })()
+
+  const formatBond = (k: number, sym: string) => {
+    if (k >= 1000) return `${sym}${(k / 1000).toFixed(1)}m`
+    return `${sym}${k.toFixed(0)}k`
+  }
+
   return (
-    <Panel label="WATCH" title="Capacity Signals" className="col-span-6"
-           meta={<span className="text-[10.5px] text-ink-4 tabular-nums">{events.length}</span>}>
-      <div className="divide-y divide-border/70">
-        {loading ? (
-          <div className="px-3 py-4 text-[12px] text-ink-3 text-center">Loading…</div>
-        ) : events.length === 0 ? (
-          <div className="px-3 py-6 text-[12px] text-ink-3 text-center">No supply-chain signals yet</div>
-        ) : events.map(ev => (
-          <div key={ev.id} className="px-2.5 py-1.5 hover:bg-raised cursor-pointer">
-            <div className="flex items-center gap-1.5 mb-0.5 text-[10.5px]">
-              <span className="text-ink-3 tabular-nums">{fmtDate(ev.event_date)}</span>
-              <span className="text-ink-4">·</span>
-              <span className="text-ink-3">{ev.event_type}</span>
-              <span className={clsx('ml-auto text-[10.5px] font-semibold', CONFIDENCE_STYLE[ev.confidence])}>
-                {ev.confidence}
-              </span>
-            </div>
-            <p className="text-[12px] text-ink leading-snug line-clamp-2">{ev.headline}</p>
-            {ev.capacity_mw != null && (
-              <p className="text-[10.5px] text-ink-4 tabular-nums mt-0.5">{ev.capacity_mw} MW</p>
-            )}
+    <Panel
+      label="WATCH"
+      title="Bond / Guarantee Disclosures"
+      className="col-span-6"
+      meta={
+        <>
+          <div className="flex items-center bg-canvas border border-border rounded-sm p-px">
+            {ASSET_CLASS_FILTERS.map(f => (
+              <button key={f.code} onClick={() => { setFilter(f.code); setExpanded(null) }}
+                      className={clsx(
+                        'px-1.5 py-0.5 text-[10px] font-bold tracking-wide rounded-sm uppercase',
+                        filter === f.code ? 'bg-active text-teal' : 'text-ink-3 hover:text-ink',
+                      )}>
+                {f.label}
+              </button>
+            ))}
           </div>
-        ))}
+          <span className="text-[10.5px] text-ink-4 tabular-nums">{operators.length}</span>
+        </>
+      }>
+      {(() => {
+        // BLM Federal Lands — show whenever filter is 'all' or matches an
+        // asset class we have data for. Offshore wind is excluded entirely
+        // (offshore is BOEM jurisdiction, not BLM).
+        const visibleSummaries = blmSummaries.filter(s =>
+          filter === 'all' || filter === s.asset_class
+        )
+        const visibleSites = blmSites.filter(s =>
+          filter === 'all' || filter === s.asset_class
+        )
+
+        const fedSiteCount  = visibleSummaries.reduce((a, s) => a + Number(s.site_count ?? 0), 0)
+        const fedCapacityMw = visibleSummaries.reduce((a, s) => a + Number(s.total_capacity_mw ?? 0), 0)
+        const fedStatutory  = visibleSummaries.reduce((a, s) => a + Number(s.sum_statutory_min_bond_usd ?? 0), 0)
+
+        const showFederal   = fedSiteCount > 0 && filter !== 'offshore_wind'
+        const federalKey    = '__BLM_US_FEDERAL_LANDS__'
+        const isFederalOpen = expanded === federalKey
+
+        const fmtUsd = (v: number | null | undefined): string => {
+          const n = Number(v ?? 0)
+          if (n >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(2)}bn`
+          if (n >= 1_000_000)     return `$${(n / 1_000_000).toFixed(1)}m`
+          if (n >= 1_000)         return `$${(n / 1_000).toFixed(0)}k`
+          return `$${n.toFixed(0)}`
+        }
+
+        const ASSET_CLASS_PILL_FED: Record<BlmAssetClass, string> = {
+          onshore_wind: 'bg-teal-50 text-teal-700 border-teal-200',
+          solar_pv:     'bg-amber-50 text-amber-700 border-amber-200',
+          bess:         'bg-violet-50 text-violet-700 border-violet-200',
+        }
+        const CLASS_LABEL: Record<BlmAssetClass, string> = {
+          onshore_wind: 'On-Wind',
+          solar_pv:     'Solar',
+          bess:         'BESS',
+        }
+        const CLASS_ORDER: BlmAssetClass[] = ['onshore_wind', 'solar_pv', 'bess']
+        const visibleClasses = CLASS_ORDER.filter(c => visibleSummaries.some(s => s.asset_class === c))
+
+        // ── Companies House iXBRL: filter by asset_class ─────────────────────
+        const chFiltered = chProvisions.filter(c =>
+          filter === 'all' || (c.asset_class && filter === c.asset_class)
+        )
+        const chTotalGbp = chFiltered.reduce((a, c) => a + Number(c.value_gbp ?? 0), 0)
+        const chCompanyCount = new Set(chFiltered.map(c => c.company_number)).size
+        const showCh = chFiltered.length > 0
+        const chKey = '__CH_IXBRL__'
+        const isChOpen = expanded === chKey
+        const fmtGbp = (n: number | null | undefined) => {
+          if (n == null) return '£—'
+          if (n >= 1_000_000_000) return `£${(n / 1_000_000_000).toFixed(2)}bn`
+          if (n >= 1_000_000)     return `£${(n / 1_000_000).toFixed(1)}m`
+          if (n >= 1_000)         return `£${(n / 1_000).toFixed(0)}k`
+          return `£${n.toFixed(0)}`
+        }
+
+        return (
+      <div className="flex flex-col h-full">
+        <div className="flex-1 min-h-0 overflow-auto">
+          {loading ? (
+            <div className="px-3 py-4 text-[12px] text-ink-3 text-center">Loading…</div>
+          ) : (operators.length === 0 && !showFederal && !showCh) ? (
+            <div className="px-3 py-6 text-[11.5px] text-ink-3 text-center leading-snug">
+              No bond disclosures match this filter.<br />
+              <span className="text-ink-4">Pure-play YieldCos (Greencoat UKW, NextEnergy Solar, Gore Street BESS, etc.) curated via Airtable.</span>
+            </div>
+          ) : (
+            <div className="divide-y divide-border/70">
+
+              {/* ── BLM Federal Lands · regulator-implied (always at top when shown) ── */}
+              {showFederal && (
+                <div>
+                  <button
+                    onClick={() => setExpanded(isFederalOpen ? null : federalKey)}
+                    className="w-full px-2.5 py-1.5 text-left hover:bg-raised flex items-center gap-2 bg-amber-50/40">
+                    <span className="text-ink-4 text-[10px] tabular-nums w-3">{isFederalOpen ? '▼' : '▶'}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[11.5px] font-semibold text-ink truncate flex items-center gap-1.5">
+                        BLM US Federal Lands
+                        <span className="text-[9px] font-bold px-1 py-px rounded-sm border tracking-wide bg-amber-50 text-amber-700 border-amber-200">
+                          REGULATOR-IMPLIED
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-ink-4 tabular-nums truncate">
+                        US · {fedSiteCount} sites · {(fedCapacityMw / 1000).toFixed(2)} GW · {visibleClasses.map(c => CLASS_LABEL[c]).join(' · ')}
+                      </div>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <div className="text-[12px] font-semibold text-ink tabular-nums">
+                        {fmtUsd(fedStatutory)}
+                      </div>
+                      <div className="text-[9px] text-ink-4 tracking-wide uppercase">
+                        statutory min
+                      </div>
+                    </div>
+                  </button>
+
+                  {isFederalOpen && (
+                    <div className="bg-canvas border-t border-border/60">
+                      {/* Methodology callout */}
+                      <div className="px-2.5 py-1.5 bg-amber-50/40 border-b border-border/60 text-[10px] text-ink-3 leading-snug">
+                        <span className="font-semibold text-ink-2">Statutory minimum</span>: wind per 43 CFR 2805.20 ($20k × turbines, assumes ≥1MW); solar per BLM IM-2015-138 ($10k/MW, PV only — CSP plants carry project-specific ROD bonds); BESS shown for visibility only (no BLM BESS formula; bonded jointly with host project).{' '}
+                        <span className="font-semibold text-ink-2">Caveat</span>: per-site turbine counts and nameplate capacity are hand-entered from public project specs and not verified against the underlying BLM ROD attachment. Treat as a lower-bound multiplication, not a sourced figure. The economic-cost (DCI) overlay and underbond gap will return when per-asset-class DCI series are published.
+                      </div>
+
+                      {visibleClasses.map(cls => {
+                        const sitesForClass   = visibleSites.filter(s => s.asset_class === cls)
+                        const summaryForClass = visibleSummaries.find(s => s.asset_class === cls)
+                        if (!summaryForClass) return null
+                        const classStat = summaryForClass.sum_statutory_min_bond_usd
+                        const classCap  = Number(summaryForClass.total_capacity_mw ?? 0)
+                        return (
+                          <div key={cls}>
+                            <div className="px-2.5 py-1 bg-titlebar/50 border-b border-border/40 flex items-center justify-between">
+                              <div className="flex items-center gap-1.5">
+                                <span className={`text-[9px] font-bold px-1 py-px rounded-sm border tracking-wide ${ASSET_CLASS_PILL_FED[cls]}`}>
+                                  {CLASS_LABEL[cls]}
+                                </span>
+                                <span className="text-[10px] text-ink-3 tabular-nums">
+                                  {sitesForClass.length} sites · {(classCap / 1000).toFixed(2)} GW
+                                </span>
+                              </div>
+                              <div className="text-[10px] text-ink font-semibold tabular-nums">
+                                {classStat != null ? `${fmtUsd(classStat)} stat. min` : 'n/a (host-bonded)'}
+                              </div>
+                            </div>
+                            <table className="w-full table-fixed">
+                              <colgroup>
+                                <col style={{ width: '46%' }} />
+                                <col style={{ width: '10%' }} />
+                                <col style={{ width: '16%' }} />
+                                <col style={{ width: '28%' }} />
+                              </colgroup>
+                              <thead>
+                                <tr className="border-b border-border/60">
+                                  <th className="px-2 py-1 text-left text-[9px] font-semibold text-ink-4 uppercase tracking-wide">Project</th>
+                                  <th className="px-2 py-1 text-left text-[9px] font-semibold text-ink-4 uppercase tracking-wide">St</th>
+                                  <th className="px-2 py-1 text-right text-[9px] font-semibold text-ink-4 uppercase tracking-wide">MW</th>
+                                  <th className="px-2 py-1 text-right text-[9px] font-semibold text-ink-4 uppercase tracking-wide">Statutory min</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {sitesForClass.length === 0 ? (
+                                  <tr>
+                                    <td colSpan={4} className="px-2 py-3 text-[11px] text-ink-3 text-center leading-snug">
+                                      No sites curated for {CLASS_LABEL[cls]}.
+                                    </td>
+                                  </tr>
+                                ) : sitesForClass.map(s => (
+                                  <tr key={s.blm_serial} className="border-b border-border/40 last:border-0 hover:bg-panel">
+                                    <td className="px-2 py-0.5">
+                                      <div className="text-[10.5px] text-ink font-medium leading-tight truncate">{s.project_name}</div>
+                                      <div className="text-[9px] text-ink-4 tabular-nums leading-tight truncate" title={s.notes ?? undefined}>
+                                        {s.operator ?? '—'} · {s.blm_serial}{s.commissioning_year ? ` · ${s.commissioning_year}` : ''}
+                                        {s.asset_class === 'onshore_wind' && s.turbine_count ? ` · ${s.turbine_count} turb` : ''}
+                                      </div>
+                                    </td>
+                                    <td className="px-2 py-0.5 text-[10.5px] text-ink-2">{s.state}</td>
+                                    <td className="px-2 py-0.5 text-right text-[10.5px] tabular-nums text-ink">{Number(s.capacity_mw).toFixed(0)}</td>
+                                    <td className="px-2 py-0.5 text-right text-[10.5px] tabular-nums text-ink" title={s.statutory_basis ?? undefined}>
+                                      {s.statutory_min_bond_usd != null ? fmtUsd(s.statutory_min_bond_usd) : <span className="text-ink-4 italic">n/a</span>}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )
+                      })}
+
+                      <div className="px-2 py-1 border-t border-border/60 bg-titlebar text-[10px] text-ink-4">
+                        Source: Curated BLM RODs, NEPA documents, ROW serial numbers · 43 CFR 2805.20 (wind) · BLM IM-2015-138 (solar PV)
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── Companies House iXBRL · UK operator/SPV provision balances ── */}
+              {showCh && (
+                <div>
+                  <button
+                    onClick={() => setExpanded(isChOpen ? null : chKey)}
+                    className="w-full px-2.5 py-1.5 text-left hover:bg-raised flex items-center gap-2 bg-blue-50/40">
+                    <span className="text-ink-4 text-[10px] tabular-nums w-3">{isChOpen ? '▼' : '▶'}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[11.5px] font-semibold text-ink truncate flex items-center gap-1.5">
+                        UK Companies House · iXBRL
+                        <span className="text-[9px] font-bold px-1 py-px rounded-sm border tracking-wide bg-blue-50 text-blue-700 border-blue-200">
+                          FILED ACCOUNTS
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-ink-4 tabular-nums truncate">
+                        UK · {chCompanyCount} {chCompanyCount === 1 ? 'company' : 'companies'} · decommissioning / restoration provisions
+                      </div>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <div className="text-[12px] font-semibold text-ink tabular-nums">
+                        {fmtGbp(chTotalGbp)}
+                      </div>
+                      <div className="text-[9px] text-ink-4 tracking-wide uppercase">
+                        sum of latest provisions
+                      </div>
+                    </div>
+                  </button>
+
+                  {isChOpen && (
+                    <div className="bg-canvas border-t border-border/60">
+                      <div className="px-2.5 py-1.5 bg-blue-50/40 border-b border-border/60 text-[10px] text-ink-3 leading-snug">
+                        Provision balances scraped from <span className="font-semibold text-ink-2">filed iXBRL accounts</span> at UK Companies House. We match XBRL concepts on substring (decommission · dilapidation · restoration · rehabilitation). One row per company, latest period only. PDF-only filings (most large operators) and Channel-Island YieldCos (Greencoat aside) are not at UK CH and don't appear here.
+                      </div>
+                      <table className="w-full table-fixed">
+                        <colgroup>
+                          <col style={{ width: '34%' }} />
+                          <col style={{ width: '14%' }} />
+                          <col style={{ width: '14%' }} />
+                          <col style={{ width: '20%' }} />
+                          <col style={{ width: '18%' }} />
+                        </colgroup>
+                        <thead>
+                          <tr className="border-b border-border/60">
+                            <th className="px-2 py-1 text-left  text-[9px] font-semibold text-ink-4 uppercase tracking-wide">Company</th>
+                            <th className="px-2 py-1 text-left  text-[9px] font-semibold text-ink-4 uppercase tracking-wide">Group</th>
+                            <th className="px-2 py-1 text-left  text-[9px] font-semibold text-ink-4 uppercase tracking-wide">Period</th>
+                            <th className="px-2 py-1 text-left  text-[9px] font-semibold text-ink-4 uppercase tracking-wide">Concept</th>
+                            <th className="px-2 py-1 text-right text-[9px] font-semibold text-ink-4 uppercase tracking-wide">Provision</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {chFiltered.map(c => (
+                            <tr key={c.company_number} className="border-b border-border/40 last:border-0 hover:bg-panel">
+                              <td className="px-2 py-0.5">
+                                <div className="text-[10.5px] text-ink font-medium leading-tight truncate" title={c.company_name}>
+                                  {c.company_name}
+                                </div>
+                                <div className="text-[9px] text-ink-4 tabular-nums leading-tight">
+                                  CH · {c.company_number}
+                                </div>
+                              </td>
+                              <td className="px-2 py-0.5 text-[10.5px] text-ink-2 truncate">{c.parent_group ?? '—'}</td>
+                              <td className="px-2 py-0.5 text-[10.5px] text-ink-2 tabular-nums">{c.period_end ?? '—'}</td>
+                              <td className="px-2 py-0.5 text-[10px] text-ink-3 truncate" title={c.concept_name}>
+                                {c.concept_label ?? c.concept_name}
+                              </td>
+                              <td className="px-2 py-0.5 text-right text-[10.5px] tabular-nums text-ink font-semibold">
+                                {fmtGbp(c.value_gbp)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <div className="px-2 py-1 border-t border-border/60 bg-titlebar text-[10px] text-ink-4">
+                        Source: UK Companies House Document API · iXBRL parse · ingestion/sync_companies_house_ixbrl.py
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {operators.map(op => {
+                const sym = CCY_SYMBOL[op.currency] ?? op.currency
+                const isOpen = expanded === `${op.operator}|${op.fy}`
+                const classList = Array.from(op.asset_classes).map(c => ASSET_CLASS_LABEL_SHORT[c]).join(' · ')
+                return (
+                  <div key={`${op.operator}|${op.fy}`}>
+                    {/* Operator summary row */}
+                    <button
+                      onClick={() => setExpanded(isOpen ? null : `${op.operator}|${op.fy}`)}
+                      className="w-full px-2.5 py-1.5 text-left hover:bg-raised flex items-center gap-2">
+                      <span className="text-ink-4 text-[10px] tabular-nums w-3">{isOpen ? '▼' : '▶'}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[11.5px] font-semibold text-ink truncate">
+                          {op.operator}{op.operator_ticker && <span className="text-ink-4 font-normal"> · {op.operator_ticker}</span>}
+                        </div>
+                        <div className="text-[10px] text-ink-4 tabular-nums truncate">
+                          {op.jurisdiction} · {op.fy} · {op.site_count} site{op.site_count !== 1 ? 's' : ''} · {classList}
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <div className="text-[12px] font-semibold text-ink tabular-nums">
+                          {formatBond(op.total_thousands, sym)}
+                        </div>
+                        {op.pure_decom_thousands < op.total_thousands && (() => {
+                          const bundledThousands = op.total_thousands - op.pure_decom_thousands
+                          const bundledCount = op.rows.filter(r => !r.purpose_pure_decom).length
+                          return (
+                            <div className="text-[9px] text-amber-700 tabular-nums leading-tight"
+                                 title={`${bundledCount} bond${bundledCount !== 1 ? 's' : ''} bundle decommissioning with other obligations (e.g. grid security, radar mitigation, wake compensation). Exclude these bonds for a pure-decom view.`}>
+                              of which {formatBond(bundledThousands, sym)} bundled w/ grid·radar·wake
+                            </div>
+                          )
+                        })()}
+                      </div>
+                    </button>
+
+                    {/* Expanded per-site detail — grouped by asset class, sites aggregated by name */}
+                    {isOpen && (() => {
+                      // Aggregate bond rows by site_name within each asset class.
+                      // Multi-beneficiary sites (e.g. South Kyle has 4 separate counter-indemnities)
+                      // collapse to one row that lists all beneficiaries.
+                      interface SiteAgg {
+                        site_name:        string
+                        site_asset_class: AroBondRow['site_asset_class']
+                        site_capacity_mw: number | null
+                        ownership_pct:    number | null
+                        bond_currency:    string
+                        total_thousands:  number
+                        beneficiaries:    string[]
+                        any_mixed:        boolean
+                        mixed_notes:      string[]   // unique purpose_notes for mixed-purpose constituents
+                      }
+
+                      const siteMap = new Map<string, SiteAgg>()
+                      for (const r of op.rows) {
+                        const key = `${r.site_name}|${r.site_asset_class}`
+                        let s = siteMap.get(key)
+                        if (!s) {
+                          s = {
+                            site_name: r.site_name, site_asset_class: r.site_asset_class,
+                            site_capacity_mw: r.site_capacity_mw, ownership_pct: r.ownership_pct,
+                            bond_currency: r.bond_currency, total_thousands: 0,
+                            beneficiaries: [], any_mixed: false, mixed_notes: [],
+                          }
+                          siteMap.set(key, s)
+                        }
+                        s.total_thousands += r.bond_amount_thousands
+                        if (!s.beneficiaries.includes(r.beneficiary)) s.beneficiaries.push(r.beneficiary)
+                        if (!r.purpose_pure_decom) {
+                          s.any_mixed = true
+                          if (r.purpose_notes && !s.mixed_notes.includes(r.purpose_notes)) {
+                            s.mixed_notes.push(r.purpose_notes)
+                          }
+                        }
+                      }
+
+                      // Order classes for display, then sort sites within each by total bond desc
+                      const CLASS_ORDER: AroBondRow['site_asset_class'][] = ['offshore_wind', 'onshore_wind', 'solar_pv', 'bess']
+                      const allSites = Array.from(siteMap.values())
+                      const groups = CLASS_ORDER
+                        .map(cls => ({
+                          cls,
+                          sites: allSites.filter(s => s.site_asset_class === cls)
+                                         .sort((a, b) => b.total_thousands - a.total_thousands),
+                        }))
+                        .filter(g => g.sites.length > 0)
+
+                      const ASSET_CLASS_PILL: Record<AroBondRow['site_asset_class'], string> = {
+                        offshore_wind: 'bg-sky-50 text-sky-700 border-sky-200',
+                        onshore_wind:  'bg-teal-50 text-teal-700 border-teal-200',
+                        solar_pv:      'bg-amber-50 text-amber-700 border-amber-200',
+                        bess:          'bg-violet-50 text-violet-700 border-violet-200',
+                      }
+
+                      const sitePerMwK = (s: SiteAgg): number | null => {
+                        if (!s.site_capacity_mw || s.site_capacity_mw <= 0) return null
+                        const attributable = s.site_capacity_mw * ((s.ownership_pct ?? 100) / 100)
+                        return attributable > 0 ? s.total_thousands / attributable : null
+                      }
+
+                      const formatBeneficiaries = (list: string[]): string => {
+                        if (list.length === 1) return list[0]
+                        if (list.length === 2) return list.join(' · ')
+                        return `${list[0]} +${list.length - 1}`
+                      }
+
+                      return (
+                        <div className="bg-canvas border-t border-border/60">
+                          {groups.map(g => {
+                            const subtotal = g.sites.reduce((s, x) => s + x.total_thousands, 0)
+                            const totalAttribMw = g.sites.reduce((s, x) =>
+                              s + (x.site_capacity_mw ?? 0) * ((x.ownership_pct ?? 100) / 100), 0)
+                            const blendedPerMw = totalAttribMw > 0 ? subtotal / totalAttribMw : null
+                            const groupSym = CCY_SYMBOL[g.sites[0].bond_currency] ?? g.sites[0].bond_currency
+
+                            return (
+                              <div key={g.cls}>
+                                {/* Asset-class subheader */}
+                                <div className="flex items-center gap-2 px-2 py-1 bg-titlebar border-b border-border/70">
+                                  <span className={clsx(
+                                    'text-[9px] font-bold px-1 py-px rounded-sm border tracking-wide',
+                                    ASSET_CLASS_PILL[g.cls],
+                                  )}>
+                                    {ASSET_CLASS_LABEL_SHORT[g.cls]}
+                                  </span>
+                                  <span className="text-[9.5px] text-ink-4 tabular-nums">
+                                    {g.sites.length} site{g.sites.length !== 1 ? 's' : ''}
+                                  </span>
+                                  <span className="ml-auto text-[10.5px] tabular-nums">
+                                    <span className="text-ink-4 mr-1">Σ</span>
+                                    <span className="text-ink font-semibold">{formatBond(subtotal, groupSym)}</span>
+                                    {blendedPerMw != null && (
+                                      <span className="text-ink-3 ml-2">
+                                        ≈ {groupSym}{blendedPerMw.toFixed(0)}k/MW
+                                      </span>
+                                    )}
+                                  </span>
+                                </div>
+
+                                {/* Aggregated site rows — table-fixed with explicit colgroup so all
+                                    asset-class subtables align column widths identically */}
+                                <table className="w-full table-fixed">
+                                  <colgroup>
+                                    <col style={{ width: '34%' }} />
+                                    <col style={{ width: '36%' }} />
+                                    <col style={{ width: '15%' }} />
+                                    <col style={{ width: '15%' }} />
+                                  </colgroup>
+                                  <thead>
+                                    <tr className="border-b border-border/60">
+                                      <th className="px-2 py-1 text-left text-[9px] font-semibold text-ink-4 uppercase tracking-wide">Site</th>
+                                      <th className="px-2 py-1 text-left text-[9px] font-semibold text-ink-4 uppercase tracking-wide">Beneficiaries</th>
+                                      <th className="px-2 py-1 text-right text-[9px] font-semibold text-ink-4 uppercase tracking-wide">Bond</th>
+                                      <th className="px-2 py-1 text-right text-[9px] font-semibold text-ink-4 uppercase tracking-wide">
+                                        <span className="normal-case">{groupSym}k</span>/MW
+                                      </th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {g.sites.map((s, idx) => {
+                                      const rsym = CCY_SYMBOL[s.bond_currency] ?? s.bond_currency
+                                      const pmw = sitePerMwK(s)
+                                      return (
+                                        <tr key={`${s.site_name}-${idx}`} className="border-b border-border/40 last:border-0 hover:bg-panel">
+                                          <td className="px-2 py-0.5">
+                                            <div className="text-[10.5px] text-ink font-medium leading-tight truncate">{s.site_name}</div>
+                                            {s.site_capacity_mw != null && (
+                                              <div className="text-[9px] text-ink-4 tabular-nums leading-tight">
+                                                {s.site_capacity_mw} MW{s.ownership_pct != null && s.ownership_pct < 100 ? ` · ${s.ownership_pct}% stake` : ''}
+                                              </div>
+                                            )}
+                                          </td>
+                                          <td className="px-2 py-0.5">
+                                            <div className="text-[10.5px] text-ink-2 truncate" title={s.beneficiaries.join(' · ')}>
+                                              {formatBeneficiaries(s.beneficiaries)}
+                                            </div>
+                                            {s.any_mixed && (
+                                              <div className="text-[9px] text-amber-700 leading-tight" title={s.mixed_notes.join(' · ')}>
+                                                bundled: {s.mixed_notes.join('; ').replace(/^Combined:\s*/i, '')}
+                                              </div>
+                                            )}
+                                          </td>
+                                          <td className="px-2 py-0.5 text-right text-[10.5px] tabular-nums text-ink font-semibold">
+                                            {formatBond(s.total_thousands, rsym)}
+                                          </td>
+                                          <td className="px-2 py-0.5 text-right text-[10.5px] tabular-nums">
+                                            {pmw != null
+                                              ? <span className={clsx(s.any_mixed && 'text-amber-700')}>{pmw.toFixed(0)}</span>
+                                              : <span className="text-ink-4">—</span>}
+                                          </td>
+                                        </tr>
+                                      )
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )
+                          })}
+
+                          {op.rows[0]?.source_url && (
+                            <div className="px-2 py-1 border-t border-border/60 bg-titlebar">
+                              <a href={op.rows[0].source_url + (op.rows[0].filing_page ? `#page=${op.rows[0].filing_page}` : '')}
+                                 target="_blank" rel="noopener noreferrer"
+                                 className="flex items-center gap-1 text-[10px] text-teal hover:text-teal-bright hover:underline">
+                                <ExternalLink size={9} />{op.rows[0].source_name}
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="flex-shrink-0 border-t border-border px-2.5 py-1 text-[9.5px] text-ink-4 leading-snug">
+          Operator-posted bonds + BLM regulator-implied · onshore vs offshore separated · click row to expand
+        </div>
       </div>
+        )
+      })()}
     </Panel>
   )
 }
@@ -824,13 +1512,15 @@ export function WatchPage() {
         </div>
       </div>
 
-      {/* 12-col panel grid — viewport-fit, 2 equal rows, panels scroll internally */}
+      {/* 12-col panel grid — viewport-fit, 2 rows, panels scroll internally
+            Row 1: Signal Tape (col-8) + Decom Mandates (col-4)
+            Row 2: Provisions (col-6) + Bonds (col-6) */}
       <div className="flex-1 min-h-0 overflow-hidden p-1.5">
         <div className="h-full grid grid-cols-12 grid-rows-2 gap-1.5">
           <SignalTapePanel />
           <DecomMandatesPanel />
-          <DisclosuresPanel />
-          <CapacitySignalsPanel />
+          <ProvisionsPanel />
+          <BondsPanel />
         </div>
       </div>
 

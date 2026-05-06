@@ -12,6 +12,10 @@ name: Daily Pipeline
 #   Step 8.  Fetch LME / COMEX scrap      → commodity_prices        (yfinance, uses Step 7 FX)
 #   Step 9.  Compute DCI publications     → dci_publications        (uses Steps 7-8)
 #   Step 10. Compute NRO estimates        → nro_estimates           (uses Steps 7-8)
+#   Step 11. USWTDB sync                  → us_wind_assets          (USGS, weekly cadence sufficient)
+#   Step 12. BLM ROW polygons sync        → blm_row_polygons        (state-office ArcGIS)
+#   Step 13. Federal-land flag compute    → us_wind_assets.is_federal_land  (depends on 11+12)
+#   Step 14. Companies House iXBRL sync   → ch_filings + ch_provisions      (UK SPVs / operators)
 #
 # Each step writes to ingestion_runs telemetry. The Coverage overlay in the
 # Terminal shows the daily run health.
@@ -141,3 +145,43 @@ jobs:
           SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python compute_nro.py
+        continue-on-error: true
+
+      # ── Step 11 ── USGS USWTDB → us_wind_assets (~75k turbines)
+      - name: 11 · USWTDB sync
+        working-directory: ingestion
+        env:
+          SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python sync_uswtdb.py
+        continue-on-error: true
+
+      # ── Step 12 ── BLM state-office ROW polygons → blm_row_polygons
+      - name: 12 · BLM ROW polygons sync
+        working-directory: ingestion
+        env:
+          SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python sync_blm_row_polygons.py
+        continue-on-error: true
+
+      # ── Step 13 ── Federal-land flag spatial join (depends on 11 + 12)
+      - name: 13 · Compute federal-land flags
+        working-directory: ingestion
+        env:
+          SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python compute_federal_land_flags.py
+        continue-on-error: true
+
+      # ── Step 14 ── Companies House iXBRL → ch_filings + ch_provisions
+      # UK operator/SPV provision balances scraped from filed accounts.
+      # Free CH API; rate-limited at 600 req / 5 min — script paces 0.6s/req.
+      - name: 14 · Companies House iXBRL sync
+        working-directory: ingestion
+        env:
+          CH_API_KEY:                ${{ secrets.CH_API_KEY }}
+          SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python sync_companies_house_ixbrl.py
+        continue-on-error: true
