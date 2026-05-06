@@ -1,38 +1,36 @@
 interface Signal {
-  label: string
+  label:  string
   status: 'building' | 'planned'
 }
 
 interface ModulePlaceholderProps {
-  label: string
-  name: string
+  label:       string
+  name:        string
   description: string
-  signals: Signal[]
+  signals:     Signal[]
 }
 
 export function ModulePlaceholder({ label, name, description, signals }: ModulePlaceholderProps) {
   return (
-    <div className="flex-1 flex flex-col items-center justify-center px-8 py-16">
-      <div className="max-w-lg w-full">
+    <div className="flex-1 flex flex-col items-center justify-center px-6 py-8">
+      <div className="max-w-md w-full">
 
-        <div className="mb-6">
-          <div className="text-[10px] text-terminal-muted tracking-widest uppercase mb-1">{label}</div>
-          <div className="text-base font-semibold text-terminal-text">{name}</div>
+        <div className="mb-3">
+          <div className="label-xs mb-1">{label}</div>
+          <div className="text-[16px] font-semibold text-ink">{name}</div>
         </div>
 
-        <p className="text-sm text-terminal-muted leading-relaxed mb-8">{description}</p>
+        <p className="text-[12.5px] text-ink-3 leading-relaxed mb-4">{description}</p>
 
-        <div className="border border-terminal-border rounded">
-          <div className="px-4 py-2.5 border-b border-terminal-border">
-            <span className="text-[10px] text-terminal-muted tracking-widest uppercase">
-              Module includes
-            </span>
+        <div className="border border-border rounded-sm bg-panel">
+          <div className="px-2.5 h-7 flex items-center border-b border-border bg-titlebar">
+            <span className="label-xs">Module includes</span>
           </div>
-          <div className="divide-y divide-terminal-border">
+          <div className="divide-y divide-border">
             {signals.map(({ label: sLabel, status }) => (
-              <div key={sLabel} className="flex items-center justify-between px-4 py-2.5">
-                <span className="text-xs text-terminal-muted">{sLabel}</span>
-                <span className={status === 'building' ? 'text-[10px] text-terminal-teal' : 'text-[10px] text-terminal-muted'}>
+              <div key={sLabel} className="flex items-center justify-between px-2.5 py-1.5">
+                <span className="text-[12.5px] text-ink-2">{sLabel}</span>
+                <span className={status === 'building' ? 'text-[10.5px] uppercase tracking-wide text-teal font-semibold' : 'text-[10.5px] uppercase tracking-wide text-ink-4 font-semibold'}>
                   {status === 'building' ? 'IN BUILD' : 'PLANNED'}
                 </span>
               </div>

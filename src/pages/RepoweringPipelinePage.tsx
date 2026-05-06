@@ -77,7 +77,7 @@ function StagePill({ stage }: { stage: RepoweringStage }) {
   }
   return (
     <span className={clsx(
-      'inline-flex items-center px-2 py-0.5 text-[10px] font-mono font-medium border rounded',
+      'inline-flex items-center px-2 py-0.5 text-[11px] font-mono font-medium border rounded',
       colours[stage]
     )}>
       {STAGE_LABELS[stage]}
@@ -133,7 +133,7 @@ function CountryDropdown({
                   className="accent-teal-500 w-3.5 h-3.5"
                 />
                 <span className="text-xs text-terminal-muted">{cLabel}</span>
-                <span className="ml-auto text-[10px] text-terminal-muted font-mono">{code}</span>
+                <span className="ml-auto text-[11px] text-terminal-muted font-mono">{code}</span>
               </label>
             ))}
             {selected.length > 0 && (
@@ -187,7 +187,7 @@ function DetailPanel({
   return (
     <div className="w-80 flex-shrink-0 border-l border-terminal-border bg-terminal-surface flex flex-col">
       {/* Header */}
-      <div className="flex items-start justify-between px-5 py-4 border-b border-terminal-border">
+      <div className="flex items-start justify-between px-2.5 py-1.5 border-b border-terminal-border">
         <div className="flex-1 min-w-0 pr-3">
           <div className="text-sm font-semibold text-terminal-text leading-snug">
             {project.project_name}
@@ -206,8 +206,8 @@ function DetailPanel({
 
       {/* Project details */}
       <div className="flex-1 overflow-y-auto">
-        <div className="px-5 py-4">
-          <div className="text-[10px] text-terminal-muted font-mono tracking-widest uppercase mb-3">
+        <div className="px-2 py-1.5">
+          <div className="text-[11px] text-terminal-muted font-mono tracking-widest uppercase mb-3">
             Project Details
           </div>
           <div className="space-y-2.5">
@@ -221,8 +221,8 @@ function DetailPanel({
         </div>
 
         {project.notes && (
-          <div className="px-5 py-3 border-t border-terminal-border">
-            <div className="text-[10px] text-terminal-muted font-mono tracking-widest uppercase mb-2">
+          <div className="px-2.5 py-1.5 border-t border-terminal-border">
+            <div className="text-[11px] text-terminal-muted font-mono tracking-widest uppercase mb-2">
               Notes
             </div>
             <p className="text-xs text-terminal-muted leading-relaxed">{project.notes}</p>
@@ -230,8 +230,8 @@ function DetailPanel({
         )}
 
         {/* Source metadata */}
-        <div className="px-5 py-4 border-t border-terminal-border">
-          <div className="text-[10px] text-terminal-muted font-mono tracking-widest uppercase mb-3">
+        <div className="px-2.5 py-1.5 border-t border-terminal-border">
+          <div className="text-[11px] text-terminal-muted font-mono tracking-widest uppercase mb-3">
             Source Metadata
           </div>
           <div className="space-y-2.5">
@@ -389,7 +389,7 @@ export function RepoweringPipelinePage() {
               key={s}
               onClick={() => setStage(s)}
               className={clsx(
-                'px-4 py-3 text-xs font-mono font-medium border-b-2 transition-colors whitespace-nowrap',
+                'px-2.5 py-1.5 text-xs font-mono font-medium border-b-2 transition-colors whitespace-nowrap',
                 stage === s
                   ? 'border-terminal-teal text-terminal-teal'
                   : 'border-transparent text-terminal-muted hover:text-terminal-text'
@@ -403,8 +403,8 @@ export function RepoweringPipelinePage() {
 
       {/* Stage bar chart */}
       {stageCounts.length > 0 && (
-        <div className="bg-terminal-black border-b border-terminal-border px-6 py-3 flex items-center gap-6">
-          <span className="text-[10px] font-mono text-terminal-muted uppercase tracking-widest flex-shrink-0">
+        <div className="bg-terminal-black border-b border-terminal-border px-3 py-1.5 flex items-center gap-3">
+          <span className="text-[11px] font-mono text-terminal-muted uppercase tracking-widest flex-shrink-0">
             Pipeline
           </span>
           <div className="flex-1 h-8">
@@ -436,7 +436,7 @@ export function RepoweringPipelinePage() {
           </div>
           <div className="flex items-center gap-3 flex-shrink-0">
             {stageCounts.map(({ stage: s, count, label }) => (
-              <span key={s} className="flex items-center gap-1 text-[10px] font-mono text-terminal-muted">
+              <span key={s} className="flex items-center gap-1 text-[11px] font-mono text-terminal-muted">
                 <span className="num text-terminal-text">{count}</span> {label}
               </span>
             ))}
@@ -445,7 +445,7 @@ export function RepoweringPipelinePage() {
       )}
 
       {/* Filter bar */}
-      <div className="bg-terminal-black border-b border-terminal-border px-6 py-2.5 flex items-center gap-4">
+      <div className="bg-terminal-black border-b border-terminal-border px-6 py-2.5 flex items-center gap-2">
         <CountryDropdown selected={countries} onChange={setCountries} />
         <div className="ml-auto text-xs text-terminal-muted font-mono">
           {loading ? '—' : `${total.toLocaleString()} project${total !== 1 ? 's' : ''}`}
@@ -472,7 +472,7 @@ export function RepoweringPipelinePage() {
                     <SortableTh label="Project"    sortKey="project_name"     sort={sort} onSort={toggle} className="text-left pl-6 py-2.5 pr-3" />
                     <SortableTh label="Country"    sortKey="country_code"     sort={sort} onSort={toggle} className="text-left py-2.5 pr-3" />
                     <SortableTh label="Capacity"   sortKey="capacity_mw"      sort={sort} onSort={toggle} className="text-right py-2.5 pr-3" />
-                    <th className="text-[10px] text-terminal-muted font-medium tracking-wide uppercase text-left py-2.5 pr-3">Turbine</th>
+                    <th className="text-[11px] text-terminal-muted font-medium tracking-wide uppercase text-left py-2.5 pr-3">Turbine</th>
                     <SortableTh label="Hub Ht"     sortKey="hub_height_m"     sort={sort} onSort={toggle} className="text-right py-2.5 pr-3" />
                     <SortableTh label="Rotor"      sortKey="rotor_diameter_m" sort={sort} onSort={toggle} className="text-right py-2.5 pr-3" />
                     <SortableTh label="Developer"  sortKey="developer"        sort={sort} onSort={toggle} className="text-left py-2.5 pr-3" />
@@ -543,7 +543,7 @@ export function RepoweringPipelinePage() {
 
               {/* Pagination */}
               {totalPages > 1 && (
-                <div className="flex items-center justify-between px-6 py-3 border-t border-terminal-border bg-terminal-surface">
+                <div className="flex items-center justify-between px-3 py-1.5 border-t border-terminal-border bg-terminal-surface">
                   <span className="text-xs text-terminal-muted font-mono">
                     {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total.toLocaleString()}
                   </span>

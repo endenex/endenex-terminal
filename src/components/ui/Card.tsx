@@ -1,13 +1,13 @@
 import { clsx } from 'clsx'
 
 interface CardProps {
-  children: React.ReactNode
+  children:   React.ReactNode
   className?: string
 }
 
 export function Card({ children, className }: CardProps) {
   return (
-    <div className={clsx('bg-terminal-surface border border-terminal-border rounded-lg', className)}>
+    <div className={clsx('bg-panel border border-border rounded-sm', className)}>
       {children}
     </div>
   )
@@ -15,7 +15,7 @@ export function Card({ children, className }: CardProps) {
 
 export function CardHeader({ children, className }: CardProps) {
   return (
-    <div className={clsx('px-6 py-4 border-b border-terminal-border', className)}>
+    <div className={clsx('px-2.5 h-7 flex items-center border-b border-border bg-titlebar', className)}>
       {children}
     </div>
   )
@@ -23,7 +23,7 @@ export function CardHeader({ children, className }: CardProps) {
 
 export function CardContent({ children, className }: CardProps) {
   return (
-    <div className={clsx('px-6 py-4', className)}>
+    <div className={clsx('p-2.5', className)}>
       {children}
     </div>
   )

@@ -1,5 +1,4 @@
-// ── Pure-SVG sparkline components ──────────────────────────────────────────
-// Tiny no-dependency replacement for the react-sparklines library.
+// ── Pure-SVG sparkline (light default colour) ──────────────────────────────
 
 import type { ReactNode } from 'react'
 import { createContext, useContext } from 'react'
@@ -15,7 +14,7 @@ interface Ctx {
 const SparkCtx = createContext<Ctx | null>(null)
 
 export function Sparklines({
-  data, width = 80, height = 24, margin = 2, children,
+  data, width = 64, height = 20, margin = 1.5, children,
 }: {
   data:    number[]
   width?:  number
@@ -41,14 +40,14 @@ export function Sparklines({
   )
 }
 
-export function SparklinesLine({ color = '#007B8A', strokeWidth = 1 }: { color?: string; strokeWidth?: number }) {
+export function SparklinesLine({ color = '#0E7A86', strokeWidth = 1.2 }: { color?: string; strokeWidth?: number }) {
   const ctx = useContext(SparkCtx)
   if (!ctx) return null
   const d = ctx.points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ')
   return <path d={d} fill="none" stroke={color} strokeWidth={strokeWidth} />
 }
 
-export function SparklinesSpots({ color = '#007B8A', size = 1.5 }: { color?: string; size?: number }) {
+export function SparklinesSpots({ color = '#0E7A86', size = 1.4 }: { color?: string; size?: number }) {
   const ctx = useContext(SparkCtx)
   if (!ctx) return null
   const last = ctx.points[ctx.points.length - 1]

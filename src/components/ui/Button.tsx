@@ -2,12 +2,12 @@ import { clsx } from 'clsx'
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'ghost'
-  size?: 'sm' | 'md' | 'lg'
+  size?:    'sm' | 'md' | 'lg'
 }
 
 export function Button({
   variant = 'primary',
-  size = 'md',
+  size    = 'md',
   className,
   children,
   ...props
@@ -15,21 +15,21 @@ export function Button({
   return (
     <button
       className={clsx(
-        'inline-flex items-center justify-center font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed',
+        'inline-flex items-center justify-center font-semibold transition-colors focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed rounded-sm border tracking-wide uppercase',
         {
-          'bg-terminal-teal text-white hover:bg-terminal-teal-light focus:ring-terminal-teal':
+          'bg-teal text-white border-teal hover:bg-teal-bright hover:border-teal-bright':
             variant === 'primary',
-          'bg-terminal-navy-light text-white border border-terminal-navy-border hover:bg-terminal-navy-border focus:ring-terminal-navy-border':
+          'bg-panel text-ink-2 border-border hover:bg-raised hover:text-ink hover:border-border-strong':
             variant === 'secondary',
-          'text-terminal-teal hover:bg-terminal-teal/10 focus:ring-terminal-teal':
+          'text-teal border-transparent hover:bg-teal-dim':
             variant === 'ghost',
         },
         {
-          'px-3 py-1.5 text-xs rounded': size === 'sm',
-          'px-4 py-2 text-sm rounded': size === 'md',
-          'px-6 py-3 text-sm rounded-md': size === 'lg',
+          'px-2 py-0.5 text-[11px]':   size === 'sm',
+          'px-3 py-1   text-[12px]':   size === 'md',
+          'px-4 py-1.5 text-[13px]':   size === 'lg',
         },
-        className
+        className,
       )}
       {...props}
     >

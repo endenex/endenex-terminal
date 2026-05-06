@@ -1,9 +1,4 @@
-// ── Chart N + O — Geographic asset map + choropleth ────────────────────────
-// react-simple-maps based world map. Two modes:
-//   mode='dots'        — pin each asset (lat/lon) coloured by EOL year
-//   mode='choropleth'  — shade countries by aggregate metric (e.g. GW reaching EOL)
-//
-// World topojson loaded from CDN (~200KB cached). No tile server needed.
+// ── Chart N + O — Geographic asset map + choropleth (light) ────────────────
 
 import { useState, useMemo } from 'react'
 import {
@@ -24,12 +19,11 @@ export interface AssetPin {
 }
 
 export interface CountryMetric {
-  country_code: string   // ISO alpha-2 (we'll map to ISO numeric inside)
+  country_code: string
   value:        number
   label:        string
 }
 
-// ISO alpha-2 → numeric (for choropleth matching against world-atlas country IDs)
 const ISO2_TO_NUMERIC: Record<string, string> = {
   GB: '826', DE: '276', FR: '250', ES: '724', IT: '380', NL: '528', PL: '616',
   DK: '208', SE: '752', NO: '578', FI: '246', PT: '620', BE: '056', AT: '040',
@@ -38,25 +32,25 @@ const ISO2_TO_NUMERIC: Record<string, string> = {
 }
 
 function eolColour(eol: number | null, today: number): string {
-  if (eol === null) return '#9BB5BB'
-  if (eol < today)        return '#C03939'   // past
-  if (eol <= today + 5)   return '#E89C2C'   // near
-  if (eol <= today + 10)  return '#3D8A9A'   // mid
-  return '#5A8A95'                            // far
+  if (eol === null) return '#98A1AE'
+  if (eol < today)        return '#C73838'
+  if (eol <= today + 5)   return '#D97706'
+  if (eol <= today + 10)  return '#0E7A86'
+  return '#0A5C66'
 }
 
 function choroplethColour(v: number, max: number): string {
-  if (v <= 0 || max <= 0) return '#F4F5F7'
+  if (v <= 0 || max <= 0) return '#F4F6F9'
   const intensity = Math.min(v / max, 1)
-  // Teal scale
-  const r = Math.round(180 - intensity * 173)
-  const g = Math.round(220 - intensity * 97)
-  const b = Math.round(220 - intensity * 82)
+  // Light teal scale
+  const r = Math.round(228 - intensity * 214)
+  const g = Math.round(241 - intensity * 119)
+  const b = Math.round(243 - intensity * 109)
   return `rgb(${r},${g},${b})`
 }
 
 export function WorldAssetMap({
-  pins = [], metrics = [], mode = 'dots', height = 480,
+  pins = [], metrics = [], mode = 'dots', height = 380,
 }: {
   pins?:    AssetPin[]
   metrics?: CountryMetric[]
@@ -67,7 +61,6 @@ export function WorldAssetMap({
   const [hoverCountry, setHoverCountry] = useState<{ name: string; value?: number } | null>(null)
   const todayYear = new Date().getFullYear()
 
-  // Map numeric ID → metric (for choropleth)
   const metricByNumeric = useMemo(() => {
     const m = new Map<string, CountryMetric>()
     for (const x of metrics) {
@@ -84,7 +77,7 @@ export function WorldAssetMap({
       <ComposableMap
         projectionConfig={{ scale: 150 }}
         width={900} height={height}
-        style={{ width: '100%', height: '100%', background: '#F4F5F7' }}
+        style={{ width: '100%', height: '100%', background: '#F2F4F7' }}
       >
         <ZoomableGroup center={[10, 30]} zoom={1.2}>
           <Geographies geography={TOPO_URL}>
@@ -92,15 +85,13 @@ export function WorldAssetMap({
               geographies.map((geo) => {
                 const numId = String(geo.id)
                 const metric = mode === 'choropleth' ? metricByNumeric.get(numId) : undefined
-                const fill = metric
-                  ? choroplethColour(metric.value, maxMetric)
-                  : '#FFFFFF'
+                const fill = metric ? choroplethColour(metric.value, maxMetric) : '#FFFFFF'
                 return (
                   <Geography
                     key={geo.rsmKey}
                     geography={geo}
                     fill={fill}
-                    stroke="#E5E8EC"
+                    stroke="#D6DBE0"
                     strokeWidth={0.4}
                     onMouseEnter={() => setHoverCountry({
                       name:  (geo as { properties?: { name?: string } }).properties?.name ?? '',
@@ -109,7 +100,7 @@ export function WorldAssetMap({
                     onMouseLeave={() => setHoverCountry(null)}
                     style={{
                       default: { outline: 'none' },
-                      hover:   { outline: 'none', fill: metric ? '#007B8A' : '#E5E8EC' },
+                      hover:   { outline: 'none', fill: metric ? '#0E7A86' : '#E4F1F3' },
                       pressed: { outline: 'none' },
                     }}
                   />
@@ -124,8 +115,8 @@ export function WorldAssetMap({
                 r={pin.capacity_mw ? Math.max(2, Math.min(7, Math.log(pin.capacity_mw + 1) * 1.6)) : 2.5}
                 fill={eolColour(pin.eol_year, todayYear)}
                 stroke="#FFFFFF"
-                strokeWidth={0.4}
-                opacity={0.85}
+                strokeWidth={0.5}
+                opacity={0.9}
                 onMouseEnter={() => setHoverPin(pin)}
                 onMouseLeave={() => setHoverPin(null)}
                 style={{ cursor: 'pointer' }}
@@ -135,15 +126,14 @@ export function WorldAssetMap({
         </ZoomableGroup>
       </ComposableMap>
 
-      {/* Tooltip overlay */}
       {(hoverPin || hoverCountry) && (
-        <div className="absolute top-2 left-2 bg-panel border border-border rounded shadow px-3 py-2 text-[11px] pointer-events-none">
+        <div className="absolute top-1.5 left-1.5 bg-panel border border-border rounded-sm px-2 py-1 text-[11.5px] pointer-events-none shadow-panel-float">
           {hoverPin && (
             <>
               <p className="font-semibold text-ink">{hoverPin.site_name ?? '(unnamed)'}</p>
               <p className="text-ink-3">{hoverPin.country_code} · {hoverPin.asset_class.replace(/_/g,' ')}</p>
-              {hoverPin.capacity_mw != null && <p className="text-ink-2">{hoverPin.capacity_mw.toFixed(1)} MW</p>}
-              {hoverPin.eol_year != null && <p className="text-ink-3">EOL year: {hoverPin.eol_year}</p>}
+              {hoverPin.capacity_mw != null && <p className="text-ink-2 tabular-nums">{hoverPin.capacity_mw.toFixed(1)} MW</p>}
+              {hoverPin.eol_year != null && <p className="text-ink-3">EOL {hoverPin.eol_year}</p>}
             </>
           )}
           {hoverCountry && !hoverPin && (
@@ -155,22 +145,21 @@ export function WorldAssetMap({
         </div>
       )}
 
-      {/* Legend */}
-      <div className="absolute bottom-2 left-2 bg-panel border border-border rounded shadow px-3 py-2 text-[10px] flex items-center gap-3">
+      <div className="absolute bottom-1.5 left-1.5 bg-panel border border-border rounded-sm px-2 py-1 text-[10.5px] flex items-center gap-2">
         {mode === 'dots' ? (
           <>
-            <span className="font-semibold text-ink-3 uppercase tracking-wide">EOL Horizon</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-down inline-block" /> past</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full inline-block" style={{background:'#E89C2C'}} /> ≤5y</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full inline-block" style={{background:'#3D8A9A'}} /> 5-10y</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full inline-block" style={{background:'#5A8A95'}} /> &gt;10y</span>
+            <span className="font-semibold text-ink-3 uppercase tracking-wide">EOL</span>
+            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-down inline-block" />past</span>
+            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full inline-block" style={{background:'#D97706'}} />≤5y</span>
+            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full inline-block" style={{background:'#0E7A86'}} />5-10y</span>
+            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full inline-block" style={{background:'#0A5C66'}} />&gt;10y</span>
           </>
         ) : (
           <>
             <span className="font-semibold text-ink-3 uppercase tracking-wide">Density</span>
-            <span className="text-ink-3">low</span>
-            <div className="w-24 h-2 rounded" style={{ background: 'linear-gradient(to right, #DCE2DD, #007B8A)' }} />
-            <span className="text-ink-3">high</span>
+            <span className="text-ink-4">low</span>
+            <div className="w-20 h-1.5 rounded-sm" style={{ background: 'linear-gradient(to right, #E4F1F3, #0E7A86)' }} />
+            <span className="text-ink-4">high</span>
           </>
         )}
       </div>

@@ -3,81 +3,160 @@
 @tailwind utilities;
 
 @layer base {
+  html, body, #root {
+    @apply bg-page text-ink;
+    color-scheme: light;
+  }
+
   body {
-    @apply font-sans antialiased bg-page text-ink;
-    font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1, 'tnum' 1;
+    @apply font-sans antialiased;
+    font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1, 'tnum' 1, 'cv11' 1, 'ss01' 1;
     font-variant-numeric: tabular-nums;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.005em;
+    font-size: 13px;
+    line-height: 1.45;
   }
 
-  /* Tabular nums everywhere — column alignment without monospace */
+  /* Tabular numerals everywhere — column alignment without monospace */
   * {
     font-variant-numeric: tabular-nums;
-    font-feature-settings: 'tnum' 1, 'cv11' 1;
+    font-feature-settings: 'tnum' 1, 'cv11' 1, 'ss01' 1;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: #0A1628;
   }
 }
 
-/* ── Panel chrome ──────────────────────────────────────────────────────────── */
+/* ── Panel chrome — sharp 1px borders, no shadow ──────────────────────────── */
 
 .panel-shell {
-  @apply bg-panel border border-border rounded shadow-panel transition-shadow duration-150;
+  @apply bg-panel border border-border rounded-sm overflow-hidden flex flex-col;
 }
 .panel-shell:hover {
-  @apply shadow-panel-md;
+  @apply border-border-strong;
 }
 
 .panel-titlebar {
-  @apply flex items-center justify-between px-3 py-2 border-b border-border bg-titlebar flex-shrink-0;
+  @apply flex items-center justify-between px-2.5 h-7 border-b border-border bg-titlebar flex-shrink-0;
 }
 
-/* ── Dockview overrides (kept in case dockview used in Phase 2) ────────────── */
-
-.endenex-dockview {
-  --dv-background-color:                            #F4F5F7;
-  --dv-group-view-background-color:                 #F4F5F7;
-  --dv-tabs-and-actions-container-background-color: #FFFFFF;
-  --dv-tabs-and-actions-container-height:           34px;
-  --dv-tab-height:                                  34px;
-  --dv-activegroup-visiblepanel-tab-background-color: #F4F5F7;
-  --dv-activegroup-visiblepanel-tab-color:          #0A1628;
-  --dv-activegroup-hiddenpanel-tab-background-color:#FFFFFF;
-  --dv-activegroup-hiddenpanel-tab-color:           #6B7585;
-  --dv-tab-divider-color:                           #E5E8EC;
-  --dv-separator-border:                            #E5E8EC;
-  --dv-drag-over-background-color:                  rgba(0,123,138,0.06);
-  --dv-drag-over-border-color:                      #007B8A;
+.panel-body {
+  @apply flex-1 min-h-0 overflow-auto;
 }
 
-/* ── Number and unit helpers ────────────────────────────────────────────────── */
+/* ── Section / sub-headers ─────────────────────────────────────────────────── */
 
-/*
-  .num  — any numeric data value (tabular-nums, medium weight)
-  .unit — currency / unit suffix (tertiary colour, 85% size)
-  .delta-up / .delta-down — directional move indicators
-*/
+.label-xs {
+  @apply text-[10.5px] font-semibold text-ink-3 uppercase tracking-[0.06em];
+}
+
+.label-sm {
+  @apply text-[11px] font-semibold text-ink-3 uppercase tracking-[0.05em];
+}
+
+/* ── Number and unit helpers ───────────────────────────────────────────────── */
 
 .num {
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1, 'cv11' 1;
   font-weight: 500;
+  color: #0A1628;
+}
+
+.num-lg {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: 17px;
+  letter-spacing: -0.015em;
+  color: #0A1628;
 }
 
 .unit {
-  font-size: 0.85em;
+  font-size: 0.8em;
   font-weight: 400;
-  color: #6B7585;
-  margin-left: 0.1em;
+  color: #98A1AE;
+  margin-left: 0.15em;
   letter-spacing: 0;
 }
 
-.delta-up   { color: #1F8A5C; }
-.delta-down { color: #B53C3C; }
+.delta-up   { color: #0F8B58; }
+.delta-down { color: #C73838; }
+.delta-flat { color: #98A1AE; }
 
-/* ── Scrollbar (light theme) ────────────────────────────────────────────────── */
+/* ── Data table density (light context) ────────────────────────────────────── */
 
-::-webkit-scrollbar       { width: 6px; height: 6px; }
+.table-tight th {
+  @apply text-[10.5px] font-semibold text-ink-3 uppercase tracking-wide bg-titlebar
+         px-2.5 py-1.5 text-left border-b border-border whitespace-nowrap;
+}
+
+.table-tight td {
+  @apply text-[12.5px] text-ink-2 px-2.5 py-1.5 border-b border-border/70 whitespace-nowrap;
+}
+
+.table-tight tr:hover td {
+  @apply bg-raised;
+}
+
+.table-tight td.num {
+  @apply text-ink text-right tabular-nums;
+}
+
+/* ── Divider ───────────────────────────────────────────────────────────────── */
+
+.cell-divider {
+  @apply w-px h-3 bg-border mx-2;
+}
+
+/* ── Scrollbar (light) ─────────────────────────────────────────────────────── */
+
+::-webkit-scrollbar       { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #D0D5DB; border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: #C5CBD3; border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: #98A1AE; }
+
+/* Recharts overrides — light tooltip */
+.recharts-default-tooltip {
+  background: #FFFFFF !important;
+  border: 1px solid #D6DBE0 !important;
+  border-radius: 2px !important;
+  font-size: 12px !important;
+  color: #0A1628 !important;
+  box-shadow: 0 2px 8px rgba(10,22,40,0.08) !important;
+}
+.recharts-tooltip-label { color: #6B7585 !important; }
+.recharts-cartesian-axis-tick text { fill: #98A1AE !important; font-size: 11px !important; }
+.recharts-cartesian-grid-horizontal line,
+.recharts-cartesian-grid-vertical line { stroke: #E5E8EC !important; }
+
+::selection { background: rgba(14,122,134,0.18); color: #0A1628; }
+
+/* ── Ticker tape scroll animation ──────────────────────────────────────────── */
+
+@keyframes ticker-scroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.ticker-track {
+  display: inline-flex;
+  align-items: center;
+  animation: ticker-scroll 60s linear infinite;
+  white-space: nowrap;
+  will-change: transform;
+}
+
+.ticker-track:hover {
+  animation-play-state: paused;
+}
+
+.ticker-mask {
+  mask-image: linear-gradient(to right, transparent 0, black 24px, black calc(100% - 24px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0, black 24px, black calc(100% - 24px), transparent 100%);
+}

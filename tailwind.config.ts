@@ -1,86 +1,121 @@
 import type { Config } from 'tailwindcss'
 
+// ── Endenex Terminal — design tokens v3 ──────────────────────────────────────
+// BloombergNEF-style light palette. White panels on cool-grey workspace, deep
+// navy ink, BNEF-amber + teal accents. Dense layout, sharp 1px borders, no
+// shadows, readable type (13px base).
+
 export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
       colors: {
-        // ── Light surface palette ─────────────────────────────────────────────
-        page:     '#F4F5F7',   // cool grey — workspace background
-        canvas:   '#FAFBFC',   // near-white — sub-panel areas
-        panel:    '#FFFFFF',   // white — panel surfaces
-        titlebar: '#EFF1F4',   // light grey — panel titlebars
-        active:   '#E6F2F4',   // teal-tinted — active state surfaces
+        // ── Surfaces (light stack) ───────────────────────────────────────────
+        page:     '#F2F4F7',   // workspace background — cool grey
+        canvas:   '#FAFBFC',   // toolbar / strip backgrounds — near-white
+        panel:    '#FFFFFF',   // primary panel surface
+        titlebar: '#F4F6F9',   // panel header — distinct from panel
+        active:   '#E4F1F3',   // selected / active — teal-tinted
+        raised:   '#F7F9FB',   // hover states
 
-        // ── Borders (light context) ───────────────────────────────────────────
+        // ── Borders ──────────────────────────────────────────────────────────
         border: {
-          DEFAULT: '#E5E8EC',
-          strong:  '#D0D5DB',
-          focus:   '#007B8A',
+          DEFAULT: '#D6DBE0',   // visible, sharp — not the wishy-washy E5
+          strong:  '#B5BCC4',
+          focus:   '#0E7A86',
         },
 
-        // ── Text (light context) ──────────────────────────────────────────────
+        // ── Text ─────────────────────────────────────────────────────────────
         ink: {
-          DEFAULT: '#0A1628',   // primary — brand navy
-          '2':     '#4A5566',   // secondary
+          DEFAULT: '#0A1628',   // primary — deep navy, near-black
+          '2':     '#3D4759',   // secondary
           '3':     '#6B7585',   // tertiary
-          '4':     '#98A1AE',   // quaternary
+          '4':     '#98A1AE',   // quaternary — labels, units
+          '5':     '#C5CBD3',   // disabled / placeholder
         },
 
-        // ── Top chrome (dark navy anchor) ─────────────────────────────────────
+        // ── Top chrome (deep navy anchor for brand) ───────────────────────────
         chrome: {
           bg:     '#0A1628',
-          raised: '#122035',
+          raised: '#152238',
           text:   '#E8EAED',
           muted:  '#A0A9B7',
           border: '#1F2D40',
         },
 
-        // ── Accents ───────────────────────────────────────────────────────────
+        // ── Accents (deeper for light bg contrast) ────────────────────────────
         teal: {
-          DEFAULT: '#007B8A',
+          DEFAULT: '#0E7A86',   // primary teal — readable on white
           bright:  '#14A4B4',
-          deep:    '#005966',
+          deep:    '#0A5C66',
+          dim:     '#E4F1F3',
+        },
+        amber: {
+          DEFAULT: '#D97706',   // BNEF-style orange/amber
+          bright:  '#F59E0B',
+          dim:     '#FEF3E2',
         },
 
-        // ── Data colours (institutional — muted, not retail) ──────────────────
-        up:        '#1F8A5C',
-        down:      '#B53C3C',
-        highlight: '#C77E0A',
+        // ── Data colours (institutional — saturated for white bg) ─────────────
+        up:        '#0F8B58',
+        'up-dim':  '#E6F4EC',
+        down:      '#C73838',
+        'down-dim':'#FBE9E9',
+        highlight: '#D97706',
 
         // ── Role label colours ────────────────────────────────────────────────
-        product: '#C77E0A',   // amber — Product tabs (DCI, Portfolio)
-        moat:    '#007B8A',   // teal  — Processing Capacity Monitor
+        product: '#D97706',
+        moat:    '#0E7A86',
 
-        // ── Legacy terminal-* aliases (kept so older component refs don't break)
+        // ── Legacy terminal-* aliases (light context) ─────────────────────────
         terminal: {
-          black:        '#F4F5F7',   // remapped → page bg (was dark)
-          surface:      '#FFFFFF',   // remapped → panel white
-          border:       '#E5E8EC',   // remapped → light border
-          text:         '#0A1628',   // remapped → primary ink
-          muted:        '#6B7585',   // remapped → tertiary ink
-          teal:         '#007B8A',
+          black:        '#F2F4F7',
+          surface:      '#FFFFFF',
+          border:       '#D6DBE0',
+          text:         '#0A1628',
+          muted:        '#6B7585',
+          teal:         '#0E7A86',
           'teal-light': '#14A4B4',
           navy:         '#0A1628',
-          'navy-light': '#122035',
+          'navy-light': '#152238',
           'navy-border':'#1F2D40',
-          grey:         '#F4F5F7',
-          'grey-dark':  '#E8E9EC',
+          grey:         '#F2F4F7',
+          'grey-dark':  '#E8EAED',
           white:        '#FFFFFF',
-          red:          '#B53C3C',
-          green:        '#1F8A5C',
+          red:          '#C73838',
+          green:        '#0F8B58',
         },
       },
 
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
-        mono: ['Inter', 'system-ui', 'sans-serif'],   // no code fonts
+        mono: ['Inter', 'system-ui', 'sans-serif'],
       },
 
+      fontSize: {
+        // Terminal-tuned scale — denser than tailwind defaults but readable
+        '2xs':  ['10.5px', { lineHeight: '14px' }],
+        'xs':   ['11.5px', { lineHeight: '15px' }],
+        'sm':   ['12.5px', { lineHeight: '17px' }],
+        'base': ['13.5px', { lineHeight: '19px' }],
+        'lg':   ['15px',   { lineHeight: '21px' }],
+        'xl':   ['17px',   { lineHeight: '23px' }],
+        '2xl':  ['20px',   { lineHeight: '26px' }],
+      },
+
+      // Sharp 1px borders, no soft shadows on panels.
+      // Floating overlays get a single subtle one.
       boxShadow: {
-        panel:       '0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)',
-        'panel-md':  '0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04)',
-        'panel-float':'0 8px 32px rgba(0,0,0,0.14), 0 2px 8px rgba(0,0,0,0.08)',
+        panel:        'none',
+        'panel-md':   'none',
+        'panel-float':'0 8px 32px rgba(10,22,40,0.14), 0 2px 8px rgba(10,22,40,0.06)',
+      },
+
+      borderRadius: {
+        DEFAULT: '2px',
+        sm:      '2px',
+        md:      '3px',
+        lg:      '4px',
       },
     },
   },

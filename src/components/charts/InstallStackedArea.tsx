@@ -1,5 +1,4 @@
-// ── Chart G — Installation pipeline stacked area ───────────────────────────
-// Stacked area: GW installed per year by sub-region.
+// ── Chart G — Installation pipeline stacked area (light) ───────────────────
 
 import { useMemo } from 'react'
 import {
@@ -13,18 +12,17 @@ interface Row {
 }
 
 const SUBREGION_COLORS: Record<string, string> = {
-  Scotland:           '#0A1628',
-  England:            '#007B8A',
-  Wales:              '#C4863A',
-  'Northern Ireland': '#4A9BAA',
-  Total:              '#007B8A',
+  Scotland:           '#0E7A86',
+  England:            '#14A4B4',
+  Wales:              '#D97706',
+  'Northern Ireland': '#0F8B58',
+  Total:              '#0E7A86',
 }
 
 export function InstallStackedArea({
   rows, regions,
 }: {
   rows: Row[]
-  /** Ordered list of sub-regions to stack (top to bottom) */
   regions: string[]
 }) {
   const data = useMemo(() => {
@@ -38,27 +36,27 @@ export function InstallStackedArea({
   }, [rows])
 
   if (data.length === 0) {
-    return <div className="h-56 flex items-center justify-center text-[12px] text-ink-3">No installation data</div>
+    return <div className="h-48 flex items-center justify-center text-[11.5px] text-ink-4">—</div>
   }
 
   return (
-    <div className="h-72">
+    <div className="h-60">
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#E5E8EC" vertical={false} />
-          <XAxis dataKey="year" tick={{ fill: '#98A1AE', fontSize: 10 }} axisLine={false} tickLine={false} />
-          <YAxis tick={{ fill: '#98A1AE', fontSize: 10 }} axisLine={false} tickLine={false} width={40}
-                 label={{ value: 'GW', angle: -90, position: 'insideLeft', fill: '#98A1AE', fontSize: 10 }} />
+        <AreaChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="2 4" stroke="#E5E8EC" vertical={false} />
+          <XAxis dataKey="year" tick={{ fill: '#98A1AE', fontSize: 11 }} axisLine={false} tickLine={false} />
+          <YAxis tick={{ fill: '#98A1AE', fontSize: 11 }} axisLine={false} tickLine={false} width={36}
+                 label={{ value: 'GW', angle: -90, position: 'insideLeft', fill: '#98A1AE', fontSize: 11 }} />
           <Tooltip
-            contentStyle={{ background: '#FFFFFF', border: '1px solid #E5E8EC', borderRadius: 6, fontSize: 11, color: '#0A1628' }}
+            contentStyle={{ background: '#FFFFFF', border: '1px solid #D6DBE0', borderRadius: 2, fontSize: 12, color: '#0A1628' }}
             formatter={(v: unknown, name: unknown) => [`${(v as number).toFixed(2)} GW`, name as string]}
           />
-          <Legend wrapperStyle={{ fontSize: 10 }} iconSize={8} />
+          <Legend wrapperStyle={{ fontSize: 11, color: '#6B7585' }} iconSize={8} />
           {regions.map(r => (
             <Area key={r} type="monotone" dataKey={r} stackId="1"
-                  stroke={SUBREGION_COLORS[r] ?? '#007B8A'}
-                  fill={SUBREGION_COLORS[r] ?? '#007B8A'}
-                  fillOpacity={0.85} isAnimationActive={false} />
+                  stroke={SUBREGION_COLORS[r] ?? '#0E7A86'}
+                  fill={SUBREGION_COLORS[r] ?? '#0E7A86'}
+                  fillOpacity={0.75} isAnimationActive={false} />
           ))}
         </AreaChart>
       </ResponsiveContainer>

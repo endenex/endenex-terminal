@@ -1,64 +1,60 @@
 import { clsx } from 'clsx'
 
-// Single shimmer bar
+// Single shimmer bar — uses page (slightly grey) for contrast on white panels
 export function SkeletonBar({ className }: { className?: string }) {
   return (
-    <div className={clsx('animate-pulse bg-terminal-surface rounded', className)} />
+    <div className={clsx('animate-pulse bg-page rounded-sm', className)} />
   )
 }
 
-// A row that mimics a data feed item: meta strip + headline + summary
 export function SkeletonFeedRow() {
   return (
-    <div className="px-5 py-4 border-b border-terminal-border">
-      <div className="flex items-center gap-2 mb-2.5">
-        <SkeletonBar className="h-3 w-16" />
-        <SkeletonBar className="h-4 w-20 rounded-sm" />
-        <SkeletonBar className="h-3 w-24" />
-        <SkeletonBar className="h-3 w-10 ml-auto" />
+    <div className="px-2.5 py-2 border-b border-border">
+      <div className="flex items-center gap-2 mb-1.5">
+        <SkeletonBar className="h-2.5 w-14" />
+        <SkeletonBar className="h-3 w-16 rounded-sm" />
+        <SkeletonBar className="h-2.5 w-20" />
+        <SkeletonBar className="h-2.5 w-8 ml-auto" />
       </div>
-      <SkeletonBar className="h-3.5 w-4/5 mb-1.5" />
-      <SkeletonBar className="h-3 w-2/3" />
+      <SkeletonBar className="h-3 w-4/5 mb-1" />
+      <SkeletonBar className="h-2.5 w-2/3" />
     </div>
   )
 }
 
-// A row that mimics a price table row: label | value | date
 export function SkeletonPriceRow() {
   return (
-    <div className="flex items-center justify-between px-4 py-3 border-b border-terminal-border last:border-0">
-      <SkeletonBar className="h-3 w-32" />
-      <div className="flex items-center gap-3">
-        <SkeletonBar className="h-3 w-20" />
-        <SkeletonBar className="h-3 w-12" />
+    <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-border last:border-0">
+      <SkeletonBar className="h-2.5 w-28" />
+      <div className="flex items-center gap-2">
+        <SkeletonBar className="h-2.5 w-16" />
+        <SkeletonBar className="h-2.5 w-10" />
       </div>
     </div>
   )
 }
 
-// A row that mimics a table data row (projects, generic)
 export function SkeletonTableRow({ cols = 6 }: { cols?: number }) {
-  const widths = ['w-40', 'w-20', 'w-16', 'w-24', 'w-16', 'w-14', 'w-20', 'w-16']
+  const widths = ['w-32', 'w-16', 'w-14', 'w-20', 'w-14', 'w-12', 'w-16', 'w-14']
   return (
-    <tr className="border-b border-terminal-border">
+    <tr className="border-b border-border">
       {Array.from({ length: cols }).map((_, i) => (
-        <td key={i} className={i === 0 ? 'pl-6 py-3 pr-3' : 'py-3 pr-3'}>
-          <SkeletonBar className={clsx('h-3 animate-pulse', widths[i % widths.length])} />
+        <td key={i} className={i === 0 ? 'pl-2.5 py-1.5 pr-2' : 'py-1.5 pr-2'}>
+          <SkeletonBar className={clsx('h-2.5 animate-pulse', widths[i % widths.length])} />
         </td>
       ))}
     </tr>
   )
 }
 
-// A compact row for dashboard panels (project name + stage badge)
 export function SkeletonCompactRow() {
   return (
-    <div className="flex items-center justify-between px-4 py-2.5 border-b border-terminal-border last:border-0">
-      <div className="space-y-1.5">
-        <SkeletonBar className="h-3 w-36" />
-        <SkeletonBar className="h-2.5 w-24" />
+    <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-border last:border-0">
+      <div className="space-y-1">
+        <SkeletonBar className="h-2.5 w-32" />
+        <SkeletonBar className="h-2 w-20" />
       </div>
-      <SkeletonBar className="h-5 w-16 rounded" />
+      <SkeletonBar className="h-3.5 w-12 rounded-sm" />
     </div>
   )
 }

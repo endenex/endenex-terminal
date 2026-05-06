@@ -1,6 +1,5 @@
 // ── Tab navigation strip ────────────────────────────────────────────────────
-// Light strip below top chrome — seven tabs with role labels.
-// Spec: Product Brief v1.0 §4.1, §4.2
+// Light strip below top chrome — function-key style with role tags.
 
 import { clsx } from 'clsx'
 import { PANELS, PANEL_ORDER, type PanelId } from '@/config/panels'
@@ -11,55 +10,60 @@ interface TabNavProps {
 }
 
 const ROLE_COLOUR: Record<string, string> = {
-  default: 'text-ink-3',
-  product: 'text-highlight',
+  default: 'text-ink-4',
+  product: 'text-amber',
   moat:    'text-teal',
 }
 
 export function TabNav({ active, onSelect }: TabNavProps) {
   return (
-    <div className="flex-shrink-0 bg-panel border-b border-border flex items-stretch select-none">
+    <div className="flex-shrink-0 h-10 bg-canvas border-b border-border flex items-stretch select-none">
       {PANEL_ORDER.map((id, idx) => {
-        const meta   = PANELS[id]
+        const meta     = PANELS[id]
         const isActive = id === active
         return (
           <button
             key={id}
             onClick={() => onSelect(id)}
             className={clsx(
-              'relative flex flex-col items-start justify-center px-5 py-2 border-r border-border text-left transition-colors',
-              'hover:bg-active/50',
-              isActive ? 'bg-page' : 'bg-panel',
+              'relative flex items-center gap-2 px-3 h-full border-r border-border text-left transition-colors',
+              isActive
+                ? 'bg-panel'
+                : 'bg-canvas hover:bg-raised',
             )}
           >
-            {/* Active indicator */}
             {isActive && (
               <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-teal" />
             )}
 
-            {/* Index number */}
-            <span className="text-[9px] font-semibold text-ink-4 tabular-nums mb-0.5">
-              {String(idx + 1).padStart(2, '0')}
+            <span className={clsx(
+              'text-[10px] font-semibold tabular-nums tracking-widest',
+              isActive ? 'text-teal' : 'text-ink-4',
+            )}>
+              F{idx + 1}
             </span>
 
-            {/* Tab title */}
-            <span className={clsx(
-              'text-[11.5px] font-semibold leading-tight whitespace-nowrap',
-              isActive ? 'text-ink' : 'text-ink-2',
-            )}>
-              {meta.title}
-            </span>
-
-            {/* Role label */}
-            <span className={clsx(
-              'text-[9px] font-semibold tracking-wide mt-0.5 whitespace-nowrap',
-              ROLE_COLOUR[meta.roleColor],
-            )}>
-              {meta.role}
-            </span>
+            <div className="flex flex-col items-start">
+              <span className={clsx(
+                'text-[12.5px] font-semibold leading-none whitespace-nowrap',
+                isActive ? 'text-ink' : 'text-ink-2',
+              )}>
+                {meta.title}
+              </span>
+              <span className={clsx(
+                'text-[9.5px] font-semibold tracking-[0.08em] mt-0.5 whitespace-nowrap uppercase',
+                ROLE_COLOUR[meta.roleColor],
+              )}>
+                {meta.role}
+              </span>
+            </div>
           </button>
         )
       })}
+
+      <div className="flex-1 flex items-center justify-end pr-3 gap-3">
+        <span className="text-[10.5px] text-ink-3 tracking-wider uppercase font-medium">⌘K · Search</span>
+      </div>
     </div>
   )
 }

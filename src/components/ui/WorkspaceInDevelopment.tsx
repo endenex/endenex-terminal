@@ -2,11 +2,11 @@ import type { LucideIcon } from 'lucide-react'
 import { Clock } from 'lucide-react'
 
 interface WorkspaceInDevelopmentProps {
-  icon: LucideIcon
-  name: string
+  icon:        LucideIcon
+  name:        string
   description: string
-  features: string[]
-  phase: string
+  features:    string[]
+  phase:       string
 }
 
 export function WorkspaceInDevelopment({
@@ -17,35 +17,33 @@ export function WorkspaceInDevelopment({
   phase,
 }: WorkspaceInDevelopmentProps) {
   return (
-    <div className="max-w-2xl">
-      <div className="border border-terminal-border rounded-lg bg-terminal-surface">
-        <div className="p-6">
-          <div className="flex items-center gap-4 mb-6">
-            <div className="w-10 h-10 bg-terminal-teal/10 rounded-lg flex items-center justify-center flex-shrink-0">
-              <Icon size={20} className="text-terminal-teal" />
+    <div className="max-w-xl">
+      <div className="border border-border rounded-sm bg-panel">
+        <div className="p-3">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-8 h-8 bg-teal-dim border border-teal/30 rounded-sm flex items-center justify-center flex-shrink-0">
+              <Icon size={16} className="text-teal" />
             </div>
             <div>
-              <h2 className="text-terminal-text font-semibold">{name}</h2>
-              <div className="flex items-center gap-2 mt-0.5">
-                <Clock size={11} className="text-terminal-muted" />
-                <span className="text-xs text-terminal-muted">Module in development</span>
-                <span className="text-[10px] font-mono text-terminal-teal border border-terminal-teal/30 rounded px-1.5 py-0.5">
+              <h2 className="text-[15px] font-semibold text-ink leading-tight">{name}</h2>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <Clock size={10} className="text-ink-4" />
+                <span className="text-[11px] text-ink-3">Module in development</span>
+                <span className="text-[10.5px] font-semibold text-teal border border-teal/30 rounded-sm px-1 py-px uppercase tracking-wide bg-teal-dim">
                   {phase}
                 </span>
               </div>
             </div>
           </div>
 
-          <p className="text-terminal-muted text-sm leading-relaxed mb-6">{description}</p>
+          <p className="text-ink-3 text-[12.5px] leading-relaxed mb-3">{description}</p>
 
           <div>
-            <div className="text-[10px] text-terminal-muted font-mono uppercase tracking-wider mb-3">
-              This workspace will include
-            </div>
-            <ul className="space-y-2">
+            <div className="label-xs mb-2">This workspace will include</div>
+            <ul className="space-y-1.5">
               {features.map((f) => (
-                <li key={f} className="flex items-start gap-2.5 text-sm text-terminal-muted">
-                  <div className="w-1.5 h-1.5 rounded-full bg-terminal-teal flex-shrink-0 mt-1.5" />
+                <li key={f} className="flex items-start gap-2 text-[12.5px] text-ink-2">
+                  <div className="w-1 h-1 rounded-full bg-teal flex-shrink-0 mt-1.5" />
                   {f}
                 </li>
               ))}

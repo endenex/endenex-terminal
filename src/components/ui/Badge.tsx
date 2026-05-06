@@ -7,28 +7,29 @@ type BadgeVariant =
   | 'observed' | 'inferred' | 'modelled'
   | 'neutral' | 'coming-soon'
 
+// BNEF-style: pale fill, mid-saturation text and border. Readable on white.
 const VARIANT_STYLES: Record<BadgeVariant, string> = {
-  high:        'bg-emerald-900/30 text-emerald-400 border-emerald-700/50',
-  medium:      'bg-amber-900/30 text-amber-400 border-amber-700/50',
-  low:         'bg-red-900/30 text-red-400 border-red-700/50',
-  confirmed:   'bg-teal-900/30 text-teal-400 border-teal-700/50',
-  active:      'bg-blue-900/30 text-blue-400 border-blue-700/50',
-  candidate:   'bg-violet-900/30 text-violet-400 border-violet-700/50',
-  watchlist:   'bg-terminal-border text-terminal-muted border-terminal-border',
-  phase1:      'bg-emerald-900/30 text-emerald-400 border-emerald-700/50',
-  phase2:      'bg-terminal-border text-terminal-muted border-terminal-border',
-  phase3:      'bg-terminal-border text-terminal-muted border-terminal-border',
-  phase4:      'bg-terminal-border text-terminal-muted border-terminal-border',
-  observed:    'bg-blue-900/30 text-blue-400 border-blue-700/50',
-  inferred:    'bg-amber-900/30 text-amber-400 border-amber-700/50',
-  modelled:    'bg-violet-900/30 text-violet-400 border-violet-700/50',
-  neutral:     'bg-terminal-border text-terminal-muted border-terminal-border',
-  'coming-soon': 'bg-terminal-border text-terminal-muted border-terminal-border',
+  high:        'bg-emerald-50 text-emerald-700 border-emerald-200',
+  medium:      'bg-amber-50 text-amber-700 border-amber-200',
+  low:         'bg-red-50 text-red-700 border-red-200',
+  confirmed:   'bg-teal-50 text-teal-700 border-teal-200',
+  active:      'bg-sky-50 text-sky-700 border-sky-200',
+  candidate:   'bg-violet-50 text-violet-700 border-violet-200',
+  watchlist:   'bg-canvas text-ink-3 border-border',
+  phase1:      'bg-emerald-50 text-emerald-700 border-emerald-200',
+  phase2:      'bg-canvas text-ink-3 border-border',
+  phase3:      'bg-canvas text-ink-3 border-border',
+  phase4:      'bg-canvas text-ink-3 border-border',
+  observed:    'bg-sky-50 text-sky-700 border-sky-200',
+  inferred:    'bg-amber-50 text-amber-700 border-amber-200',
+  modelled:    'bg-violet-50 text-violet-700 border-violet-200',
+  neutral:     'bg-canvas text-ink-3 border-border',
+  'coming-soon':'bg-canvas text-ink-4 border-border',
 }
 
 interface BadgeProps {
-  variant: BadgeVariant
-  children: React.ReactNode
+  variant:    BadgeVariant
+  children:   React.ReactNode
   className?: string
 }
 
@@ -36,9 +37,9 @@ export function Badge({ variant, children, className }: BadgeProps) {
   return (
     <span
       className={clsx(
-        'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border font-mono',
+        'inline-flex items-center px-1.5 py-px rounded-sm text-[10.5px] font-semibold uppercase tracking-wide border',
         VARIANT_STYLES[variant],
-        className
+        className,
       )}
     >
       {children}

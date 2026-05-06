@@ -150,7 +150,7 @@ function PriceDirection({ current, prev }: { current: number; prev: number | und
   if (Math.abs(pct) < 0.05) return null  // effectively flat
   const up = pct > 0
   return (
-    <span className={`inline-flex items-center gap-0.5 text-[11px] font-mono ${up ? 'text-emerald-400' : 'text-red-400'}`}>
+    <span className={`inline-flex items-center gap-0.5 text-[15px] font-mono ${up ? 'text-emerald-400' : 'text-red-400'}`}>
       {up ? '▲' : '▼'}
       {Math.abs(pct).toFixed(1)}%
     </span>
@@ -268,20 +268,20 @@ export function RecoveryValuePage() {
               key={r.code}
               onClick={() => setRegion(r.code)}
               className={clsx(
-                'px-5 py-3 text-xs font-medium border-b-2 transition-colors',
+                'px-2.5 py-1.5 text-xs font-medium border-b-2 transition-colors',
                 region === r.code
                   ? 'border-terminal-teal text-terminal-teal'
                   : 'border-transparent text-terminal-muted hover:text-gray-800'
               )}
             >
               {r.label}
-              <span className="ml-1.5 text-[10px] font-mono opacity-60">{r.currency}</span>
+              <span className="ml-1.5 text-[11px] font-mono opacity-60">{r.currency}</span>
             </button>
           ))}
         </div>
       </div>
 
-      <div className="p-6 space-y-6">
+      <div className="p-3 space-y-2">
 
         {/* ── Scrap Prices ─────────────────────────────────────────── */}
         <div>
@@ -299,10 +299,10 @@ export function RecoveryValuePage() {
               <thead>
                 <tr className="bg-terminal-black border-b border-terminal-border">
                     <SortableTh label="Material"    sortKey="material_type"   sort={priceSort} onSort={priceToggle} className="text-left pl-5 py-2.5 pr-3" />
-                    <th className="text-[10px] text-terminal-muted font-medium tracking-wide uppercase text-left py-2.5 pr-3">Component</th>
+                    <th className="text-[11px] text-terminal-muted font-medium tracking-wide uppercase text-left py-2.5 pr-3">Component</th>
                     <SortableTh label="Price / t"   sortKey="price_per_tonne" sort={priceSort} onSort={priceToggle} className="text-right py-2.5 pr-3" />
-                    <th className="text-[10px] text-terminal-muted font-medium tracking-wide uppercase text-right py-2.5 pr-3">Change</th>
-                    <th className="text-[10px] text-terminal-muted font-medium tracking-wide uppercase py-2.5 pr-3 w-24">Trend</th>
+                    <th className="text-[11px] text-terminal-muted font-medium tracking-wide uppercase text-right py-2.5 pr-3">Change</th>
+                    <th className="text-[11px] text-terminal-muted font-medium tracking-wide uppercase py-2.5 pr-3 w-24">Trend</th>
                     <SortableTh label="Source"      sortKey="source_name"     sort={priceSort} onSort={priceToggle} className="text-left py-2.5 pr-3" />
                     <SortableTh label="Price Date"  sortKey="price_date"      sort={priceSort} onSort={priceToggle} className="text-left py-2.5 pr-3" />
                     <SortableTh label="Confidence"  sortKey="confidence"      sort={priceSort} onSort={priceToggle} className="text-left py-2.5 pr-5" />
@@ -334,7 +334,7 @@ export function RecoveryValuePage() {
                         <td className="py-3 pr-3 text-right">
                           {p && prev
                             ? <PriceDirection current={p.price_per_tonne} prev={prev.price_per_tonne} />
-                            : <span className="text-[11px] font-mono text-terminal-border">—</span>
+                            : <span className="text-[15px] font-mono text-terminal-border">—</span>
                           }
                         </td>
                         <td className="py-2 pr-3">
@@ -385,7 +385,7 @@ export function RecoveryValuePage() {
                     ['Last Reviewed', 'text-left py-2.5 pr-5 font-mono'],
                   ].map(([label, cls]) => (
                     <th key={label} className={clsx(
-                      'text-[10px] text-terminal-muted font-medium tracking-wide uppercase', cls
+                      'text-[11px] text-terminal-muted font-medium tracking-wide uppercase', cls
                     )}>
                       {label}
                     </th>
@@ -434,8 +434,8 @@ export function RecoveryValuePage() {
         </div>
 
         {/* Methodology note */}
-        <div className="bg-terminal-black border border-terminal-border rounded-lg px-5 py-4">
-          <div className="text-[10px] text-terminal-muted font-mono tracking-widest uppercase mb-2">
+        <div className="bg-terminal-black border border-terminal-border rounded-lg px-2 py-1.5">
+          <div className="text-[11px] text-terminal-muted font-mono tracking-widest uppercase mb-2">
             Methodology
           </div>
           <p className="text-xs text-terminal-muted leading-relaxed">

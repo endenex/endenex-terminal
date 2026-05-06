@@ -1,7 +1,5 @@
 // ── Panel chrome shell ──────────────────────────────────────────────────────
-// Wraps every panel with titlebar, drag handle, source label, controls.
-// Spec: Product Brief v1.0 §3.4
-// Controls render visually at MVP; drag/resize/pop-out wired in Phase 2.
+// Sharp 1px border, dense titlebar, no shadow. BNEF-grade light.
 
 import { type ReactNode } from 'react'
 import { clsx } from 'clsx'
@@ -9,11 +7,12 @@ import { useWorkspace } from '@/context/WorkspaceContext'
 import type { PanelId } from '@/config/panels'
 
 interface PanelShellProps {
-  sourceLabel:  string          // e.g. "DCI DASHBOARD" — rendered in small caps
-  title:        string          // e.g. "Spot Indices"
-  linkTo?:      PanelId         // clicking title navigates to this tab
-  children:     ReactNode
-  className?:   string
+  sourceLabel:    string
+  title:          string
+  linkTo?:        PanelId
+  meta?:          ReactNode
+  children:       ReactNode
+  className?:     string
   bodyClassName?: string
 }
 
@@ -21,6 +20,7 @@ export function PanelShell({
   sourceLabel,
   title,
   linkTo,
+  meta,
   children,
   className,
   bodyClassName,
@@ -28,46 +28,32 @@ export function PanelShell({
   const { openPanel } = useWorkspace()
 
   return (
-    <div className={clsx('panel-shell flex flex-col overflow-hidden', className)}>
+    <div className={clsx('panel-shell', className)}>
 
-      {/* Titlebar */}
-      <div className="panel-titlebar gap-2">
+      {/* Titlebar — h-7, dense */}
+      <div className="panel-titlebar">
         <div className="flex items-center gap-2 min-w-0 flex-1">
-          {/* Drag handle (visual only at MVP) */}
-          <span className="text-ink-4 text-[13px] leading-none cursor-grab select-none flex-shrink-0">
-            ⋮⋮
-          </span>
-
-          {/* Source label */}
-          <span className="text-[9.5px] font-semibold tracking-widest uppercase text-ink-3 flex-shrink-0">
-            {sourceLabel}
-          </span>
-
-          <span className="text-ink-4 text-[9px]">·</span>
-
-          {/* Panel title */}
+          <span className="label-xs flex-shrink-0">{sourceLabel}</span>
+          <span className="text-ink-4 text-[10px]">·</span>
           {linkTo ? (
             <button
               onClick={() => openPanel(linkTo)}
-              className="text-[12px] font-semibold text-ink hover:text-teal transition-colors truncate"
+              className="text-[12.5px] font-semibold text-ink hover:text-teal transition-colors truncate"
             >
               {title}
             </button>
           ) : (
-            <span className="text-[12px] font-semibold text-ink truncate">{title}</span>
+            <span className="text-[12.5px] font-semibold text-ink truncate">{title}</span>
           )}
         </div>
-
-        {/* Window controls (visual only at MVP) */}
-        <div className="flex items-center gap-2 text-ink-4 flex-shrink-0">
-          <span className="text-[13px] cursor-default select-none hover:text-ink-2 transition-colors" title="Minimise">⊟</span>
-          <span className="text-[13px] cursor-default select-none hover:text-ink-2 transition-colors" title="Maximise">⊞</span>
-          <span className="text-[12px] cursor-default select-none hover:text-ink-2 transition-colors" title="Close">×</span>
-        </div>
+        {meta && (
+          <div className="flex items-center gap-2 text-[11px] text-ink-3 flex-shrink-0">
+            {meta}
+          </div>
+        )}
       </div>
 
-      {/* Body */}
-      <div className={clsx('flex-1 min-h-0 overflow-auto', bodyClassName)}>
+      <div className={clsx('panel-body', bodyClassName)}>
         {children}
       </div>
 
