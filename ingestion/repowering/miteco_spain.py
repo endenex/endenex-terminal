@@ -206,7 +206,7 @@ def main():
     if not args.dry_run:
         client.table('ingestion_runs').insert({
             'pipeline':           'miteco_spain_repowering',
-            'status':             'failed',
+            'status':             'failure',
             'started_at':         f'{today}T00:00:00Z',
             'finished_at':        f'{today}T00:00:00Z',
             'records_written':    0,
