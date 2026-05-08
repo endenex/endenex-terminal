@@ -1,0 +1,121 @@
+name: Repowering pipeline ingestion
+
+on:
+  schedule:
+    # Mondays 04:00 UTC for Phase 1 source pulls (ERCOT, CAISO, RTE).
+    # Tuesdays 04:00 UTC for Phase 2 (MITECO, Terna).
+    # Wednesdays 04:00 UTC for Phase 3 (SEC EDGAR + LSE RNS).
+    # Thursdays 04:00 UTC for completion-check + developer-enrichment.
+    - cron: '0 4 * * 1'    # Mon — Phase 1
+    - cron: '0 4 * * 2'    # Tue — Phase 2
+    - cron: '0 4 * * 3'    # Wed — Phase 3
+    - cron: '0 4 * * 4'    # Thu — orchestrators
+  workflow_dispatch:
+
+jobs:
+  phase-1-iso-queues:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 4 * * 1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: ingestion/requirements.txt
+      - run: pip install -r ingestion/requirements.txt openpyxl
+      - name: ERCOT GINR
+        working-directory: ingestion
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python -m repowering.ercot_ginr
+      - name: CAISO Queue
+        working-directory: ingestion
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python -m repowering.caiso_queue
+      - name: RTE France Open Data
+        working-directory: ingestion
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python -m repowering.rte_france
+      # AEMO requires a manual URL update each month (latest workbook link
+      # is generated dynamically). Skipping by default; trigger manually
+      # via workflow_dispatch when AEMO publishes the new month.
+
+  phase-2-eu-fragmented:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 4 * * 2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: ingestion/requirements.txt
+      - run: pip install -r ingestion/requirements.txt openpyxl
+      - name: MITECO Spain (LLM-extracted)
+        if: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+        working-directory: ingestion
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python -m repowering.miteco_spain
+      # Terna requires the monthly XLSX URL — update workflow_dispatch when
+      # Terna publishes new month.
+
+  phase-3-corporate-filings:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 4 * * 3'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: ingestion/requirements.txt
+      - run: pip install -r ingestion/requirements.txt
+      - name: SEC EDGAR + LSE RNS
+        if: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+        working-directory: ingestion
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python -m repowering.sec_edgar
+
+  orchestrators:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 4 * * 4'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: ingestion/requirements.txt
+      - run: pip install -r ingestion/requirements.txt
+      - name: Completion check (ongoing → completed_at)
+        if: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+        working-directory: ingestion
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python -m repowering.check_completions
+      - name: Developer enrichment (NULL developer → matched)
+        if: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+        working-directory: ingestion
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python -m repowering.enrich_developers
