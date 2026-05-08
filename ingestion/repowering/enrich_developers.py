@@ -42,6 +42,27 @@ ANTHROPIC_MODEL   = 'claude-haiku-4-5'
 
 MAX_ATTEMPTS = 3   # don't retry forever
 
+# Sources where the developer is structurally confidential during the
+# pre-commissioning phase — running DDG searches against codenames like
+# "GNARLY OSAGE" or "PLUOT" is hopeless because no public source has the
+# attribution. These projects will get developers from EIA Form 860
+# (~12-month lag) or post-IA FERC filings, not from press scraping.
+SKIP_SOURCES = {
+    'caiso_queue',
+    'ercot_giinr',
+    'miso_queue',
+    'pjm_queue',
+    'nyiso_queue',
+    'spp_queue',
+    'aemo_giinr',
+}
+
+# Stop the run after this many consecutive DDG failures. Once DDG starts
+# rate-limiting the runner IP, every subsequent search waits 30s for the
+# timeout — capping prevents 13-minute zombie runs. Telemetry row still
+# gets written so the partial-run shows up.
+MAX_CONSECUTIVE_DDG_FAILS = 5
+
 
 DEV_TOOL = {
     'name':'submit_developer_match',
@@ -65,12 +86,19 @@ DEV_TOOL = {
 }
 
 
-def fetch_unenriched(client, limit: int = 200) -> list[dict]:
+def fetch_unenriched(client, limit: int = 50) -> list[dict]:
+    """Pull projects that need a developer name, excluding queue-stage
+    sources where developer attribution is confidential.
+    """
+    # PostgREST `not.in.(...)` for the source filter; values must be quoted
+    skip_csv = ','.join(f'"{s}"' for s in SKIP_SOURCES)
     res = client.table('repowering_projects') \
         .select('id, project_name, country_code, asset_class, capacity_mw, '
-                'location_description, stage, developer_enrichment_attempts') \
+                'location_description, stage, source_type, '
+                'developer_enrichment_attempts') \
         .is_('developer', 'null') \
         .lt('developer_enrichment_attempts', MAX_ATTEMPTS) \
+        .not_.in_('source_type', f'({skip_csv})') \
         .order('developer_enrichment_attempts', desc=False) \
         .limit(limit).execute()
     return list(res.data or [])
@@ -139,7 +167,7 @@ def llm_developer_match(project: dict, news_blob: str) -> dict | None:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--limit', type=int, default=200, help='Max rows to enrich per run')
+    ap.add_argument('--limit', type=int, default=50, help='Max rows to enrich per run')
     ap.add_argument('--dry-run', action='store_true')
     args = ap.parse_args()
 
@@ -155,12 +183,24 @@ def main():
         log.error('  ANTHROPIC_API_KEY not set — cannot enrich')
         sys.exit(0)
 
-    enriched = attempted = 0
+    enriched = attempted = consecutive_ddg_fails = 0
+    ddg_blocked = False
     for p in projects:
+        if ddg_blocked:
+            break
         log.info(f'  → {p["project_name"]} ({p["country_code"]})')
         attempted += 1
         news = scrape_for_developer(p)
-        result = llm_developer_match(p, news)
+        if not news:
+            consecutive_ddg_fails += 1
+            if consecutive_ddg_fails >= MAX_CONSECUTIVE_DDG_FAILS:
+                log.warning(f'  DDG appears rate-limited ({consecutive_ddg_fails} consecutive empty/failed fetches) — stopping early')
+                ddg_blocked = True
+                # Still increment attempts on this project so it counts
+                # toward the 3-strike limit and we move on next week.
+        else:
+            consecutive_ddg_fails = 0
+        result = llm_developer_match(p, news) if news else None
 
         update: dict = {
             'developer_enrichment_at':       now,
