@@ -60,7 +60,6 @@ jobs:
           cache-dependency-path: ingestion/requirements.txt
       - run: pip install -r ingestion/requirements.txt openpyxl
       - name: MITECO Spain (LLM-extracted)
-        if: ${{ secrets.ANTHROPIC_API_KEY != '' }}
         working-directory: ingestion
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -83,7 +82,6 @@ jobs:
           cache-dependency-path: ingestion/requirements.txt
       - run: pip install -r ingestion/requirements.txt
       - name: SEC EDGAR + LSE RNS
-        if: ${{ secrets.ANTHROPIC_API_KEY != '' }}
         working-directory: ingestion
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -104,7 +102,6 @@ jobs:
           cache-dependency-path: ingestion/requirements.txt
       - run: pip install -r ingestion/requirements.txt
       - name: Completion check (ongoing → completed_at)
-        if: ${{ secrets.ANTHROPIC_API_KEY != '' }}
         working-directory: ingestion
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -112,7 +109,6 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python -m repowering.check_completions
       - name: Developer enrichment (NULL developer → matched)
-        if: ${{ secrets.ANTHROPIC_API_KEY != '' }}
         working-directory: ingestion
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}

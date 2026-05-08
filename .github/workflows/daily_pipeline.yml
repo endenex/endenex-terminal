@@ -209,7 +209,6 @@ jobs:
       # Cost: ~$0.002 per filing on Claude Haiku.
       # Skip if ANTHROPIC_API_KEY not configured.
       - name: 15 · ARO PDF + LLM extraction
-        if: ${{ secrets.ANTHROPIC_API_KEY != '' }}
         working-directory: ingestion
         env:
           CH_API_KEY:                ${{ secrets.CH_API_KEY }}
@@ -226,7 +225,6 @@ jobs:
       # FT-grade and leave it. Idempotent — picks up only un-rewritten rows.
       # Cost: ~$0.0001 per headline on Haiku → ~$7/year.
       - name: 16 · Signal Tape headline rewriter
-        if: ${{ secrets.ANTHROPIC_API_KEY != '' }}
         working-directory: ingestion
         env:
           ANTHROPIC_API_KEY:         ${{ secrets.ANTHROPIC_API_KEY }}
@@ -257,7 +255,6 @@ jobs:
       # Cost: ~$0.005 per operator on Claude Haiku (text-layer PDFs only,
       # no vision needed). Skip if ANTHROPIC_API_KEY not configured.
       - name: 18 · Operator IR ARO extraction
-        if: ${{ secrets.ANTHROPIC_API_KEY != '' }}
         working-directory: ingestion
         env:
           ANTHROPIC_API_KEY:         ${{ secrets.ANTHROPIC_API_KEY }}

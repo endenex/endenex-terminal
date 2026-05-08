@@ -37,8 +37,7 @@ jobs:
         run: python weekly_scrap_price_update.py
 
       - name: Public press scan (Argus / AMM / RecyclingToday / LetsRecycle)
-        # Skip if ANTHROPIC_API_KEY not configured.
-        if: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+        # Script no-ops gracefully if ANTHROPIC_API_KEY is unset.
         working-directory: ingestion
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
