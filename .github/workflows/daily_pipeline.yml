@@ -133,6 +133,18 @@ jobs:
         run: python fetch_lme_scrap_prices.py
         continue-on-error: true
 
+      # ── Step 8b ── FRED PPI scrap series (steel / copper / aluminium)
+      # Long-history monthly mill-payable indices, calibrated to current
+      # spot from scrap_price_benchmarks. Powers the Historical Prices &
+      # Basis chart's "Mill payable (FRED PPI)" line.
+      - name: 8b · Fetch FRED PPI scrap series
+        working-directory: ingestion
+        env:
+          SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python fetch_fred_scrap_history.py --years 10
+        continue-on-error: true
+
       # ── Step 9 ── DCI publications (v1.1, uses fresh prices from Step 8)
       - name: 9 · Compute DCI publications
         working-directory: ingestion
