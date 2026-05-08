@@ -31,7 +31,7 @@ export const PANELS: Record<PanelId, PanelMeta> = {
     roleColor: 'default',
   },
   pcm: {
-    title:     'Processing Capacity Monitor',
+    title:     'Recycling Capacity Monitor',
     role:      'Module · Moat spine',
     roleColor: 'moat',
   },
@@ -48,5 +48,5 @@ export const PANELS: Record<PanelId, PanelMeta> = {
 }
 
 export const PANEL_ORDER: PanelId[] = [
-  'home', 'dci', 'ari', 'smi', 'pcm', 'portfolio', 'watch',
+  'home', 'dci', 'ari', 'smi', 'pcm', 'watch', 'portfolio',
 ]

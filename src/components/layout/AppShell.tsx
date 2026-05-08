@@ -16,7 +16,7 @@ import { DashboardPage }  from '@/pages/DashboardPage'
 import { DciPage }        from '@/pages/DciPage'
 import { RetirementPage } from '@/pages/RetirementPage'
 import { MaterialsPage }  from '@/pages/MaterialsPage'
-import { BladesPage }     from '@/pages/BladesPage'
+import { RecyclingCapacityPage } from '@/pages/RecyclingCapacityPage'
 import { WatchPage }      from '@/pages/WatchPage'
 import { PortfolioPage }  from '@/pages/PortfolioPage'
 
@@ -28,7 +28,7 @@ const PAGE: Record<PanelId, React.FC> = {
   dci:       DciPage,
   ari:       RetirementPage,
   smi:       MaterialsPage,
-  pcm:       BladesPage,
+  pcm:       RecyclingCapacityPage,
   portfolio: PortfolioPage,
   watch:     WatchPage,
 }

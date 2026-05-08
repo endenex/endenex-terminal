@@ -255,7 +255,7 @@ function SignalTapePanel() {
     <Panel
       label="WATCH"
       title="Signal Tape"
-      className="col-span-8 row-span-1"
+      className=""
       meta={
         <div className="flex items-center gap-1.5">
           <div className="flex items-center bg-canvas border border-border rounded-sm p-px">
@@ -471,15 +471,11 @@ function DecomMandatesPanel() {
 
   const rows = events.filter(e => matchesFilter(e.event_type, filter))
 
-  const totalMw    = rows.reduce((s, r) => s + (r.capacity_mw ?? 0), 0)
-  const awardCt    = rows.filter(r => r.event_type === 'Decommissioning award' || r.event_type === 'Repowering award').length
-  const distressCt = rows.filter(r => r.event_type === 'Insolvency').length
-
   return (
     <Panel
       label="WATCH"
-      title="Decom Mandates"
-      className="col-span-4 row-span-1"
+      title="Decommissioning Mandates"
+      className=""
       meta={
         <>
           <div className="flex items-center bg-canvas border border-border rounded-sm p-px">
@@ -497,28 +493,6 @@ function DecomMandatesPanel() {
         </>
       }>
       <div className="flex flex-col h-full">
-        {/* Aggregates strip */}
-        <div className="flex-shrink-0 border-b border-border bg-canvas grid grid-cols-3 divide-x divide-border">
-          <div className="px-2.5 py-1.5">
-            <div className="text-[9.5px] font-semibold text-ink-4 uppercase tracking-wide">Σ MW</div>
-            <div className="text-[13px] font-semibold text-ink tabular-nums leading-none mt-0.5">
-              {totalMw > 0 ? totalMw.toLocaleString('en-GB') : '—'}
-            </div>
-          </div>
-          <div className="px-2.5 py-1.5">
-            <div className="text-[9.5px] font-semibold text-ink-4 uppercase tracking-wide">Awards</div>
-            <div className="text-[13px] font-semibold text-emerald-700 tabular-nums leading-none mt-0.5">
-              {awardCt}
-            </div>
-          </div>
-          <div className="px-2.5 py-1.5">
-            <div className="text-[9.5px] font-semibold text-ink-4 uppercase tracking-wide">Distress</div>
-            <div className="text-[13px] font-semibold text-down tabular-nums leading-none mt-0.5">
-              {distressCt}
-            </div>
-          </div>
-        </div>
-
         {/* Mandate feed */}
         <div className="flex-1 min-h-0 overflow-auto divide-y divide-border/70">
           {loading ? (
@@ -672,7 +646,7 @@ function ProvisionsPanel() {
     <Panel
       label="WATCH"
       title="Provision Disclosures"
-      className="col-span-6"
+      className=""
       meta={
         <>
           <div className="flex items-center bg-canvas border border-border rounded-sm p-px">
@@ -705,7 +679,9 @@ function ProvisionsPanel() {
                   <th className="px-2 py-1 text-left text-[9.5px] font-semibold text-ink-3 uppercase tracking-wide">Operator</th>
                   <th className="px-2 py-1 text-left text-[9.5px] font-semibold text-ink-3 uppercase tracking-wide">Class</th>
                   <th className="px-2 py-1 text-right text-[9.5px] font-semibold text-ink-3 uppercase tracking-wide">ARO</th>
-                  <th className="px-2 py-1 text-right text-[9.5px] font-semibold text-ink-3 uppercase tracking-wide">k/MW</th>
+                  <th className="px-2 py-1 text-right text-[9.5px] font-semibold text-ink-3 uppercase tracking-wide">
+                    <span className="normal-case">k</span>/MW
+                  </th>
                   <th className="px-2 py-1 text-left text-[9.5px] font-semibold text-ink-3 uppercase tracking-wide">FY</th>
                 </tr>
               </thead>
@@ -746,7 +722,7 @@ function ProvisionsPanel() {
                       </td>
                       <td className="px-2 py-0.5 text-right text-[11px] tabular-nums text-ink">
                         {r.total_aro_m === 0 ? <span className="text-ink-4">—</span> :
-                         r.per_mw_k != null ? r.per_mw_k.toFixed(0) : '—'}
+                         r.per_mw_k != null ? `${sym}${r.per_mw_k.toFixed(0)}` : '—'}
                       </td>
                       <td className="px-2 py-0.5">
                         <a href={r.source_url + (r.filing_page ? `#page=${r.filing_page}` : '')}
@@ -976,7 +952,7 @@ function BondsPanel() {
     <Panel
       label="WATCH"
       title="Bond / Guarantee Disclosures"
-      className="col-span-6"
+      className=""
       meta={
         <>
           <div className="flex items-center bg-canvas border border-border rounded-sm p-px">
@@ -1407,7 +1383,7 @@ function BondsPanel() {
                                       <th className="px-2 py-1 text-left text-[9px] font-semibold text-ink-4 uppercase tracking-wide">Beneficiaries</th>
                                       <th className="px-2 py-1 text-right text-[9px] font-semibold text-ink-4 uppercase tracking-wide">Bond</th>
                                       <th className="px-2 py-1 text-right text-[9px] font-semibold text-ink-4 uppercase tracking-wide">
-                                        <span className="normal-case">{groupSym}k</span>/MW
+                                        <span className="normal-case">k</span>/MW
                                       </th>
                                     </tr>
                                   </thead>
@@ -1440,7 +1416,7 @@ function BondsPanel() {
                                           </td>
                                           <td className="px-2 py-0.5 text-right text-[10.5px] tabular-nums">
                                             {pmw != null
-                                              ? <span className={clsx(s.any_mixed && 'text-amber-700')}>{pmw.toFixed(0)}</span>
+                                              ? <span className={clsx(s.any_mixed && 'text-amber-700')}>{rsym}{pmw.toFixed(0)}</span>
                                               : <span className="text-ink-4">—</span>}
                                           </td>
                                         </tr>
@@ -1519,11 +1495,11 @@ export function WatchPage() {
         </div>
       </div>
 
-      {/* 12-col panel grid — viewport-fit, 2 rows, panels scroll internally
-            Row 1: Signal Tape (col-8) + Decom Mandates (col-4)
-            Row 2: Provisions (col-6) + Bonds (col-6) */}
+      {/* 2x2 panel grid — equal column widths, viewport-fit, panels scroll internally
+            Row 1: Signal Tape · Decommissioning Mandates
+            Row 2: Provisions · Bonds */}
       <div className="flex-1 min-h-0 overflow-hidden p-1.5">
-        <div className="h-full grid grid-cols-12 grid-rows-2 gap-1.5">
+        <div className="h-full grid grid-cols-2 grid-rows-2 gap-1.5">
           <SignalTapePanel />
           <DecomMandatesPanel />
           <ProvisionsPanel />
