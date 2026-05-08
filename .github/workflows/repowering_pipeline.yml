@@ -31,18 +31,21 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python -m repowering.ercot_ginr
+        continue-on-error: true
       - name: CAISO Queue
         working-directory: ingestion
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python -m repowering.caiso_queue
+        continue-on-error: true
       - name: RTE France Open Data
         working-directory: ingestion
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python -m repowering.rte_france
+        continue-on-error: true
       # AEMO requires a manual URL update each month (latest workbook link
       # is generated dynamically). Skipping by default; trigger manually
       # via workflow_dispatch when AEMO publishes the new month.
@@ -108,6 +111,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python -m repowering.check_completions
+        continue-on-error: true
       - name: Developer enrichment (NULL developer → matched)
         working-directory: ingestion
         env:
@@ -115,3 +119,4 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python -m repowering.enrich_developers
+        continue-on-error: true

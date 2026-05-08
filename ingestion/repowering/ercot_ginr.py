@@ -63,16 +63,32 @@ ERCOT_STAGE_MAP = {
 
 
 def latest_url() -> str | None:
-    """Walk back month-by-month to find the most recent ERCOT GINR XLS that exists."""
+    """Walk back month-by-month to find the most recent ERCOT GINR XLS that exists.
+
+    ERCOT periodically rejects HEAD requests with 4xx even when GET works,
+    so we try HEAD first and fall back to a Range-limited GET. We also
+    sweep up to 12 months back rather than 4 — if ERCOT pauses publication
+    for any reason, we still find the most recent file.
+    """
     today = date.today()
-    for offset in range(0, 4):   # try this month + 3 back
+    headers = {'User-Agent': 'endenex-terminal/1.0 (operations@endenex.com)'}
+    for offset in range(0, 12):
         d = today - timedelta(days=offset * 30)
         url = ERCOT_URL_TEMPLATE.format(year=d.year, month=d.month)
-        r = requests.head(url, timeout=30, allow_redirects=True,
-                          headers={'User-Agent': 'endenex-terminal/1.0'})
-        if r.status_code == 200:
-            log.info(f'  found ERCOT GINR: {url}')
-            return url
+        try:
+            r = requests.head(url, timeout=30, allow_redirects=True, headers=headers)
+            if r.status_code == 200:
+                log.info(f'  found ERCOT GINR (HEAD): {url}')
+                return url
+            # Some CDNs reject HEAD — fall back to a tiny Range-GET.
+            r = requests.get(url, timeout=30, allow_redirects=True,
+                             headers={**headers, 'Range': 'bytes=0-1'}, stream=True)
+            if r.status_code in (200, 206):
+                log.info(f'  found ERCOT GINR (GET): {url}')
+                return url
+        except requests.RequestException as e:
+            log.warning(f'  probe {url} failed: {e}')
+            continue
     return None
 
 
