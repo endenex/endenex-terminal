@@ -92,12 +92,12 @@ def check_eia_match(client, project: dict) -> dict | None:
     if project['country_code'] != 'US':
         return None
     name_pat = f'%{project["project_name"][:30]}%'
-    # NOTE: `assets` table doesn't have a `status` column (verified via
-    # PostgREST 42703 error in CI). We just need commissioning_date — if
-    # it's populated, treat as completed.
+    # NOTE: `assets` table column is `name` (not `site_name`) and there
+    # is no `status` column — verified against migration 001. We just
+    # need commissioning_date — if it's populated, treat as completed.
     res = client.table('assets') \
         .select('id, commissioning_date') \
-        .ilike('site_name', name_pat) \
+        .ilike('name', name_pat) \
         .eq('country_code', 'US') \
         .limit(1).execute()
     if res.data:

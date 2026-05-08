@@ -195,6 +195,27 @@ def main():
     today = today_iso()
     log.info(f'=== MITECO Spain ingestion · {today} ===')
 
+    # KNOWN ISSUE (verified 2026-05-08): the
+    # /participacion-publica/{abierta,cerrada}.html URL pattern is
+    # dead — both 302 to /es/error/404.html. The current navigation
+    # page at .../consulta-de-proyectos.html is just a menu, not a
+    # project listing. MITECO has moved its environmental-evaluation
+    # search to a database tool we have not yet re-pointed at.
+    # Disabling scrape until rebuild against BOE search or the new
+    # SABIA-style MITECO portal.
+    if not args.dry_run:
+        client.table('ingestion_runs').insert({
+            'pipeline':           'miteco_spain_repowering',
+            'status':             'failed',
+            'started_at':         f'{today}T00:00:00Z',
+            'finished_at':        f'{today}T00:00:00Z',
+            'records_written':    0,
+            'source_attribution': 'MITECO Tramita',
+            'notes':              'DISABLED: source URL pattern dead (404). Replace with BOE search or current MITECO project-consultation database. 17 regional gazettes also still TODO.',
+        }).execute()
+    log.warning('  MITECO disabled — see notes column. Returning early.')
+    return
+
     urls = args.url or MITECO_LISTING_URLS
     inserted = skipped = 0
     for url in urls:

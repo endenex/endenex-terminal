@@ -71,7 +71,7 @@ def fetch_unenriched(client, limit: int = 200) -> list[dict]:
                 'location_description, stage, developer_enrichment_attempts') \
         .is_('developer', 'null') \
         .lt('developer_enrichment_attempts', MAX_ATTEMPTS) \
-        .order('developer_enrichment_attempts', {'ascending': True}) \
+        .order('developer_enrichment_attempts', desc=False) \
         .limit(limit).execute()
     return list(res.data or [])
 

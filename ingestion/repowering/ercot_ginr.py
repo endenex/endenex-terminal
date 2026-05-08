@@ -182,8 +182,20 @@ def main():
 
     url = args.url or latest_url()
     if not url:
-        log.error('  no recent ERCOT GINR XLS found')
-        sys.exit(1)
+        log.error('  no recent ERCOT GINR XLS found within 12-month walk-back')
+        # Write a `failed` telemetry row so the panel surfaces the gap
+        # instead of looking like the source was never attempted.
+        if not args.dry_run:
+            client.table('ingestion_runs').insert({
+                'pipeline':           'ercot_ginr_repowering',
+                'status':             'failed',
+                'started_at':         f'{today}T00:00:00Z',
+                'finished_at':        f'{today}T00:00:00Z',
+                'records_written':    0,
+                'source_attribution': 'ERCOT GINR',
+                'notes':              'No recent monthly XLS discovered. URL pattern may have changed or publication paused.',
+            }).execute()
+        sys.exit(0)   # exit 0 so workflow stays green; failure is recorded in telemetry
 
     xls = fetch_workbook(url)
     log.info(f'  fetched {len(xls)/1024/1024:.1f} MB')

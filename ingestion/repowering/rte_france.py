@@ -131,6 +131,27 @@ def main():
     today = today_iso()
     log.info(f'=== RTE France ingestion · {today} ===')
 
+    # KNOWN ISSUE (2026-05-08): the chosen RTE Open Data dataset is the
+    # "agrege" (aggregated) view — per-commune statistics, NOT per-
+    # installation rows. France's per-installation registry is not
+    # public (Decree 2017-1854 confidentiality), so this source can
+    # never produce project-level repowering rows. Disabling and
+    # writing a failed telemetry row. France project pipeline must
+    # come from prefecture ICPE gazette scraping (TODO, mirrors the
+    # MITECO regional-gazette TODO).
+    if not args.dry_run:
+        client.table('ingestion_runs').insert({
+            'pipeline':           'rte_france_repowering',
+            'status':             'failed',
+            'started_at':         f'{today}T00:00:00Z',
+            'finished_at':        f'{today}T00:00:00Z',
+            'records_written':    0,
+            'source_attribution': 'RTE Open Data',
+            'notes':              'DISABLED: chosen dataset is commune-aggregated, not per-installation. Replace with ICPE prefecture gazette scraper.',
+        }).execute()
+    log.warning('  RTE Open Data disabled — see notes column. Returning early.')
+    return
+
     inserted = skipped = 0
     offset = 0
     page_size = 100

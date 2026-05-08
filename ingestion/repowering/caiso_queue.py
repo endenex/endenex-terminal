@@ -39,15 +39,31 @@ from repowering._base import (
 
 CAISO_URL = 'http://www.caiso.com/Documents/PublicQueueReport.xlsx'
 
-CAISO_STAGE_MAP = {
-    'cluster_study':         'announced',
-    'phase_i_study':         'application_submitted',
-    'phase_ii_study':        'application_submitted',
-    'gia_negotiation':       'application_approved',
-    'gia_executed':          'permitted',
-    'in_service':            'ongoing',
-    'commercial_operation':  'ongoing',
-    'under_construction':    'ongoing',
+# Sheet structure as of May 2026 (verified by direct inspection):
+#   Sheet "Grid GenerationQueue" — active queue (~303 rows)
+#   Header row is row index 3 (rows 0-2 are titles / merged-cell labels)
+#   Type-1 values for renewables: 'Storage', 'Photovoltaic', 'Wind Turbine'
+#   Stage signal comes from "Interconnection Agreement Status" column
+SHEET_NAME = 'Grid GenerationQueue'
+HEADER_ROW = 3   # 0-indexed
+
+# Map CAISO Type-1 values to our asset_class enum
+CAISO_TYPE1_MAP = {
+    'storage':           'bess',
+    'photovoltaic':      'solar_pv',
+    'solar':             'solar_pv',
+    'wind turbine':      'onshore_wind',
+    'wind':              'onshore_wind',
+}
+
+# Map CAISO IA Status → our five-stage enum. IA = Interconnection
+# Agreement; "Executed" means the project has signed terms with the
+# utility, which is closest to our "permitted" stage. Projects still
+# in study phase have IA Status = null.
+CAISO_IA_STAGE_MAP = {
+    'executed':           'permitted',
+    'in progress':        'application_approved',
+    'filed unexecuted':   'application_submitted',
 }
 
 
@@ -64,14 +80,17 @@ def parse_workbook(xls_bytes: bytes) -> list[dict]:
         log.error('openpyxl required: pip install openpyxl')
         sys.exit(1)
     wb = openpyxl.load_workbook(BytesIO(xls_bytes), data_only=True, read_only=True)
-    # CAISO publishes "Grid queue" or "Active Projects" — use first sheet
-    ws = wb[wb.sheetnames[0]]
-    rows = list(ws.iter_rows(values_only=True))
-    if not rows:
+    if SHEET_NAME not in wb.sheetnames:
+        log.error(f'  sheet {SHEET_NAME!r} not found; available: {wb.sheetnames}')
         return []
-    headers = [str(h or '').strip() for h in rows[0]]
+    ws = wb[SHEET_NAME]
+    rows = list(ws.iter_rows(values_only=True))
+    if len(rows) <= HEADER_ROW:
+        return []
+    # Strip newlines from headers (CAISO uses \n inside header strings)
+    headers = [str(h or '').replace('\n', ' ').strip() for h in rows[HEADER_ROW]]
     out: list[dict] = []
-    for r in rows[1:]:
+    for r in rows[HEADER_ROW + 1:]:
         if not r or all(c is None for c in r):
             continue
         out.append(dict(zip(headers, r)))
@@ -79,24 +98,35 @@ def parse_workbook(xls_bytes: bytes) -> list[dict]:
 
 
 def build_row(rec: dict, today: str) -> dict | None:
-    fuel = ((rec.get('Fuel-1') or rec.get('Fuel') or rec.get('Type')) or '').strip()
-    asset_class = normalise_asset_class(fuel)
-    # CAISO tags storage as "BATTERY" or "STORAGE"
-    if not asset_class and 'storage' in fuel.lower() or 'battery' in fuel.lower():
-        asset_class = 'bess'
-    if asset_class not in {'onshore_wind','offshore_wind','solar_pv','bess'}:
-        return None
+    # Asset class — Type-1 carries the primary technology
+    type1 = (rec.get('Type-1') or '').strip().lower()
+    asset_class = CAISO_TYPE1_MAP.get(type1)
+    if not asset_class:
+        return None   # not wind / solar / storage
 
-    project_name = (rec.get('Project Name') or rec.get('Generator Name') or '').strip()
+    project_name = (rec.get('Project Name') or '').strip()
     if not project_name:
         return None
 
-    stage_raw = rec.get('Current Status') or rec.get('Phase') or 'cluster_study'
-    stage = normalise_stage(stage_raw, CAISO_STAGE_MAP) or 'announced'
+    # Stage — prefer IA Status (executed = permitted), fall back to study
+    # process if IA still null
+    ia_status = (rec.get('Interconnection Agreement  Status')
+                 or rec.get('Interconnection Agreement Status') or '').strip().lower()
+    stage = CAISO_IA_STAGE_MAP.get(ia_status)
+    if not stage:
+        # Fall back to phase signal
+        if rec.get('Facilities Study (FAS) or  Phase II Cluster Study'):
+            stage = 'application_approved'
+        elif rec.get('System Impact Study or  Phase I Cluster Study'):
+            stage = 'application_submitted'
+        else:
+            stage = 'announced'
 
-    queue_pos = (rec.get('Queue Position') or rec.get('Queue #') or '').strip() if isinstance(rec.get('Queue Position'), str) else str(rec.get('Queue Position') or '')
+    queue_pos = rec.get('Queue Position')
+    queue_pos = str(queue_pos).strip() if queue_pos is not None else ''
 
-    capacity = rec.get('MW-1') or rec.get('Net MW') or rec.get('MW')
+    # Net MWs to Grid is the export-side capacity; falls back to MW-1
+    capacity = rec.get('Net MWs to Grid') or rec.get('MW-1')
     try:
         capacity_mw = float(capacity) if capacity else None
     except (TypeError, ValueError):
@@ -106,7 +136,8 @@ def build_row(rec: dict, today: str) -> dict | None:
     state = (rec.get('State') or 'CA').strip()
     location = f'{county}, {state}' if county else f'{state}, USA'
 
-    cod = parse_date(rec.get('Proposed On-line Date') or rec.get('Online Date'))
+    cod = parse_date(rec.get('Current On-line Date')
+                     or rec.get('Proposed On-line Date (as filed with IR)'))
 
     return {
         'project_name':        project_name,
