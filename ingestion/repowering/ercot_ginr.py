@@ -180,11 +180,16 @@ def main():
     today = today_iso()
     log.info(f'=== ERCOT GINR ingestion · {today} ===')
 
-    url = args.url or latest_url()
-    if not url:
-        log.error('  no recent ERCOT GINR XLS found within 12-month walk-back')
-        # Write a `failed` telemetry row so the panel surfaces the gap
-        # instead of looking like the source was never attempted.
+    # KNOWN ISSUE (verified 2026-05-08): ercot.com is behind Imperva /
+    # Incapsula WAF. Every direct GIS_Report_Monthly_*.xlsx URL returns
+    # 403 with a bot-detection page, regardless of User-Agent. Bypass
+    # requires headless browser (Playwright) or paid scraping API
+    # (ScrapingBee / ZenRows ~$50/mo). Disabled for now; Texas
+    # repowering data will land via EIA Form 860 with a ~12-month lag.
+    # Honour --url override for manual one-off ingests if you can pull
+    # the file locally and host it somewhere we can fetch.
+    if not args.url:
+        log.warning('  ERCOT direct-scrape disabled (Incapsula WAF). Pass --url to override.')
         if not args.dry_run:
             client.table('ingestion_runs').insert({
                 'pipeline':           'ercot_ginr_repowering',
@@ -193,9 +198,10 @@ def main():
                 'finished_at':        f'{today}T00:00:00Z',
                 'records_written':    0,
                 'source_attribution': 'ERCOT GINR',
-                'notes':              'No recent monthly XLS discovered. URL pattern may have changed or publication paused.',
+                'notes':              'DISABLED: ercot.com fronted by Incapsula WAF — direct file fetch returns 403. Replace with paid scraping bypass or wait for EIA Form 860 (12-month lag).',
             }).execute()
-        sys.exit(0)   # exit 0 so workflow stays green; failure is recorded in telemetry
+        sys.exit(0)
+    url = args.url
 
     xls = fetch_workbook(url)
     log.info(f'  fetched {len(xls)/1024/1024:.1f} MB')

@@ -37,8 +37,16 @@ from base_ingestor import get_supabase_client, log
 from repowering._base import today_iso
 
 
-ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY')
-ANTHROPIC_MODEL   = 'claude-haiku-4-5'
+ANTHROPIC_API_KEY     = os.environ.get('ANTHROPIC_API_KEY')
+ANTHROPIC_MODEL       = 'claude-haiku-4-5'
+
+# Brave Search API — preferred over DDG because:
+#   - free tier: 2,000 queries/month (well above our 50/run × 4 runs/mo)
+#   - real Google-grade results without IP rate-limits
+#   - returns structured JSON instead of HTML scraping
+# Falls back to DDG if BRAVE_SEARCH_API_KEY isn't set.
+BRAVE_SEARCH_API_KEY  = os.environ.get('BRAVE_SEARCH_API_KEY')
+BRAVE_API_URL         = 'https://api.search.brave.com/res/v1/web/search'
 
 MAX_ATTEMPTS = 3   # don't retry forever
 
@@ -104,13 +112,54 @@ def fetch_unenriched(client, limit: int = 50) -> list[dict]:
     return list(res.data or [])
 
 
-def scrape_for_developer(project: dict) -> str:
-    """Best-effort web search for the project's developer / operator."""
+def _build_query(project: dict) -> str:
     location = (project.get('location_description') or '').replace(',', ' ')
-    query = (
+    return (
         f'"{project["project_name"]}" {project["country_code"]} '
         f'{location} developer OR operator OR "owned by"'
     )
+
+
+def scrape_via_brave(project: dict) -> str:
+    """Brave Search API — preferred when BRAVE_SEARCH_API_KEY is set.
+
+    Returns a flattened text blob of title + description from the top
+    10 results, suitable for sending to Claude as evidence.
+    """
+    if not BRAVE_SEARCH_API_KEY:
+        return ''
+    query = _build_query(project)
+    try:
+        r = requests.get(BRAVE_API_URL, timeout=15, params={
+            'q':           query,
+            'count':       10,
+            'safesearch':  'off',
+            'extra_snippets': 'true',
+        }, headers={
+            'Accept':                'application/json',
+            'Accept-Encoding':       'gzip',
+            'X-Subscription-Token':  BRAVE_SEARCH_API_KEY,
+        })
+        if r.status_code != 200:
+            log.warning(f'    Brave API returned {r.status_code} for {project["project_name"]}')
+            return ''
+        data = r.json()
+        results = (data.get('web') or {}).get('results') or []
+        chunks: list[str] = []
+        for hit in results:
+            title = hit.get('title') or ''
+            desc  = hit.get('description') or ''
+            url_  = hit.get('url') or ''
+            chunks.append(f'{title}\n{desc}\n({url_})')
+        return '\n\n'.join(chunks)[:8000]
+    except Exception as e:
+        log.warning(f'    Brave API failed for {project["project_name"]}: {e}')
+        return ''
+
+
+def scrape_via_ddg(project: dict) -> str:
+    """DuckDuckGo HTML — fallback when Brave isn't configured."""
+    query = _build_query(project)
     url = f'https://html.duckduckgo.com/html?q={requests.utils.quote(query)}'
     try:
         r = requests.get(url, timeout=30, headers={
@@ -126,6 +175,11 @@ def scrape_for_developer(project: dict) -> str:
     except Exception as e:
         log.warning(f'    DDG fetch failed for {project["project_name"]}: {e}')
         return ''
+
+
+def scrape_for_developer(project: dict) -> str:
+    """Best-effort web search — Brave preferred, DDG fallback."""
+    return scrape_via_brave(project) or scrape_via_ddg(project)
 
 
 def llm_developer_match(project: dict, news_blob: str) -> dict | None:

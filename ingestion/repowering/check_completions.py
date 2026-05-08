@@ -42,8 +42,10 @@ from base_ingestor import get_supabase_client, log
 from repowering._base import today_iso, parse_date
 
 
-ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY')
-ANTHROPIC_MODEL   = 'claude-haiku-4-5'
+ANTHROPIC_API_KEY    = os.environ.get('ANTHROPIC_API_KEY')
+ANTHROPIC_MODEL      = 'claude-haiku-4-5'
+BRAVE_SEARCH_API_KEY = os.environ.get('BRAVE_SEARCH_API_KEY')
+BRAVE_API_URL        = 'https://api.search.brave.com/res/v1/web/search'
 
 # Don't re-check the same project too often
 MIN_DAYS_BETWEEN_CHECKS = 14
@@ -121,10 +123,38 @@ def check_rte_completion(client, project: dict) -> dict | None:
 
 # ── Press / corporate-filing scrape via Claude ──────────────────────────
 
-def scrape_news_for(project: dict) -> str:
-    """Best-effort web search via DuckDuckGo HTML for relevant news."""
-    query = f'"{project["project_name"]}" commissioning OR operational OR completed'
-    url = f'https://html.duckduckgo.com/html?q={requests.utils.quote(query)}'
+def _commissioning_query(project: dict) -> str:
+    return f'"{project["project_name"]}" commissioning OR operational OR completed'
+
+
+def scrape_news_via_brave(project: dict) -> str:
+    if not BRAVE_SEARCH_API_KEY:
+        return ''
+    try:
+        r = requests.get(BRAVE_API_URL, timeout=15, params={
+            'q':              _commissioning_query(project),
+            'count':          10,
+            'safesearch':     'off',
+            'extra_snippets': 'true',
+        }, headers={
+            'Accept':                'application/json',
+            'Accept-Encoding':       'gzip',
+            'X-Subscription-Token':  BRAVE_SEARCH_API_KEY,
+        })
+        if r.status_code != 200:
+            log.warning(f'    Brave API returned {r.status_code} for {project["project_name"]}')
+            return ''
+        results = ((r.json().get('web') or {}).get('results') or [])
+        chunks = [f'{h.get("title","")}\n{h.get("description","")}\n({h.get("url","")})'
+                  for h in results]
+        return '\n\n'.join(chunks)[:8000]
+    except Exception as e:
+        log.warning(f'    Brave API failed for {project["project_name"]}: {e}')
+        return ''
+
+
+def scrape_news_via_ddg(project: dict) -> str:
+    url = f'https://html.duckduckgo.com/html?q={requests.utils.quote(_commissioning_query(project))}'
     try:
         r = requests.get(url, timeout=30, headers={
             'User-Agent': 'Mozilla/5.0 (compatible; EndenexBot/1.0)',
@@ -139,6 +169,11 @@ def scrape_news_for(project: dict) -> str:
     except Exception as e:
         log.warning(f'    DDG fetch failed for {project["project_name"]}: {e}')
         return ''
+
+
+def scrape_news_for(project: dict) -> str:
+    """Best-effort web search — Brave preferred, DDG fallback."""
+    return scrape_news_via_brave(project) or scrape_news_via_ddg(project)
 
 
 def llm_completion_check(project: dict, news_blob: str) -> dict | None:
