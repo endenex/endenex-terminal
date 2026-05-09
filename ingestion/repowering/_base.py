@@ -8,15 +8,41 @@ Shared helpers for all repowering-projects ingestion scripts (Phase 1-3).
   • Upsert helper — does ON CONFLICT (dedupe_key) DO UPDATE so a re-run
     of any ingestion script overwrites stale stage/status data without
     duplicating rows.
+  • Date-cutoff helper — drops announcements older than MAX_AGE_YEARS
+    (default 3). Applied across all ingestion scripts.
 """
 
 from __future__ import annotations
 
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from base_ingestor import get_supabase_client, log
+
+
+# Drop any announcement / mention older than this. The repowering panel
+# is forward-looking; a 2010 wind farm's planning application doesn't
+# represent current intent. Per user 2026-05-09: 3 years.
+MAX_AGE_YEARS = 3
+_OLDEST_ALLOWED = (date.today() - timedelta(days=365 * MAX_AGE_YEARS)).isoformat()
+
+
+def is_too_old(date_str: str | None, today: str | None = None) -> bool:
+    """True if date_str is older than MAX_AGE_YEARS. Handles None / parse
+    failures by returning False (don't drop on missing date — let the
+    caller decide).
+    """
+    if not date_str:
+        return False
+    parsed = parse_date(date_str)
+    if not parsed:
+        return False
+    cutoff = (
+        (datetime.fromisoformat(today).date() if today else date.today())
+        - timedelta(days=365 * MAX_AGE_YEARS)
+    ).isoformat()
+    return parsed < cutoff
 
 
 # ── Five-stage enum, matches CHECK constraint in migration 003 ──────────

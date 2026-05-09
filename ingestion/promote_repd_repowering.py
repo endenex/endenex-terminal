@@ -36,6 +36,7 @@ import pandas as pd
 import requests
 from base_ingestor import get_supabase_client, today_iso
 from ingest_repd import discover_repd_url, TECHNOLOGY_FILTER, osgb_to_latlon, parse_date
+from repowering._base import is_too_old
 
 log = logging.getLogger(__name__)
 PIPELINE = 'promote_repd_repowering'
@@ -117,6 +118,10 @@ def map_records(df: pd.DataFrame) -> list[dict]:
         status = str(r[status_col])
         stage  = STATUS_TO_STAGE.get(status)
         if not stage:
+            continue
+        # 3-year cutoff — drop rows whose latest planning activity is stale
+        stage_date = parse_date(r.get('Planning Application Submitted')) or parse_date(r.get('Operational'))
+        if is_too_old(stage_date, today):
             continue
         lat, lon = osgb_to_latlon(r.get('X-coordinate'), r.get('Y-coordinate'))
         loc_desc = f'GB · {lat:.3f}, {lon:.3f}' if lat and lon else 'GB'

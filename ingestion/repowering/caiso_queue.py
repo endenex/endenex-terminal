@@ -34,7 +34,7 @@ import requests
 from base_ingestor import get_supabase_client, log
 from repowering._base import (
     normalise_stage, normalise_asset_class,
-    upsert_project, today_iso, parse_date,
+    upsert_project, today_iso, parse_date, is_too_old,
 )
 
 
@@ -172,15 +172,20 @@ def build_row(rec: dict, today: str) -> dict | None:
     state = (rec.get('State') or 'CA').strip()
     location = f'{county}, {state}' if county else f'{state}, USA'
 
+    queue_date = parse_date(rec.get('Queue Date'))
     cod = parse_date(rec.get('Current On-line Date')
                      or rec.get('Proposed On-line Date (as filed with IR)'))
+    # 3-year cutoff — if the queue date AND the on-line date are both
+    # >3 years old, this project is stale and probably abandoned.
+    if is_too_old(queue_date, today) and is_too_old(cod, today):
+        return None
 
     return {
         'project_name':        project_name,
         'country_code':        'US',
         'asset_class':         asset_class,
         'stage':               stage,
-        'stage_date':          cod or today,
+        'stage_date':          cod or queue_date or today,
         'capacity_mw':         capacity_mw,
         'developer':           (rec.get('Interconnection Customer') or rec.get('Developer') or None),
         'operator':            None,

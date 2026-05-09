@@ -41,7 +41,7 @@ import re
 from datetime import date
 
 from base_ingestor import get_supabase_client, today_iso
-from repowering._base import upsert_project
+from repowering._base import upsert_project, is_too_old
 
 log = logging.getLogger(__name__)
 PIPELINE = 'promote_airtable_repowering'
@@ -125,6 +125,9 @@ def event_to_project(ev: dict, today: str) -> dict | None:
     """Map a single watch_event to a repowering_projects row.
     Returns None to skip (not strict repowering, missing identity, etc.)."""
     if not is_strict_repowering_event(ev):
+        return None
+    # 3-year cutoff — stale events aren't actionable
+    if is_too_old(ev.get('event_date'), today):
         return None
     site = (ev.get('site_name') or '').strip()
     if not site:

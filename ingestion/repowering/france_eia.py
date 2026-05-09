@@ -42,7 +42,7 @@ import requests
 
 from base_ingestor import get_supabase_client, log
 from repowering._base import (
-    upsert_project, today_iso, parse_date,
+    upsert_project, today_iso, parse_date, is_too_old,
 )
 
 
@@ -235,10 +235,13 @@ def llm_extract(title: str, desc: str, body: str, url: str) -> dict | None:
 
 # ── Main ──────────────────────────────────────────────────────────────
 
-def build_row(ext: dict, source_url: str, today: str) -> dict | None:
+def build_row(ext: dict, source_url: str, today: str, card_date: str | None = None) -> dict | None:
     if not ext.get('is_specific_project'):
         return None
     if not ext.get('is_repowering_or_decommissioning'):
+        return None
+    # 3-year cutoff — drop announcements older than MAX_AGE_YEARS
+    if is_too_old(card_date, today):
         return None
     project_name = (ext.get('project_name') or '').strip()
     if not project_name:
@@ -336,7 +339,7 @@ def main():
         if not ext.get('is_specific_project'):
             generic_filtered += 1
             continue
-        row = build_row(ext, c['href'], today)
+        row = build_row(ext, c['href'], today, c.get('date'))
         if not row:
             skipped += 1
             continue

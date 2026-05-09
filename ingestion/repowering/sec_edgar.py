@@ -40,7 +40,7 @@ import requests
 
 from base_ingestor import get_supabase_client, log
 from repowering._base import (
-    upsert_project, today_iso, parse_date,
+    upsert_project, today_iso, parse_date, is_too_old,
 )
 
 
@@ -272,6 +272,10 @@ def main():
             for f in filings:
                 if not f.get('url'):
                     continue
+                # 3-year cutoff — drop stale 8-K filings
+                if is_too_old(f.get('updated'), today):
+                    skipped += 1
+                    continue
                 try:
                     text = fetch_text(f['url'])
                     extractions = extract_with_claude(text, f['url'], tracker['name'])
@@ -297,6 +301,10 @@ def main():
             filings = fetch_lse_rns(tracker['ticker'], args.limit_per_tracker)
             for f in filings:
                 if not f.get('url'):
+                    continue
+                # 3-year cutoff — drop stale RNS filings
+                if is_too_old(f.get('updated'), today):
+                    skipped += 1
                     continue
                 try:
                     text = fetch_text(f['url'])
