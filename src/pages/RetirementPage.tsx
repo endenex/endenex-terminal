@@ -1042,30 +1042,70 @@ function RepoweringPipelinePanel() {
 // ── 08 Stage Funnel panel ─────────────────────────────────────────────────────
 
 function StageFunnelPanel() {
-  const [counts, setCounts] = useState<{ stage: RepoweringStage; count: number }[]>([])
+  // Pull all rows once with both stage + country, then derive both the
+  // funnel counts and the country list client-side. Keeps it to a single
+  // round-trip and lets the country filter be instant on click.
+  const [rows, setRows] = useState<{ stage: RepoweringStage; country: string }[]>([])
   const [loading, setLoading] = useState(true)
+  const [country, setCountry] = useState<string>('ALL')
 
   useEffect(() => {
-    supabase.from('repowering_projects').select('stage')
+    supabase.from('repowering_projects').select('stage, country_code')
       .then(({ data }) => {
-        const tally: Record<string, number> = {}
-        for (const r of (data ?? []) as { stage: string }[]) {
-          tally[r.stage] = (tally[r.stage] ?? 0) + 1
-        }
-        const order: RepoweringStage[] = ['announced', 'application_submitted', 'application_approved', 'permitted', 'ongoing']
-        setCounts(order.map(s => ({ stage: s, count: tally[s] ?? 0 })))
+        setRows(((data ?? []) as { stage: RepoweringStage; country_code: string }[])
+          .map(r => ({ stage: r.stage, country: r.country_code })))
         setLoading(false)
       })
   }, [])
 
-  const max = Math.max(1, ...counts.map(c => c.count))
+  // Available countries sorted by row-count desc (most projects first)
+  const availableCountries = useMemo(() => {
+    const tally: Record<string, number> = {}
+    for (const r of rows) tally[r.country] = (tally[r.country] ?? 0) + 1
+    return Object.entries(tally)
+      .sort((a, b) => b[1] - a[1])
+      .map(([cc]) => cc)
+  }, [rows])
+
+  // Filtered rows + per-stage counts
+  const counts = useMemo(() => {
+    const filtered = country === 'ALL' ? rows : rows.filter(r => r.country === country)
+    const tally: Record<string, number> = {}
+    for (const r of filtered) tally[r.stage] = (tally[r.stage] ?? 0) + 1
+    const order: RepoweringStage[] = ['announced', 'application_submitted', 'application_approved', 'permitted', 'ongoing']
+    return order.map(s => ({ stage: s, count: tally[s] ?? 0 }))
+  }, [rows, country])
+
+  const max   = Math.max(1, ...counts.map(c => c.count))
+  const total = counts.reduce((s, c) => s + c.count, 0)
 
   return (
     <Panel label="ARI" title="Pipeline Funnel" className="col-start-2 row-start-3"
-           meta={<span className="text-[10.5px] text-ink-4 tabular-nums">{counts.reduce((s, c) => s + c.count, 0)} total</span>}>
+           meta={
+             <div className="flex items-center gap-1.5">
+               <select
+                 value={country}
+                 onChange={(e) => setCountry(e.target.value)}
+                 className="bg-canvas border border-border rounded-sm px-1.5 py-0.5 text-[10.5px] font-semibold text-ink-2 hover:text-ink cursor-pointer focus:outline-none focus:ring-1 focus:ring-teal"
+                 title="Filter funnel by country"
+               >
+                 <option value="ALL">All countries</option>
+                 {availableCountries.map(cc => (
+                   <option key={cc} value={cc}>
+                     {COUNTRY_LABEL[cc] ?? cc}
+                   </option>
+                 ))}
+               </select>
+               <span className="text-[10.5px] text-ink-4 tabular-nums">{total} total</span>
+             </div>
+           }>
       <div className="p-2.5 space-y-1.5">
         {loading ? (
           <div className="px-2 py-2 text-[12px] text-ink-3 text-center">Loading…</div>
+        ) : total === 0 ? (
+          <div className="px-2 py-2 text-[12px] text-ink-3 text-center">
+            No projects in {COUNTRY_LABEL[country] ?? country}
+          </div>
         ) : counts.map(c => (
           <div key={c.stage}>
             <div className="flex items-center justify-between text-[11px] mb-0.5">
