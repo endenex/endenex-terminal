@@ -125,14 +125,19 @@ function fmtRange(low: number | null, mid: number | null, high: number | null, s
 // ── Panel chrome ──────────────────────────────────────────────────────────────
 
 function Panel({
-  label, title, meta, children, className,
+  label, title, meta, children, className, status,
 }: {
   label:    string
   title:    string
   meta?:    React.ReactNode
   children: React.ReactNode
   className?: string
+  status?:  'in-build' | 'beta' | 'preview'
 }) {
+  const statusLabel = status === 'in-build' ? 'IN BUILD'
+                    : status === 'beta'     ? 'BETA'
+                    : status === 'preview'  ? 'PREVIEW'
+                    : null
   return (
     <div className={clsx('bg-panel border border-border rounded-sm flex flex-col overflow-hidden', className)}>
       <div className="h-7 px-3 flex items-center justify-between border-b border-border bg-titlebar flex-shrink-0">
@@ -140,6 +145,19 @@ function Panel({
           <span className="label-xs">{label}</span>
           <span className="text-ink-4 text-[10px]">·</span>
           <span className="text-[12.5px] font-semibold text-ink truncate">{title}</span>
+          {statusLabel && (
+            <span
+              className="px-1.5 py-px text-[9px] font-bold tracking-wider rounded-sm flex-shrink-0"
+              style={{
+                color: '#C4863A',                       // Endenex gold
+                backgroundColor: 'rgba(196, 134, 58, 0.12)',
+                border: '1px solid rgba(196, 134, 58, 0.35)',
+              }}
+              title="This panel is under active development. Data + visuals may change."
+            >
+              {statusLabel}
+            </span>
+          )}
         </div>
         {meta && <div className="text-[10.5px] text-ink-3 flex items-center gap-2 flex-shrink-0">{meta}</div>}
       </div>
@@ -1570,6 +1588,7 @@ function DecomVolumeForecastPanel() {
     <Panel
       label="SMI"
       title="Decom Material Volume Forecast"
+      status="in-build"
       meta={
         <div className="flex items-center gap-1.5">
           <div className="flex items-center bg-canvas border border-border rounded-sm p-px">
