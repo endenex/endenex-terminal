@@ -92,6 +92,13 @@ ALTER TABLE aro_extractions
       (filing_id IS NULL     AND ir_pdf_filing_id IS NOT NULL)
     );
 
+-- IR-grade extractions also surface PP&E note signals (capitalised
+-- decommissioning cost) — the LLM tool in extract_aro_from_pdfs.py and
+-- extract_aro_from_operator_ir.py both emit this field. Original 031
+-- migration didn't include it; adding here so the view below works.
+ALTER TABLE aro_extractions
+  ADD COLUMN IF NOT EXISTS ppe_decom_addition_present boolean;
+
 -- ── (4) Convenience view: IR-source extractions ready for review ───────
 
 DROP VIEW IF EXISTS ir_aro_extractions_v;
