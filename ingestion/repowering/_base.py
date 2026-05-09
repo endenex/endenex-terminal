@@ -135,8 +135,28 @@ def normalise_asset_class(raw: str | None) -> str | None:
 
 
 def make_dedupe_key(project_name: str, country_code: str, asset_class: str) -> str:
-    """Mirrors the trigger in migration 074."""
-    norm = re.sub(r'[^a-zA-Z0-9]', '', project_name).lower()
+    """Mirrors the Postgres trigger _normalise_project_name() / migration 079.
+
+    Strips common renewable-industry suffixes ("wind farm", "solar park",
+    "energy storage", etc.) and the leading "the" article BEFORE the
+    alphanumeric strip, so "Tahivilla" and "Tahivilla wind farm" produce
+    the same key.
+    """
+    s = (project_name or '').lower()
+    # Two-word industry suffixes (longest first to avoid greedy mismatch)
+    s = re.sub(
+        r'\s+(wind\s+farm|wind\s+park|wind\s+project|wind\s+centre|wind\s+center|'
+        r'solar\s+farm|solar\s+park|solar\s+plant|solar\s+pv|pv\s+plant|'
+        r'battery\s+storage|energy\s+storage|battery\s+facility|bess|'
+        r'energy\s+complex|energy\s+center|energy\s+centre)$',
+        '', s,
+    )
+    # Single-word generic suffixes
+    s = re.sub(r'\s+(farm|park|plant|project|facility|complex|centre|center)$', '', s)
+    # Leading article
+    s = re.sub(r'^the\s+', '', s)
+    # Final alphanumeric strip
+    norm = re.sub(r'[^a-zA-Z0-9]', '', s)
     return f'{norm}|{country_code}|{asset_class}'
 
 
