@@ -90,7 +90,8 @@ EXTRACT_TOOL = {
                 'items': {
                     'type':'object',
                     'properties': {
-                        'project_name':       {'type':'string'},
+                        'project_name':       {'type':'string',
+                                               'description':'Installation name in standard English form: "{Place} Wind Farm" (or Solar Farm / BESS). DO NOT include capacity, year, or developer in the name. Examples: "Taylor County Wind Farm" (NOT "wind farm in Taylor County" or "AES Taylor County wind farm" or "Taylor County 200 MW Wind Farm"). Just the project as a developer would label it on a press release.'},
                         'country_code':       {'type':'string','description':'ISO-2'},
                         'asset_class':        {'type':'string','enum':['onshore_wind','offshore_wind','solar_pv','bess']},
                         'stage':              {'type':'string','enum':['announced','application_submitted','application_approved','permitted','ongoing']},
