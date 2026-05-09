@@ -49,33 +49,48 @@ PIPELINE = 'promote_airtable_repowering'
 # Stage mapping for QUALIFYING event types only. Anything not in this
 # map gets dropped unless headline/notes contain the repowering regex.
 EVENT_TYPE_TO_STAGE = {
+    # Generic planning events — only promoted if headline/notes mention
+    # repowering/decommissioning explicitly
     'Planning Application':         'application_submitted',
     'Application Submitted':        'application_submitted',
     'Consent Granted':              'application_approved',
     'Permit Granted':               'application_approved',
     'Application Approved':         'application_approved',
     'Awaiting Construction':        'permitted',
-    'Repowering Announcement':      'announced',
-    'Repowering':                   'announced',
-    'Repowering Decision':          'announced',
     'Construction Start':           'ongoing',
     'Mobilisation':                 'ongoing',
     'Contractor Awarded':           'permitted',
     'Contractor Mobilisation':      'ongoing',
-    'Decommissioning Start':        'ongoing',
+    # Repowering-specific (auto-qualify)
+    'Repowering':                   'announced',
+    'Repowering Announcement':      'announced',
+    'Repowering Decision':          'announced',
+    'Repowering award':             'application_approved',
+    'End-of-life planning':         'announced',
+    # Decommissioning-specific (auto-qualify)
     'Decommissioning':              'ongoing',
+    'Decommissioning Start':        'ongoing',
     'Decommissioning Announcement': 'announced',
+    'Decommissioning award':        'application_approved',
+    'Decommissioning tender':       'application_submitted',
 }
 
-# Event types that ALWAYS qualify regardless of headline content
-# (explicitly repowering / decommissioning activity)
+# Event types that ALWAYS qualify regardless of headline content.
+# Verified against actual watch_events distinct values 2026-05-09:
+# Repowering (162) + Decommissioning (72) + End-of-life planning (7)
+# + Repowering award (2) + Decommissioning award (2) + Decommissioning
+# tender (1) = 246 of 254 candidate events.
 ALWAYS_QUALIFY = {
-    'Repowering Announcement',
     'Repowering',
+    'Repowering Announcement',
     'Repowering Decision',
-    'Decommissioning Start',
+    'Repowering award',
+    'End-of-life planning',
     'Decommissioning',
+    'Decommissioning Start',
     'Decommissioning Announcement',
+    'Decommissioning award',
+    'Decommissioning tender',
 }
 
 # Multilingual repowering / decommissioning vocabulary. Used to filter
