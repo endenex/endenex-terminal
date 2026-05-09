@@ -149,12 +149,17 @@ const STOP_WORDS = new Set([
 
 function headlineFingerprint(headline: string | null): string {
   if (!headline) return ''
-  return headline
+  // Sort alphabetically so word-order doesn't affect the key — catches
+  // syndicated rephrasings like "Chile's first wind farms" vs "first
+  // wind farms in Chile" (same significant words, different order).
+  const words = headline
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\s]/gu, ' ')
     .split(/\s+/)
-    .filter(w => w && !STOP_WORDS.has(w))
-    .slice(0, 8)            // first 8 significant words
+    .filter(w => w && w.length > 2 && !STOP_WORDS.has(w))
+  return Array.from(new Set(words))
+    .sort()
+    .slice(0, 6)
     .join(' ')
 }
 
