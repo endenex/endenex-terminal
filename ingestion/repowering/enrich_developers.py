@@ -29,12 +29,19 @@ import argparse
 import os
 import re
 import sys
+import time
 from datetime import datetime
 
 import requests
 
 from base_ingestor import get_supabase_client, log
 from repowering._base import today_iso
+
+
+# Anthropic starter tier caps inputs at 50k tokens/min. Each enrichment
+# call sends ~1.5k tokens (Tavily snippets + project metadata). Sleep 4s
+# between calls → 15/min × 1.5k = 22k tokens/min, well under cap.
+LLM_THROTTLE_SECONDS = 4
 
 
 ANTHROPIC_API_KEY     = os.environ.get('ANTHROPIC_API_KEY')
@@ -97,16 +104,19 @@ DEV_TOOL = {
 def fetch_unenriched(client, limit: int = 50) -> list[dict]:
     """Pull projects that need a developer name, excluding queue-stage
     sources where developer attribution is confidential.
+
+    NOTE: supabase-py's `.not_.in_(col, values)` requires a LIST, not a
+    string. Earlier version passed `f'({csv})'` which got iterated
+    character-by-character into the URL — filter became a no-op. Always
+    pass `list(SKIP_SOURCES)`.
     """
-    # PostgREST `not.in.(...)` for the source filter; values must be quoted
-    skip_csv = ','.join(f'"{s}"' for s in SKIP_SOURCES)
     res = client.table('repowering_projects') \
         .select('id, project_name, country_code, asset_class, capacity_mw, '
                 'location_description, stage, source_type, '
                 'developer_enrichment_attempts') \
         .is_('developer', 'null') \
         .lt('developer_enrichment_attempts', MAX_ATTEMPTS) \
-        .not_.in_('source_type', f'({skip_csv})') \
+        .not_.in_('source_type', list(SKIP_SOURCES)) \
         .order('developer_enrichment_attempts', desc=False) \
         .limit(limit).execute()
     return list(res.data or [])
@@ -190,27 +200,34 @@ def llm_developer_match(project: dict, news_blob: str) -> dict | None:
     except ImportError:
         return None
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    msg = client.messages.create(
-        model=ANTHROPIC_MODEL,
-        max_tokens=1500,
-        tools=[DEV_TOOL],
-        tool_choice={'type':'tool','name':'submit_developer_match'},
-        messages=[{
-            'role':'user',
-            'content':(
-                f'Project: {project["project_name"]}\n'
-                f'Country: {project["country_code"]}\n'
-                f'Asset class: {project["asset_class"]}\n'
-                f'Capacity: {project.get("capacity_mw") or "unknown"} MW\n'
-                f'Location: {project.get("location_description") or "unknown"}\n'
-                f'Stage: {project.get("stage")}\n\n'
-                f'Web search results below. Identify the lead developer / '
-                f'operator. Be conservative — only return a name with '
-                f'medium/high confidence if the attribution is explicit.\n\n'
-                f'---\n{news_blob}'
-            ),
-        }],
-    )
+    try:
+        msg = client.messages.create(
+            model=ANTHROPIC_MODEL,
+            max_tokens=1500,
+            tools=[DEV_TOOL],
+            tool_choice={'type':'tool','name':'submit_developer_match'},
+            messages=[{
+                'role':'user',
+                'content':(
+                    f'Project: {project["project_name"]}\n'
+                    f'Country: {project["country_code"]}\n'
+                    f'Asset class: {project["asset_class"]}\n'
+                    f'Capacity: {project.get("capacity_mw") or "unknown"} MW\n'
+                    f'Location: {project.get("location_description") or "unknown"}\n'
+                    f'Stage: {project.get("stage")}\n\n'
+                    f'Web search results below. Identify the lead developer / '
+                    f'operator. Be conservative — only return a name with '
+                    f'medium/high confidence if the attribution is explicit.\n\n'
+                    f'---\n{news_blob[:4000]}'
+                ),
+            }],
+        )
+    except anthropic.RateLimitError as e:
+        log.warning(f'    LLM rate-limited on {project["project_name"]} — skipping (retry next run): {str(e)[:120]}')
+        return None
+    except Exception as e:
+        log.warning(f'    LLM failed on {project["project_name"]}: {str(e)[:120]}')
+        return None
     for block in msg.content:
         if getattr(block,'type',None) == 'tool_use' and block.name == 'submit_developer_match':
             return block.input
@@ -253,6 +270,9 @@ def main():
         else:
             consecutive_ddg_fails = 0
         result = llm_developer_match(p, news) if news else None
+        # Throttle to keep under 50k tokens/min (Anthropic starter cap)
+        if news:
+            time.sleep(LLM_THROTTLE_SECONDS)
 
         update: dict = {
             'developer_enrichment_at':       now,
