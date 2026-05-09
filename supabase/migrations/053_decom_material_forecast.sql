@@ -60,19 +60,21 @@ WITH unified AS (
   UNION ALL
 
   -- Layer 2: USWTDB US wind turbines (table us_wind_assets)
-  -- Each row is a single turbine; sum t_cap as capacity in kW → /1000 = MW
+  -- Each row is a single turbine; turbine_capacity_kw / 1000 = MW.
+  -- NOTE: USWTDB raw fields are p_year / t_cap; migration 024 renamed
+  -- them to commissioning_year / turbine_capacity_kw on insert.
   SELECT
     'onshore_wind'                                              AS asset_class,
     'US'                                                        AS country,
-    u.p_year + 25                                               AS retire_year,
-    u.p_year                                                    AS commission_year,
-    COALESCE(u.t_cap, 0) / 1000.0                               AS capacity_mw,   -- USWTDB t_cap is kW
+    u.commissioning_year + 25                                   AS retire_year,
+    u.commissioning_year                                        AS commission_year,
+    COALESCE(u.turbine_capacity_kw, 0) / 1000.0                 AS capacity_mw,
     'uswtdb'                                                    AS source
   FROM us_wind_assets u
-  WHERE u.p_year IS NOT NULL
-    AND u.p_year > 1980
-    AND u.t_cap IS NOT NULL
-    AND u.t_cap > 0
+  WHERE u.commissioning_year IS NOT NULL
+    AND u.commissioning_year > 1980
+    AND u.turbine_capacity_kw IS NOT NULL
+    AND u.turbine_capacity_kw > 0
 )
 SELECT
   asset_class,
