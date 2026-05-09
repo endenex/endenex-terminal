@@ -336,7 +336,21 @@ def main():
     q = client.table('operator_ir_sources').select('*').order('operator_name')
     if args.operator:
         q = q.ilike('operator_name', f'%{args.operator}%')
-    ops = q.execute().data or []
+    try:
+        ops = q.execute().data or []
+    except Exception as e:
+        # Migration 038 may not be applied to this Supabase project.
+        # Log + exit cleanly so the daily pipeline doesn't show a red
+        # failure for a dormant feature.
+        msg = str(e)
+        if 'PGRST205' in msg or 'operator_ir_sources' in msg or 'schema cache' in msg:
+            log.warning('operator_ir_sources table missing — apply migration 038 to enable this feature. Exiting cleanly.')
+            try:
+                _log_run(client, 'partial', 0, 0, error='operator_ir_sources table missing (migration 038 not applied)')
+            except Exception:
+                pass
+            sys.exit(0)
+        raise
 
     log.info(f'=== Operator IR ARO extraction · {len(ops)} operators · model={MODEL_NAME} {"[DRY RUN]" if args.dry_run else ""} ===')
     n_proc, n_ext = 0, 0
