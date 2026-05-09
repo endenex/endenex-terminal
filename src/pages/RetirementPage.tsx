@@ -121,6 +121,61 @@ const RETIREMENT_EVENT_TYPES = [
   'Japan cohort',
 ]
 
+// Insolvency events are NOT all retirement-relevant — Airtable's
+// classifier sometimes lumps regulatory-blocks / litigation news in
+// here (e.g. "Trump blocks 228 wind projects"). For Insolvency only,
+// require an explicit retirement / dismantling keyword in the headline
+// or notes. All other event_types in RETIREMENT_EVENT_TYPES (Decom,
+// EOL, etc.) are inherently retirement signals — no extra filter.
+const RETIREMENT_HEADLINE_RE =
+  /\b(decommission|dismantl|repower|retire|end[\s-]of[\s-]life|cease\s+operation|wind[\s-]down|shutdown|close\s+down|end\s+of\s+lease|expir(y|ation)\s+of\s+(the\s+)?(scheme|FIT|ROC)|abandon|moth[\s-]ball)\w*\b/i
+
+function passesRetirementFilter(ev: { event_type: string; headline: string | null; notes: string | null }) {
+  if (ev.event_type !== 'Insolvency') return true
+  const text = `${ev.headline ?? ''} ${ev.notes ?? ''}`
+  return RETIREMENT_HEADLINE_RE.test(text)
+}
+
+// Near-duplicate detector: strips punctuation + stop-words from the
+// headline and checks if two events share the same first N significant
+// words within a 30-day window. Catches rephrased syndications:
+//   "...dismantling Chile's first wind farms"
+//   "...dismantling the first wind farms in Chile"
+const STOP_WORDS = new Set([
+  'a','an','the','and','or','of','in','at','on','for','to','from',
+  'is','are','was','were','be','being','been','this','that','these','those',
+  's','t','d','re','ve','ll','m',  // contraction remnants after apostrophe strip
+])
+
+function headlineFingerprint(headline: string | null): string {
+  if (!headline) return ''
+  return headline
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .split(/\s+/)
+    .filter(w => w && !STOP_WORDS.has(w))
+    .slice(0, 8)            // first 8 significant words
+    .join(' ')
+}
+
+function dedupNearDuplicates<T extends { headline: string | null; event_date: string | null }>(events: T[]): T[] {
+  const seen = new Map<string, T>()
+  for (const ev of events) {
+    const fp = headlineFingerprint(ev.headline)
+    if (!fp) { seen.set(`__id_${Math.random()}`, ev); continue }
+    const existing = seen.get(fp)
+    if (!existing) {
+      seen.set(fp, ev)
+    } else {
+      // Keep the more recent date (most current view of the story)
+      const a = ev.event_date ?? ''
+      const b = existing.event_date ?? ''
+      if (a > b) seen.set(fp, ev)
+    }
+  }
+  return Array.from(seen.values())
+}
+
 function fmtDate(val: string | null): string {
   if (!val) return '—'
   try { return new Date(val).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) }
@@ -790,13 +845,21 @@ function RetirementIntentPanel() {
 
   const load = useCallback(async () => {
     setLoading(true)
+    // Pull more than we display so the Insolvency filter + dedup can
+    // still leave us with ~40 visible signals after both passes.
     const { data } = await supabase
       .from('watch_events')
       .select('id, headline, notes, event_type, scope, site_name, company_name, developer, capacity_mw, event_date, confidence, source_url, watch_sources(name, url)')
       .in('event_type', RETIREMENT_EVENT_TYPES)
       .eq('is_duplicate', false)
-      .order('event_date', { ascending: false }).limit(40)
-    setEvents((data as unknown as WatchEvent[]) ?? [])
+      .order('event_date', { ascending: false }).limit(120)
+    const raw = (data as unknown as WatchEvent[]) ?? []
+    // 1) Drop Insolvency events that aren't actually retirement-related
+    //    (Trump-blocks-projects → no retirement keyword → drop)
+    // 2) Dedup near-identical headlines (rephrased syndications)
+    const filtered = raw.filter(passesRetirementFilter)
+    const deduped  = dedupNearDuplicates(filtered).slice(0, 40)
+    setEvents(deduped)
     setLoading(false)
   }, [])
 
