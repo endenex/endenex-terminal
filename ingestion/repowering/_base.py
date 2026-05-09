@@ -134,6 +134,87 @@ def normalise_asset_class(raw: str | None) -> str | None:
     return ASSET_CLASS_MAP.get(s)
 
 
+# ── Project-name scrubber ────────────────────────────────────────────────
+# Applied to LLM-emitted names BEFORE upsert. Mirrors the regex passes in
+# migration 082 (capacity / year / expediente strip) and migration 083
+# (English-form normalisation), plus Spanish/French anglicisation from
+# migration 081. Defence-in-depth: even if the LLM slips on a prompt
+# instruction, the row still lands clean.
+
+_CAP_RE        = re.compile(r'\s*(de\s+|of\s+)?\d+(\.\d+)?\s*(mw(p|h)?|kw)\b', re.I)
+_AREA_RE       = re.compile(r'\s*(de\s+)?\d+(\.\d+)?\s*(hectáreas|hectares|ha)\b', re.I)
+_YEAR_PAREN_RE = re.compile(r'\s*\(\s*(años?\s+)?\d{4}([-–]\d{4})?\s*\)', re.I)
+_EXPTE_RE      = re.compile(r'\s*(expediente|expte\.?|ref(\.|erencia)?\s+|dossier\s+)\s*\S+', re.I)
+
+# Spanish / French → English form (subset of migration 081's regexes;
+# applied here so re-ingestion produces the canonical form even if the
+# LLM emits the original-language name). Named groups for clarity:
+# "place" always captures the installation name itself.
+_ES_EOLICO_RE  = re.compile(
+    r'^parque\s+eólico(?:\s+de\s+(?:la|los|las)?\s*|\s+del\s+|\s+de\s+|\s+)(?P<place>.+)$', re.I,
+)
+_ES_SOLAR_RE   = re.compile(
+    r'^planta\s+(?:solar|fotovoltaica)(?:\s+de\s+(?:la|los|las)?\s*|\s+del\s+|\s+de\s+|\s+)(?P<place>.+)$', re.I,
+)
+_FR_EOLIEN_RE  = re.compile(
+    r"^parc\s+éolien(?:\s+(?:de\s+l'|de\s+la\s+|du\s+|de\s+|en\s+mer\s+de\s+l'|en\s+mer\s+))?(?P<place>.+)$", re.I,
+)
+_FR_SOLAR_RE   = re.compile(
+    r"^(?:centrale\s+photovoltaïque|parc\s+solaire|centrale\s+solaire)(?:\s+(?:de\s+l'|de\s+la\s+|du\s+|de\s+))?(?P<place>.+)$", re.I,
+)
+
+# English-form reorder: "wind farm in X" → "X Wind Farm"
+_EN_PREFIX_RE  = re.compile(
+    r'^(?:the\s+)?(?P<class>wind|solar)\s+(?:farm|park|plant|project)\s+(?:in|at|of|around|near)\s+(?P<place>.+)$', re.I,
+)
+_EN_THE_RE     = re.compile(
+    r'^the\s+(?P<place>.+?)\s+(?P<class>wind|solar)\s+(?:farm|park|plant|project)\s*$', re.I,
+)
+
+
+def clean_project_name(name: str) -> str:
+    """Scrub LLM-emitted name to canonical "{Place} {Class} Farm" form.
+    Handles capacity / year / expediente strip, multilingual prefix
+    reorder, and trailing whitespace tidy. Idempotent: safe to call on
+    already-clean names.
+    """
+    if not name:
+        return name
+    s = name.strip()
+
+    # Anglicise Spanish / French prefixes (order matters — match longest
+    # prefix first to avoid e.g. "Parc Solaire" being matched twice)
+    for pat, suffix in (
+        (_FR_SOLAR_RE,  'Solar Farm'),
+        (_FR_EOLIEN_RE, 'Wind Farm'),
+        (_ES_SOLAR_RE,  'Solar Farm'),
+        (_ES_EOLICO_RE, 'Wind Farm'),
+    ):
+        m = pat.match(s)
+        if m:
+            s = f'{m.group("place").strip()} {suffix}'
+            break  # one prefix at most
+
+    # English-form reorder
+    m = _EN_PREFIX_RE.match(s)
+    if m:
+        s = f'{m.group("place").strip()} {m.group("class").title()} Farm'
+    else:
+        m = _EN_THE_RE.match(s)
+        if m:
+            s = f'{m.group("place").strip()} {m.group("class").title()} Farm'
+
+    # Strip embedded capacity / area / year / expediente
+    s = _CAP_RE.sub('', s)
+    s = _AREA_RE.sub('', s)
+    s = _YEAR_PAREN_RE.sub('', s)
+    s = _EXPTE_RE.sub('', s)
+
+    # Tidy whitespace + leftover punctuation
+    s = re.sub(r'\s+', ' ', s).strip(' ,.;:-')
+    return s
+
+
 def make_dedupe_key(project_name: str, country_code: str, asset_class: str) -> str:
     """Mirrors the Postgres trigger _normalise_project_name() / migration 079.
 

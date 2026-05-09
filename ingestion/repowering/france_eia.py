@@ -42,7 +42,7 @@ import requests
 
 from base_ingestor import get_supabase_client, log
 from repowering._base import (
-    upsert_project, today_iso, parse_date, is_too_old,
+    upsert_project, today_iso, parse_date, is_too_old, clean_project_name,
 )
 
 
@@ -244,7 +244,7 @@ def build_row(ext: dict, source_url: str, today: str, card_date: str | None = No
     # 3-year cutoff — drop announcements older than MAX_AGE_YEARS
     if is_too_old(card_date, today):
         return None
-    project_name = (ext.get('project_name') or '').strip()
+    project_name = clean_project_name((ext.get('project_name') or '').strip())
     if not project_name:
         return None
     asset_class = ext.get('asset_class')
