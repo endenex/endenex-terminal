@@ -155,14 +155,18 @@ EXTRACT_TOOL = {
     'name': 'submit_france_renewable_project',
     'description': (
         'Extract structured metadata from a French environmental-impact '
-        'consultation page. Set is_specific_project=false if the page is '
-        'a generic regulatory consultation (national rule, decree draft, '
-        'PPE-level discussion) rather than a single named project.'
+        'consultation page. TWO independent filters: '
+        '(1) is_specific_project=false drops generic regulations. '
+        '(2) is_repowering_or_decommissioning=false drops net-new '
+        'greenfield builds. Both must be true for inclusion.'
     ),
     'input_schema': {
         'type': 'object',
         'properties': {
-            'is_specific_project': {'type': 'boolean'},
+            'is_specific_project': {'type': 'boolean',
+                                    'description': 'True if this page concerns ONE named installation. False for sector rules, decree drafts, PPE consultations.'},
+            'is_repowering_or_decommissioning': {'type': 'boolean',
+                                                  'description': 'True ONLY if the consultation explicitly describes renouvellement (replacement) of existing turbines/panels, démantèlement, dépose, or remplacement of an existing renewable installation. False for new builds, extensions, augmentations de puissance, or modifications that add capacity without retiring existing units.'},
             'project_name':       {'type': 'string'},
             'asset_class':        {'type': 'string', 'enum': ['onshore_wind','offshore_wind','solar_pv','bess']},
             'stage':              {'type': 'string', 'enum': ['announced','application_submitted','application_approved','permitted','ongoing']},
@@ -172,7 +176,7 @@ EXTRACT_TOOL = {
             'departement':        {'type': 'string'},
             'reference':          {'type': 'string', 'description': 'Procedural / file reference if visible'},
         },
-        'required': ['is_specific_project'],
+        'required': ['is_specific_project', 'is_repowering_or_decommissioning'],
     },
 }
 
@@ -197,13 +201,16 @@ def llm_extract(title: str, desc: str, body: str, url: str) -> dict | None:
                     f'Source URL: {url}\n'
                     f'Title: {title}\n'
                     f'Description: {desc}\n\n'
-                    f'Page text follows. Determine if this is a SPECIFIC named '
-                    f'renewable project (one wind farm, one solar plant, one '
-                    f'BESS site) with a procedure underway, vs a GENERIC '
-                    f'regulation (national rule modification, decree draft, '
-                    f'PPE consultation, sector-wide policy). Return '
-                    f'is_specific_project=false for the generic case.\n\n'
-                    f'For specific projects, fill the structured fields. '
+                    f'Page text follows. The repowering_projects table is '
+                    f'STRICTLY for projects that tear down an existing '
+                    f'renewable installation and replace it. TWO filters:\n'
+                    f'  is_specific_project=false → drop generic regulations\n'
+                    f'  is_repowering_or_decommissioning=false → drop NEW '
+                    f'BUILDS, extensions, augmentations de puissance, '
+                    f'capacity additions on existing sites that don\'t '
+                    f'retire existing units.\n'
+                    f'Both must be true to persist.\n\n'
+                    f'For qualifying repowering projects, fill the fields. '
                     f'Stage maps roughly:\n'
                     f'  - "consultation préalable" / "phase amont" → announced\n'
                     f'  - "enquête publique en cours" → application_submitted\n'
@@ -230,6 +237,8 @@ def llm_extract(title: str, desc: str, body: str, url: str) -> dict | None:
 
 def build_row(ext: dict, source_url: str, today: str) -> dict | None:
     if not ext.get('is_specific_project'):
+        return None
+    if not ext.get('is_repowering_or_decommissioning'):
         return None
     project_name = (ext.get('project_name') or '').strip()
     if not project_name:

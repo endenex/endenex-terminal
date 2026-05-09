@@ -25,6 +25,7 @@ is the next-largest US ISO pipeline.
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from io import BytesIO
 
@@ -38,6 +39,38 @@ from repowering._base import (
 
 
 CAISO_URL = 'http://www.caiso.com/Documents/PublicQueueReport.xlsx'
+
+# STRICT REPOWERING / DECOMMISSIONING FILTER (per user 2026-05-09):
+# The repowering_projects table is meant exclusively for projects that
+# are tearing down an existing asset and replacing it. Net-new
+# greenfield projects, "EXPANSION", "PHASE 2/3/4", and hybrid additions
+# do NOT belong here. CAISO's PublicQueueReport is overwhelmingly new
+# greenfield development; only ~5% of rows are actual repowers.
+#
+# Keep a row only if its name matches an explicit repowering signal.
+# Reject names with expansion / phase / hybrid markers even if the
+# repower regex would otherwise match.
+REPOWER_NAME_RE = re.compile(
+    r'\b(repower(ing|ed)?|decommission(ing|ed)?|dismantl(e|ing|ement)|'
+    r'demolition|retire(ment)?|replacement\s+of|modernization)\b',
+    re.I,
+)
+EXPANSION_RE = re.compile(
+    r'\b(expansion|expand|phase\s+(?:2|3|4|II|III|IV)|'
+    r'^(?:.*\s)?(?:II|III|IV)\b|hybrid(?:ization)?)\b',
+    re.I,
+)
+
+
+def is_strict_repowering(name: str) -> bool:
+    """True only if name explicitly indicates an existing-asset repower
+    or decommissioning, AND doesn't carry expansion / new-phase markers.
+    """
+    if not name:
+        return False
+    if EXPANSION_RE.search(name):
+        return False
+    return bool(REPOWER_NAME_RE.search(name))
 
 # Sheet structure as of May 2026 (verified by direct inspection):
 #   Sheet "Grid GenerationQueue" — active queue (~303 rows)
@@ -106,6 +139,9 @@ def build_row(rec: dict, today: str) -> dict | None:
 
     project_name = (rec.get('Project Name') or '').strip()
     if not project_name:
+        return None
+    # Strict repowering filter — drop new builds, expansions, phases.
+    if not is_strict_repowering(project_name):
         return None
 
     # Stage — prefer IA Status (executed = permitted), fall back to study

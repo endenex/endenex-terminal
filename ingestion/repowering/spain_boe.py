@@ -158,14 +158,19 @@ EXTRACT_TOOL = {
     'name': 'submit_spain_renewable_project',
     'description': (
         'Extract project metadata from a Spanish BOE notice or resolution. '
-        'Set is_specific_project=false if the BOE item is a generic policy '
-        'instrument (regulatory decree, sector-wide rule, ministerial order '
-        'NOT tied to a single named installation).'
+        'TWO independent boolean filters control inclusion: '
+        '(1) is_specific_project=false drops generic policy instruments. '
+        '(2) is_repowering_or_decommissioning=false drops net-new '
+        'greenfield projects. Both must be true for the row to be '
+        'persisted.'
     ),
     'input_schema': {
         'type': 'object',
         'properties': {
-            'is_specific_project':  {'type': 'boolean'},
+            'is_specific_project':  {'type': 'boolean',
+                                     'description': 'True if this notice concerns ONE named installation. False for sector-wide rules, decrees, ministerial orders not tied to a specific facility.'},
+            'is_repowering_or_decommissioning': {'type': 'boolean',
+                                                  'description': 'True ONLY if the notice explicitly describes repotenciación, repotenciado, desmantelamiento, sustitución de aerogeneradores/paneles, or retirada de servicio of an existing renewable installation. False for net-new greenfield projects, capacity expansions, phase 2/3 additions, or hybridización (adding BESS to existing solar).'},
             'project_name':         {'type': 'string'},
             'asset_class':          {'type': 'string', 'enum': ['onshore_wind','offshore_wind','solar_pv','bess']},
             'stage':                {'type': 'string', 'enum': ['announced','application_submitted','application_approved','permitted','ongoing']},
@@ -176,7 +181,7 @@ EXTRACT_TOOL = {
             'comunidad_autonoma':   {'type': 'string'},
             'reference':            {'type': 'string', 'description': 'Procedural / file reference (e.g. "Expediente: ...")'},
         },
-        'required': ['is_specific_project'],
+        'required': ['is_specific_project', 'is_repowering_or_decommissioning'],
     },
 }
 
@@ -201,9 +206,16 @@ def llm_extract(item: dict, body: str) -> dict | None:
                     f'Source: BOE {item["id"]} ({item["date"]})\n'
                     f'Section: {item["section"]}\n'
                     f'Title: {item["title"]}\n\n'
-                    f'BOE item full text follows. Extract project metadata, '
-                    f'or set is_specific_project=false if this is a generic '
-                    f'regulation rather than a specific named project.\n\n'
+                    f'BOE item full text follows. The repowering_projects '
+                    f'table is STRICTLY for projects that tear down an '
+                    f'existing renewable installation and replace it. '
+                    f'TWO filters: \n'
+                    f'  is_specific_project=false → drop generic regulations\n'
+                    f'  is_repowering_or_decommissioning=false → drop '
+                    f'NET-NEW greenfield builds, capacity expansions, '
+                    f'phase 2/3 additions, BESS hybridización on existing '
+                    f'solar.\n'
+                    f'Both must be true for the project to be persisted.\n\n'
                     f'Stage mapping (Spanish administrative process):\n'
                     f'  - "información pública" / "consulta previa" → application_submitted\n'
                     f'  - "DIA favorable" / "declaración impacto ambiental" → application_approved\n'
@@ -229,6 +241,8 @@ def llm_extract(item: dict, body: str) -> dict | None:
 
 def build_row(ext: dict, item: dict, today: str) -> dict | None:
     if not ext.get('is_specific_project'):
+        return None
+    if not ext.get('is_repowering_or_decommissioning'):
         return None
     project_name = (ext.get('project_name') or '').strip()
     if not project_name:

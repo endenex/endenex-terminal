@@ -75,10 +75,12 @@ LSE_TRACKERS = [
 EXTRACT_TOOL = {
     'name':'submit_corporate_filing_projects',
     'description':(
-        'Submit any specific renewable-energy project mentions from this '
-        'corporate filing — wind/solar/BESS projects being repowered, '
-        'decommissioned, acquired, divested, permitted, or commissioned. '
-        'Skip generic strategy language; only extract specific named projects.'
+        'Extract ONLY repowering / decommissioning / dismantling project '
+        'mentions from this corporate filing. STRICT criterion: the '
+        'project must explicitly tear down or replace an existing '
+        'renewable installation. Skip net-new builds, acquisitions of '
+        'operating assets without retirement intent, capacity expansions, '
+        'phase 2/3 additions, BESS hybridization on existing solar.'
     ),
     'input_schema': {
         'type':'object',
@@ -94,9 +96,10 @@ EXTRACT_TOOL = {
                         'stage':              {'type':'string','enum':['announced','application_submitted','application_approved','permitted','ongoing']},
                         'capacity_mw':        {'type':'number'},
                         'developer':          {'type':'string'},
-                        'event_summary':      {'type':'string','description':'1-line description of the event'},
+                        'event_summary':      {'type':'string','description':'1-line description of the event — must reference repowering, decommissioning, retirement, or replacement.'},
+                        'is_repowering_or_decommissioning': {'type':'boolean','description':'TRUE only if the filing explicitly describes repowering, decommissioning, dismantling, or retirement of an existing installation. FALSE for new builds, acquisitions, expansions, hybridization. Drop the project entirely if FALSE.'},
                     },
-                    'required': ['project_name','country_code','asset_class','stage'],
+                    'required': ['project_name','country_code','asset_class','stage','is_repowering_or_decommissioning'],
                 },
             },
         },
@@ -211,6 +214,9 @@ def build_row(ext: dict, source_url: str, issuer: str, today: str, src_type: str
     if not name:
         return None
     if ext.get('asset_class') not in {'onshore_wind','offshore_wind','solar_pv','bess'}:
+        return None
+    # Strict repowering filter — drop new builds, acquisitions, expansions
+    if not ext.get('is_repowering_or_decommissioning'):
         return None
     capacity_mw = ext.get('capacity_mw')
     try:
