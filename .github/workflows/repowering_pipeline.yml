@@ -39,12 +39,20 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python -m repowering.caiso_queue
         continue-on-error: true
-      - name: RTE France Open Data
+      - name: RTE France Open Data (DISABLED — see notes)
         working-directory: ingestion
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python -m repowering.rte_france
+        continue-on-error: true
+      - name: France EIA (consultations-publiques + LLM)
+        working-directory: ingestion
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python -m repowering.france_eia
         continue-on-error: true
       # AEMO requires a manual URL update each month (latest workbook link
       # is generated dynamically). Skipping by default; trigger manually
@@ -62,13 +70,22 @@ jobs:
           cache: 'pip'
           cache-dependency-path: ingestion/requirements.txt
       - run: pip install -r ingestion/requirements.txt openpyxl
-      - name: MITECO Spain (LLM-extracted)
+      - name: MITECO Spain (DISABLED — see notes)
         working-directory: ingestion
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python -m repowering.miteco_spain
+        continue-on-error: true
+      - name: Spain BOE (national gazette + LLM)
+        working-directory: ingestion
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python -m repowering.spain_boe
+        continue-on-error: true
       # Terna requires the monthly XLSX URL — update workflow_dispatch when
       # Terna publishes new month.
 
