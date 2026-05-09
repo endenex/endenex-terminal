@@ -40,13 +40,13 @@ from repowering._base import today_iso
 ANTHROPIC_API_KEY     = os.environ.get('ANTHROPIC_API_KEY')
 ANTHROPIC_MODEL       = 'claude-haiku-4-5'
 
-# Brave Search API — preferred over DDG because:
-#   - free tier: 2,000 queries/month (well above our 50/run × 4 runs/mo)
-#   - real Google-grade results without IP rate-limits
-#   - returns structured JSON instead of HTML scraping
-# Falls back to DDG if BRAVE_SEARCH_API_KEY isn't set.
-BRAVE_SEARCH_API_KEY  = os.environ.get('BRAVE_SEARCH_API_KEY')
-BRAVE_API_URL         = 'https://api.search.brave.com/res/v1/web/search'
+# Tavily AI Search — preferred over DDG because:
+#   - free tier: 1,000 queries/month, no credit card required
+#   - purpose-built for LLM workflows: returns clean snippets + URLs
+#   - rate-limit-free at our usage (50/run × 4 runs/mo = 200/mo)
+# Falls back to DDG if TAVILY_API_KEY isn't set.
+TAVILY_API_KEY        = os.environ.get('TAVILY_API_KEY')
+TAVILY_API_URL        = 'https://api.tavily.com/search'
 
 MAX_ATTEMPTS = 3   # don't retry forever
 
@@ -120,40 +120,38 @@ def _build_query(project: dict) -> str:
     )
 
 
-def scrape_via_brave(project: dict) -> str:
-    """Brave Search API — preferred when BRAVE_SEARCH_API_KEY is set.
+def scrape_via_tavily(project: dict) -> str:
+    """Tavily AI Search — preferred when TAVILY_API_KEY is set.
 
-    Returns a flattened text blob of title + description from the top
-    10 results, suitable for sending to Claude as evidence.
+    Tavily uses POST with a JSON body and returns a list of results
+    (title + content + url). Each is already a clean snippet, no HTML
+    scraping required.
     """
-    if not BRAVE_SEARCH_API_KEY:
+    if not TAVILY_API_KEY:
         return ''
     query = _build_query(project)
     try:
-        r = requests.get(BRAVE_API_URL, timeout=15, params={
-            'q':           query,
-            'count':       10,
-            'safesearch':  'off',
-            'extra_snippets': 'true',
-        }, headers={
-            'Accept':                'application/json',
-            'Accept-Encoding':       'gzip',
-            'X-Subscription-Token':  BRAVE_SEARCH_API_KEY,
+        r = requests.post(TAVILY_API_URL, timeout=20, json={
+            'api_key':         TAVILY_API_KEY,
+            'query':           query,
+            'search_depth':    'basic',     # 'advanced' is 2x credits; basic is plenty for name-finding
+            'max_results':     10,
+            'include_answer':  False,        # we use Claude for the answer step
         })
         if r.status_code != 200:
-            log.warning(f'    Brave API returned {r.status_code} for {project["project_name"]}')
+            log.warning(f'    Tavily returned {r.status_code} for {project["project_name"]}')
             return ''
         data = r.json()
-        results = (data.get('web') or {}).get('results') or []
+        results = data.get('results') or []
         chunks: list[str] = []
         for hit in results:
             title = hit.get('title') or ''
-            desc  = hit.get('description') or ''
-            url_  = hit.get('url') or ''
-            chunks.append(f'{title}\n{desc}\n({url_})')
+            content = hit.get('content') or ''
+            url_ = hit.get('url') or ''
+            chunks.append(f'{title}\n{content}\n({url_})')
         return '\n\n'.join(chunks)[:8000]
     except Exception as e:
-        log.warning(f'    Brave API failed for {project["project_name"]}: {e}')
+        log.warning(f'    Tavily failed for {project["project_name"]}: {e}')
         return ''
 
 
@@ -178,8 +176,8 @@ def scrape_via_ddg(project: dict) -> str:
 
 
 def scrape_for_developer(project: dict) -> str:
-    """Best-effort web search — Brave preferred, DDG fallback."""
-    return scrape_via_brave(project) or scrape_via_ddg(project)
+    """Best-effort web search — Tavily preferred, DDG fallback."""
+    return scrape_via_tavily(project) or scrape_via_ddg(project)
 
 
 def llm_developer_match(project: dict, news_blob: str) -> dict | None:

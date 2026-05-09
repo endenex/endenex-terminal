@@ -44,8 +44,8 @@ from repowering._base import today_iso, parse_date
 
 ANTHROPIC_API_KEY    = os.environ.get('ANTHROPIC_API_KEY')
 ANTHROPIC_MODEL      = 'claude-haiku-4-5'
-BRAVE_SEARCH_API_KEY = os.environ.get('BRAVE_SEARCH_API_KEY')
-BRAVE_API_URL        = 'https://api.search.brave.com/res/v1/web/search'
+TAVILY_API_KEY       = os.environ.get('TAVILY_API_KEY')
+TAVILY_API_URL       = 'https://api.tavily.com/search'
 
 # Don't re-check the same project too often
 MIN_DAYS_BETWEEN_CHECKS = 14
@@ -127,29 +127,26 @@ def _commissioning_query(project: dict) -> str:
     return f'"{project["project_name"]}" commissioning OR operational OR completed'
 
 
-def scrape_news_via_brave(project: dict) -> str:
-    if not BRAVE_SEARCH_API_KEY:
+def scrape_news_via_tavily(project: dict) -> str:
+    if not TAVILY_API_KEY:
         return ''
     try:
-        r = requests.get(BRAVE_API_URL, timeout=15, params={
-            'q':              _commissioning_query(project),
-            'count':          10,
-            'safesearch':     'off',
-            'extra_snippets': 'true',
-        }, headers={
-            'Accept':                'application/json',
-            'Accept-Encoding':       'gzip',
-            'X-Subscription-Token':  BRAVE_SEARCH_API_KEY,
+        r = requests.post(TAVILY_API_URL, timeout=20, json={
+            'api_key':         TAVILY_API_KEY,
+            'query':           _commissioning_query(project),
+            'search_depth':    'basic',
+            'max_results':     10,
+            'include_answer':  False,
         })
         if r.status_code != 200:
-            log.warning(f'    Brave API returned {r.status_code} for {project["project_name"]}')
+            log.warning(f'    Tavily returned {r.status_code} for {project["project_name"]}')
             return ''
-        results = ((r.json().get('web') or {}).get('results') or [])
-        chunks = [f'{h.get("title","")}\n{h.get("description","")}\n({h.get("url","")})'
+        results = r.json().get('results') or []
+        chunks = [f'{h.get("title","")}\n{h.get("content","")}\n({h.get("url","")})'
                   for h in results]
         return '\n\n'.join(chunks)[:8000]
     except Exception as e:
-        log.warning(f'    Brave API failed for {project["project_name"]}: {e}')
+        log.warning(f'    Tavily failed for {project["project_name"]}: {e}')
         return ''
 
 
@@ -172,8 +169,8 @@ def scrape_news_via_ddg(project: dict) -> str:
 
 
 def scrape_news_for(project: dict) -> str:
-    """Best-effort web search — Brave preferred, DDG fallback."""
-    return scrape_news_via_brave(project) or scrape_news_via_ddg(project)
+    """Best-effort web search — Tavily preferred, DDG fallback."""
+    return scrape_news_via_tavily(project) or scrape_news_via_ddg(project)
 
 
 def llm_completion_check(project: dict, news_blob: str) -> dict | None:
