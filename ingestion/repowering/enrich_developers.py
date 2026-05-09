@@ -57,20 +57,14 @@ TAVILY_API_URL        = 'https://api.tavily.com/search'
 
 MAX_ATTEMPTS = 3   # don't retry forever
 
-# Sources where the developer is structurally confidential during the
-# pre-commissioning phase — running DDG searches against codenames like
-# "GNARLY OSAGE" or "PLUOT" is hopeless because no public source has the
-# attribution. These projects will get developers from EIA Form 860
-# (~12-month lag) or post-IA FERC filings, not from press scraping.
-SKIP_SOURCES = {
-    'caiso_queue',
-    'ercot_giinr',
-    'miso_queue',
-    'pjm_queue',
-    'nyiso_queue',
-    'spp_queue',
-    'aemo_giinr',
-}
+# Sources we explicitly EXCLUDE from enrichment. Empty by default
+# (kept as a set for easy future additions). Earlier we excluded all
+# ISO interconnection queues on the assumption that queue-stage
+# project names are confidential — but Tavily proved that wrong:
+# even on a 12-project sample, found Ameresco / Avantus / AES with
+# high confidence. The cost is trivial (~3 min CI time / ~$0.10 per
+# 50 projects) and the upside is real attribution coverage.
+SKIP_SOURCES: set[str] = set()
 
 # Stop the run after this many consecutive DDG failures. Once DDG starts
 # rate-limiting the runner IP, every subsequent search waits 30s for the
@@ -102,23 +96,23 @@ DEV_TOOL = {
 
 
 def fetch_unenriched(client, limit: int = 50) -> list[dict]:
-    """Pull projects that need a developer name, excluding queue-stage
-    sources where developer attribution is confidential.
+    """Pull projects that need a developer name. SKIP_SOURCES (if any)
+    are excluded — currently empty since Tavily handles ISO codenames.
 
     NOTE: supabase-py's `.not_.in_(col, values)` requires a LIST, not a
     string. Earlier version passed `f'({csv})'` which got iterated
-    character-by-character into the URL — filter became a no-op. Always
-    pass `list(SKIP_SOURCES)`.
+    character-by-character into the URL — filter became a no-op.
     """
-    res = client.table('repowering_projects') \
+    q = client.table('repowering_projects') \
         .select('id, project_name, country_code, asset_class, capacity_mw, '
                 'location_description, stage, source_type, '
                 'developer_enrichment_attempts') \
         .is_('developer', 'null') \
-        .lt('developer_enrichment_attempts', MAX_ATTEMPTS) \
-        .not_.in_('source_type', list(SKIP_SOURCES)) \
-        .order('developer_enrichment_attempts', desc=False) \
-        .limit(limit).execute()
+        .lt('developer_enrichment_attempts', MAX_ATTEMPTS)
+    if SKIP_SOURCES:
+        q = q.not_.in_('source_type', list(SKIP_SOURCES))
+    res = q.order('developer_enrichment_attempts', desc=False) \
+           .limit(limit).execute()
     return list(res.data or [])
 
 
