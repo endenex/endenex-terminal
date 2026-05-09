@@ -32,6 +32,7 @@ import argparse
 import os
 import re
 import sys
+import time
 import xml.etree.ElementTree as ET
 from datetime import date, timedelta
 
@@ -45,6 +46,16 @@ from repowering._base import (
 
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY')
 ANTHROPIC_MODEL   = 'claude-haiku-4-5'
+
+# Anthropic free / starter tier caps inputs at 50k tokens/min. Each BOE
+# item we send is ~2.5k tokens (10k chars). Sleep 4s between LLM calls
+# → 15 calls/min × 2.5k = 37k tokens/min, safely under the cap.
+LLM_THROTTLE_SECONDS = 4
+
+# Per-item body length sent to Claude. Project name + capacity + dev
+# almost always appears in first paragraph; 10k chars covers the full
+# notice header without burning the token budget.
+MAX_BODY_CHARS = 10_000
 
 BOE_SUMARIO_URL = 'https://boe.es/datosabiertos/api/boe/sumario/{date}'
 BOE_ITEM_URL    = 'https://www.boe.es/diario_boe/txt.php?id={id}'
@@ -178,29 +189,36 @@ def llm_extract(item: dict, body: str) -> dict | None:
     except ImportError:
         return None
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    msg = client.messages.create(
-        model=ANTHROPIC_MODEL,
-        max_tokens=1500,
-        tools=[EXTRACT_TOOL],
-        tool_choice={'type': 'tool', 'name': 'submit_spain_renewable_project'},
-        messages=[{
-            'role': 'user',
-            'content': (
-                f'Source: BOE {item["id"]} ({item["date"]})\n'
-                f'Section: {item["section"]}\n'
-                f'Title: {item["title"]}\n\n'
-                f'BOE item full text follows. Extract project metadata, '
-                f'or set is_specific_project=false if this is a generic '
-                f'regulation rather than a specific named project.\n\n'
-                f'Stage mapping (Spanish administrative process):\n'
-                f'  - "información pública" / "consulta previa" → application_submitted\n'
-                f'  - "DIA favorable" / "declaración impacto ambiental" → application_approved\n'
-                f'  - "autorización administrativa" / "utilidad pública" → permitted\n'
-                f'  - "puesta en servicio" / "acta de puesta en marcha" → ongoing\n\n'
-                f'---\n{body[:25_000]}'
-            ),
-        }],
-    )
+    try:
+        msg = client.messages.create(
+            model=ANTHROPIC_MODEL,
+            max_tokens=1500,
+            tools=[EXTRACT_TOOL],
+            tool_choice={'type': 'tool', 'name': 'submit_spain_renewable_project'},
+            messages=[{
+                'role': 'user',
+                'content': (
+                    f'Source: BOE {item["id"]} ({item["date"]})\n'
+                    f'Section: {item["section"]}\n'
+                    f'Title: {item["title"]}\n\n'
+                    f'BOE item full text follows. Extract project metadata, '
+                    f'or set is_specific_project=false if this is a generic '
+                    f'regulation rather than a specific named project.\n\n'
+                    f'Stage mapping (Spanish administrative process):\n'
+                    f'  - "información pública" / "consulta previa" → application_submitted\n'
+                    f'  - "DIA favorable" / "declaración impacto ambiental" → application_approved\n'
+                    f'  - "autorización administrativa" / "utilidad pública" → permitted\n'
+                    f'  - "puesta en servicio" / "acta de puesta en marcha" → ongoing\n\n'
+                    f'---\n{body[:MAX_BODY_CHARS]}'
+                ),
+            }],
+        )
+    except anthropic.RateLimitError as e:
+        log.warning(f'    LLM rate-limited on {item["id"]} — skipping (will retry next run): {str(e)[:120]}')
+        return None
+    except Exception as e:
+        log.warning(f'    LLM failed on {item["id"]}: {str(e)[:120]}')
+        return None
     for block in msg.content:
         if getattr(block, 'type', None) == 'tool_use' and block.name == 'submit_spain_renewable_project':
             return block.input
@@ -286,7 +304,7 @@ def main():
 
     log.info(f'  total: {len(all_hits)} BOE items to LLM-extract')
 
-    inserted = skipped = generic_filtered = 0
+    inserted = skipped = generic_filtered = rate_limited = 0
     for h in all_hits:
         if args.dry_run:
             log.info(f'    [dry-run] {h["id"]} · {h["title"][:90]}')
@@ -296,7 +314,12 @@ def main():
             skipped += 1
             continue
         ext = llm_extract(h, body)
-        if not ext or not ext.get('is_specific_project'):
+        # Throttle to keep under 50k tokens/min (Anthropic starter cap)
+        time.sleep(LLM_THROTTLE_SECONDS)
+        if ext is None:
+            rate_limited += 1
+            continue
+        if not ext.get('is_specific_project'):
             generic_filtered += 1
             continue
         row = build_row(ext, h, today)
@@ -317,10 +340,10 @@ def main():
             'finished_at':        f'{today}T00:00:00Z',
             'records_written':    inserted,
             'source_attribution': 'BOE.es Sumario API',
-            'notes':              f'Spain BOE · {inserted} upserts · {skipped} skipped · {generic_filtered} filtered as generic.',
+            'notes':              f'Spain BOE · {inserted} upserts · {skipped} skipped · {generic_filtered} filtered as generic · {rate_limited} rate-limited.',
         }).execute()
 
-    log.info(f'=== complete: {inserted} upserted · {generic_filtered} generic-filtered · {skipped} skipped ===')
+    log.info(f'=== complete: {inserted} upserted · {generic_filtered} generic-filtered · {skipped} skipped · {rate_limited} rate-limited ===')
 
 
 if __name__ == '__main__':

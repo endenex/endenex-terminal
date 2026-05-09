@@ -35,6 +35,7 @@ import argparse
 import os
 import re
 import sys
+import time
 from datetime import date
 
 import requests
@@ -47,6 +48,12 @@ from repowering._base import (
 
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY')
 ANTHROPIC_MODEL   = 'claude-haiku-4-5'
+
+# Anthropic starter tier caps inputs at 50k tokens/min. Each project
+# page is ~2.5k tokens (10k chars). Sleep 4s between LLM calls to
+# stay under the cap.
+LLM_THROTTLE_SECONDS = 4
+MAX_BODY_CHARS       = 10_000
 
 PORTAL = 'https://www.consultations-publiques.developpement-durable.gouv.fr'
 
@@ -178,34 +185,41 @@ def llm_extract(title: str, desc: str, body: str, url: str) -> dict | None:
     except ImportError:
         return None
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    msg = client.messages.create(
-        model=ANTHROPIC_MODEL,
-        max_tokens=1500,
-        tools=[EXTRACT_TOOL],
-        tool_choice={'type': 'tool', 'name': 'submit_france_renewable_project'},
-        messages=[{
-            'role': 'user',
-            'content': (
-                f'Source URL: {url}\n'
-                f'Title: {title}\n'
-                f'Description: {desc}\n\n'
-                f'Page text follows. Determine if this is a SPECIFIC named '
-                f'renewable project (one wind farm, one solar plant, one '
-                f'BESS site) with a procedure underway, vs a GENERIC '
-                f'regulation (national rule modification, decree draft, '
-                f'PPE consultation, sector-wide policy). Return '
-                f'is_specific_project=false for the generic case.\n\n'
-                f'For specific projects, fill the structured fields. '
-                f'Stage maps roughly:\n'
-                f'  - "consultation préalable" / "phase amont" → announced\n'
-                f'  - "enquête publique en cours" → application_submitted\n'
-                f'  - "avis favorable de l\'AE" / "déclaration utilité publique" → application_approved\n'
-                f'  - "arrêté préfectoral d\'autorisation" / "permis de construire délivré" → permitted\n'
-                f'  - "mise en service" / "raccordement" → ongoing\n\n'
-                f'---\n{body[:25_000]}'
-            ),
-        }],
-    )
+    try:
+        msg = client.messages.create(
+            model=ANTHROPIC_MODEL,
+            max_tokens=1500,
+            tools=[EXTRACT_TOOL],
+            tool_choice={'type': 'tool', 'name': 'submit_france_renewable_project'},
+            messages=[{
+                'role': 'user',
+                'content': (
+                    f'Source URL: {url}\n'
+                    f'Title: {title}\n'
+                    f'Description: {desc}\n\n'
+                    f'Page text follows. Determine if this is a SPECIFIC named '
+                    f'renewable project (one wind farm, one solar plant, one '
+                    f'BESS site) with a procedure underway, vs a GENERIC '
+                    f'regulation (national rule modification, decree draft, '
+                    f'PPE consultation, sector-wide policy). Return '
+                    f'is_specific_project=false for the generic case.\n\n'
+                    f'For specific projects, fill the structured fields. '
+                    f'Stage maps roughly:\n'
+                    f'  - "consultation préalable" / "phase amont" → announced\n'
+                    f'  - "enquête publique en cours" → application_submitted\n'
+                    f'  - "avis favorable de l\'AE" / "déclaration utilité publique" → application_approved\n'
+                    f'  - "arrêté préfectoral d\'autorisation" / "permis de construire délivré" → permitted\n'
+                    f'  - "mise en service" / "raccordement" → ongoing\n\n'
+                    f'---\n{body[:MAX_BODY_CHARS]}'
+                ),
+            }],
+        )
+    except anthropic.RateLimitError as e:
+        log.warning(f'    LLM rate-limited on {url[:60]} — skipping (will retry next run): {str(e)[:120]}')
+        return None
+    except Exception as e:
+        log.warning(f'    LLM failed on {url[:60]}: {str(e)[:120]}')
+        return None
     for block in msg.content:
         if getattr(block, 'type', None) == 'tool_use' and block.name == 'submit_france_renewable_project':
             return block.input
@@ -295,7 +309,7 @@ def main():
 
     log.info(f'  {len(candidates)} unique candidate pages → LLM extract')
 
-    inserted = skipped = generic_filtered = 0
+    inserted = skipped = generic_filtered = rate_limited = 0
     for c in candidates:
         if args.dry_run:
             log.info(f'    [dry-run] {c["title"][:80]}')
@@ -305,7 +319,12 @@ def main():
             skipped += 1
             continue
         ext = llm_extract(c['title'], c['desc'], body, c['href'])
-        if not ext or not ext.get('is_specific_project'):
+        # Throttle to keep under 50k tokens/min (Anthropic starter cap)
+        time.sleep(LLM_THROTTLE_SECONDS)
+        if ext is None:
+            rate_limited += 1
+            continue
+        if not ext.get('is_specific_project'):
             generic_filtered += 1
             continue
         row = build_row(ext, c['href'], today)
@@ -326,10 +345,10 @@ def main():
             'finished_at':        f'{today}T00:00:00Z',
             'records_written':    inserted,
             'source_attribution': PORTAL,
-            'notes':              f'France EIA · {inserted} upserts · {skipped} skipped · {generic_filtered} filtered as generic.',
+            'notes':              f'France EIA · {inserted} upserts · {skipped} skipped · {generic_filtered} filtered as generic · {rate_limited} rate-limited.',
         }).execute()
 
-    log.info(f'=== complete: {inserted} upserted · {generic_filtered} generic-filtered · {skipped} skipped ===')
+    log.info(f'=== complete: {inserted} upserted · {generic_filtered} generic-filtered · {skipped} skipped · {rate_limited} rate-limited ===')
 
 
 if __name__ == '__main__':
