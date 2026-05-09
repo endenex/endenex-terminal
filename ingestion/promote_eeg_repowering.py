@@ -138,32 +138,27 @@ def cluster_to_project_row(cluster: list[dict]) -> dict:
             f'Source: MaStR + Endenex EEG-expiry inference v1.'
         ),
         'asset_id':            cluster[0]['id'],   # link to first turbine in cluster
-        'source_type':         'Endenex EEG-Expiry Inference',
+        'source_type':         'eeg_register',     # lowercase enum value
         'source_date':         today,
-        'confidence':          'Inferred',
-        'derivation':          'Modelled',
+        'confidence':          'Low',              # EEG-expiry inference, not observed
+        'derivation':          'Inferred',         # 'Inferred' is a derivation value, not confidence
         'last_reviewed':       today,
     }
 
 
 def upsert_projects(client, rows: list[dict]) -> int:
-    """
-    Upsert keyed on (project_name, country_code) — best-effort dedup.
-    Doesn't have a true natural key; we set source_type so re-runs with the same
-    inference replace prior rows from this script without touching curated rows
-    from Airtable / planning portals (which carry different source_type values).
+    """Idempotent upsert via dedupe_key (migration 074). Replaces the
+    legacy delete-by-source_type + bulk-insert pattern that broke when
+    two records collided on (name × country × asset_class).
     """
     if not rows:
         return 0
-    # No unique constraint exists in repowering_projects. Use a manual approach:
-    # delete prior EEG-inference rows, then insert fresh. This keeps idempotency
-    # and avoids stale rows when assets drop out of the EEG window.
-    client.table('repowering_projects') \
-        .delete() \
-        .eq('source_type', 'Endenex EEG-Expiry Inference') \
-        .execute()
-    client.table('repowering_projects').insert(rows).execute()
-    return len(rows)
+    from repowering._base import upsert_project
+    total = 0
+    for row in rows:
+        if upsert_project(client, row):
+            total += 1
+    return total
 
 
 def log_run(client, status: str, written: int, error: str | None = None):

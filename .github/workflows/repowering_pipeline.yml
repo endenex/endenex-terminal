@@ -25,26 +25,17 @@ jobs:
           cache: 'pip'
           cache-dependency-path: ingestion/requirements.txt
       - run: pip install -r ingestion/requirements.txt openpyxl
-      - name: ERCOT GINR
-        working-directory: ingestion
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: python -m repowering.ercot_ginr
-        continue-on-error: true
-      - name: CAISO Queue
+      # ERCOT disabled in CI: ercot.com is fronted by Imperva WAF and
+      # returns 403 to all unauthenticated downloads. Trigger
+      # ingestion/repowering/ercot_ginr.py manually with --url if you
+      # can host the XLS somewhere accessible. Texas coverage will
+      # come from EIA Form 860 with ~12-month lag.
+      - name: CAISO Queue (strict repowering filter)
         working-directory: ingestion
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python -m repowering.caiso_queue
-        continue-on-error: true
-      - name: RTE France Open Data (DISABLED — see notes)
-        working-directory: ingestion
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: python -m repowering.rte_france
         continue-on-error: true
       - name: France EIA (consultations-publiques + LLM)
         working-directory: ingestion
@@ -54,9 +45,10 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python -m repowering.france_eia
         continue-on-error: true
-      # AEMO requires a manual URL update each month (latest workbook link
-      # is generated dynamically). Skipping by default; trigger manually
-      # via workflow_dispatch when AEMO publishes the new month.
+      # rte_france.py: deprecated (commune-aggregated dataset, no
+      # project-level data). Replaced by france_eia.py above. Kept in
+      # repo for reference; not invoked.
+      # AEMO: same — requires monthly URL refresh, trigger manually.
 
   phase-2-eu-fragmented:
     if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 4 * * 2'
@@ -70,14 +62,6 @@ jobs:
           cache: 'pip'
           cache-dependency-path: ingestion/requirements.txt
       - run: pip install -r ingestion/requirements.txt openpyxl
-      - name: MITECO Spain (DISABLED — see notes)
-        working-directory: ingestion
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: python -m repowering.miteco_spain
-        continue-on-error: true
       - name: Spain BOE (national gazette + LLM)
         working-directory: ingestion
         env:
@@ -86,8 +70,10 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python -m repowering.spain_boe
         continue-on-error: true
-      # Terna requires the monthly XLSX URL — update workflow_dispatch when
-      # Terna publishes new month.
+      # miteco_spain.py: deprecated (URL pattern dead, 404). Replaced
+      # by spain_boe.py above. Kept in repo for reference; not invoked.
+      # Terna: requires monthly URL refresh, trigger manually when
+      # the Italian regulator publishes a new XLSX.
 
   phase-3-corporate-filings:
     if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 4 * * 3'

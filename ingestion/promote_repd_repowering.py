@@ -35,7 +35,7 @@ from datetime import date
 import pandas as pd
 import requests
 from base_ingestor import get_supabase_client, today_iso
-from ingest_repd import REPD_URL, TECHNOLOGY_FILTER, osgb_to_latlon, parse_date
+from ingest_repd import discover_repd_url, TECHNOLOGY_FILTER, osgb_to_latlon, parse_date
 
 log = logging.getLogger(__name__)
 PIPELINE = 'promote_repd_repowering'
@@ -58,8 +58,9 @@ STATUS_TO_STAGE = {
 
 
 def fetch_repd() -> pd.DataFrame:
-    log.info(f'Downloading REPD from {REPD_URL}')
-    r = requests.get(REPD_URL, timeout=120)
+    repd_url = discover_repd_url()
+    log.info(f'Downloading REPD from {repd_url}')
+    r = requests.get(repd_url, timeout=120)
     r.raise_for_status()
     df = pd.read_excel(io.BytesIO(r.content), sheet_name='REPD')
     log.info(f'Downloaded {len(df):,} REPD rows')
@@ -135,7 +136,7 @@ def map_records(df: pd.DataFrame) -> list[dict]:
             'source_url':           'https://www.gov.uk/government/publications/renewable-energy-planning-database-monthly-extract',
             'notes':                f'REPD Development Status: {status}. Already commissioned site with active planning activity — observed repowering signal.',
             'asset_id':             None,
-            'source_type':          'BEIS REPD Planning Status',
+            'source_type':          'repd',
             'source_date':          today,
             'confidence':           'High',
             'derivation':           'Observed',
@@ -161,17 +162,17 @@ def _to_float(v):
 
 
 def upsert_projects(client, rows: list[dict]) -> int:
+    """Idempotent upsert via dedupe_key (migration 074). Replaces the
+    legacy delete-by-source_type + bulk-insert pattern that broke when
+    two records collided on (name × country × asset_class).
+    """
     if not rows:
         return 0
-    # Replace prior REPD-derived rows
-    client.table('repowering_projects').delete().eq('source_type', 'BEIS REPD Planning Status').execute()
-    # Batch insert
-    BATCH = 200
+    from repowering._base import upsert_project
     total = 0
-    for i in range(0, len(rows), BATCH):
-        chunk = rows[i:i+BATCH]
-        client.table('repowering_projects').insert(chunk).execute()
-        total += len(chunk)
+    for row in rows:
+        if upsert_project(client, row):
+            total += 1
     return total
 
 
