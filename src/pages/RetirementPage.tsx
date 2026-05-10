@@ -10,6 +10,7 @@ import { clsx } from 'clsx'
 import { ExternalLink } from 'lucide-react'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, Legend } from 'recharts'
 import { supabase } from '@/lib/supabase'
+import { useDesignLife } from '@/store/designLife'
 import { InstallStackedArea } from '@/components/charts/InstallStackedArea'
 import { DecomWaveBars }      from '@/components/charts/DecomWaveBars'
 import { WorldAssetMap, type AssetPin } from '@/components/charts/WorldAssetMap'
@@ -344,7 +345,14 @@ interface RetirementPanelProps {
 function RetirementPanel({ spec, className }: RetirementPanelProps) {
   const [rows,    setRows]    = useState<InstallRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [median,  setMedian]  = useState(spec.sliderDefault)
+  // Median design-life lives in the shared store so the WFF panel in
+  // Recycling Capacity Monitor stays in lockstep when this slider moves.
+  const median    = useDesignLife(s => spec.key === 'wind'  ? s.windMedianYears
+                                     : spec.key === 'solar' ? s.solarMedianYears
+                                     :                        s.bessMedianYears)
+  const setMedian = useDesignLife(s => spec.key === 'wind'  ? s.setWind
+                                     : spec.key === 'solar' ? s.setSolar
+                                     :                        s.setBess)
   const [selected,setSelected]= useState<Set<string>>(new Set())   // selected countries; empty = ALL
 
   // Load installation history for this asset class (or set of classes for wind)
@@ -432,7 +440,7 @@ function RetirementPanel({ spec, className }: RetirementPanelProps) {
                  min={spec.sliderMin} max={spec.sliderMax}
                  step={1}
                  value={median}
-                 onChange={e => setMedian(parseInt(e.target.value))}
+                 onChange={e => setMedian(parseInt(e.target.value, 10))}
                  className={clsx(
                    'w-24 h-1 rounded-sm cursor-pointer appearance-none bg-[#D8D3CB] outline-none',
                    '[&::-webkit-slider-thumb]:appearance-none',

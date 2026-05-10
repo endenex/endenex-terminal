@@ -19,6 +19,7 @@ import {
   applyUncertainty, UNCERTAINTY_PCT,
   type AssetClass, type MaterialIntensity, type VintageCohort,
 } from '@/data/material_assumptions'
+import { useDesignLife } from '@/store/designLife'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1062,12 +1063,21 @@ const MATERIAL_COLORS: Record<string, string> = {
   electrolyte:  '#7c7c7c',  // mid grey (waste)
 }
 
-interface RetirementRow {
-  asset_class:     'onshore_wind' | 'offshore_wind' | 'solar_pv' | 'bess'
-  country:         string
-  retire_year:     number
-  commission_year: number
-  retiring_mw:     number
+interface InstallHistoryRow {
+  asset_class:  'wind_onshore' | 'wind_offshore' | 'solar' | 'bess'
+  country:      string
+  region:       string | null
+  year:         number       // commission year
+  capacity_mw:  number
+  duration_h:   number | null  // BESS only — used to derive MWh
+}
+
+/** Same triangular distribution as ARI panels — median ±2y window. */
+function triangularAnnualRetirement(age: number, median: number): number {
+  if (age < 0) return 0
+  const offset = Math.abs(Math.round(age) - median)
+  if (offset > 2) return 0
+  return (3 - offset) / 9
 }
 
 interface YearMaterialBand {
@@ -1101,76 +1111,101 @@ function getIntensitiesFor(ac: AssetClass): Record<string, MaterialIntensity[]> 
   return ac === 'wind' ? WIND_INTENSITIES : ac === 'solar' ? SOLAR_INTENSITIES : BESS_INTENSITIES
 }
 
-// Map our AssetClass (wind/solar/bess) to the schema enum values used in
-// retirement_schedule_v (onshore_wind, offshore_wind, solar_pv, bess).
+// Map our AssetClass (wind/solar/bess) to the installation_history
+// asset_class enum values (wind_onshore, wind_offshore, solar, bess).
 function dbAssetClassFilter(ac: AssetClass): string[] {
-  if (ac === 'wind')  return ['onshore_wind', 'offshore_wind']
-  if (ac === 'solar') return ['solar_pv']
+  if (ac === 'wind')  return ['wind_onshore', 'wind_offshore']
+  if (ac === 'solar') return ['solar']
   return ['bess']
 }
+
+const RETIRE_YEARS_WFF = Array.from({ length: 27 }, (_, i) => 2024 + i)  // 2024-2050
 
 function WasteFlowForecastPanel() {
   const [assetClass, setAssetClass] = useState<AssetClass>('wind')
   const [region, setRegion]         = useState('GLOBAL')
-  const [rows, setRows]             = useState<RetirementRow[]>([])
+  const [rows, setRows]             = useState<InstallHistoryRow[]>([])
   const [loading, setLoading]       = useState(true)
+
+  // Median design life — read from shared store so ARI sliders drive
+  // this panel too. When user drags slider in ARI, this panel updates.
+  const median = useDesignLife(s => assetClass === 'wind'  ? s.windMedianYears
+                                  : assetClass === 'solar' ? s.solarMedianYears
+                                  :                          s.bessMedianYears)
 
   useEffect(() => {
     setLoading(true)
     let q = supabase
-      .from('retirement_schedule_v')
-      .select('asset_class, country, retire_year, commission_year, retiring_mw')
+      .from('installation_history')
+      .select('asset_class, country, region, year, capacity_mw, duration_h')
       .in('asset_class', dbAssetClassFilter(assetClass))
-      .gte('retire_year', 2024)
-      .lte('retire_year', 2050)
 
     const cfg = WFF_REGIONS.find(r => r.code === region)
     if (cfg?.countries) q = q.in('country', cfg.countries)
 
     q.then(({ data }) => {
-      setRows((data ?? []) as RetirementRow[])
+      setRows((data ?? []) as InstallHistoryRow[])
       setLoading(false)
     })
   }, [assetClass, region])
 
   // Compute chart series + detail rows + chemistry-weighted BESS pricing
-  // + confidence bands. For each retiring (year, commission_year) we look
-  // up the cohort, multiply MW × intensity_kg_per_unit / 1000 = tonnes per
-  // material. For BESS black mass specifically, the unit price is
-  // weighted by the cohort's chemistry mix (NMC / LFP / NCA / Na-ion).
+  // + confidence bands. Mirrors ARI panels' triangular-distribution
+  // retirement model with the SAME slider-driven median design life
+  // (sourced from the shared design-life store).
+  //
+  // Pipeline:
+  //   installation_history (commission year × country × MW)
+  //     × triangular distribution(age, median)
+  //     × cohort-aware intensity per MW
+  //     × first-degree recovery %
+  //   = recovered tonnes per (retire year × material)
   const { chartData, detailRows, materialKeys, bessChemistryBlend, totalRange2030 } = useMemo(() => {
     const cohorts     = getCohortsFor(assetClass)
     const intensities = getIntensitiesFor(assetClass)
     const recovery    = FIRST_DEGREE_RECOVERY[assetClass]
 
-    // Tally by year × material
+    // Tally by retire-year × material
     const byYear: Record<number, Record<string, number>> = {}
     // Detail accumulator (per material)
     const byMaterial: Record<string, { source: string; display: string }> = {}
-    // BESS-only: track chemistry-weighted black mass price by year
-    // (because cohorts feed different years; weight by retiring MW)
+    // BESS-only: track chemistry-weighted black mass price by retiring MW
     let bmPriceWeightedSum = 0
     let bmPriceWeightedDen = 0
     // Cohort retiring-MW totals — used for chemistry blend display
     const cohortMwTotals: Record<string, number> = {}
 
     for (const r of rows) {
-      const cohort = cohortForYear(cohorts, r.commission_year)
+      // Convert capacity to the right unit. Wind/solar = MW; BESS = MWh
+      // (capacity_mw × duration_h, same as ARI BESS panel).
+      const mw_or_mwh = (assetClass === 'bess' && r.duration_h != null)
+        ? r.capacity_mw * r.duration_h
+        : r.capacity_mw
+
+      const cohort = cohortForYear(cohorts, r.year)
       const mats   = intensities[cohort.label] ?? []
-      cohortMwTotals[cohort.label] = (cohortMwTotals[cohort.label] ?? 0) + r.retiring_mw
 
-      for (const m of mats) {
-        const tonnes = (r.retiring_mw * m.kg_per_unit) / 1000
-        if (!byYear[r.retire_year]) byYear[r.retire_year] = {}
-        byYear[r.retire_year][m.material] = (byYear[r.retire_year][m.material] ?? 0) + tonnes
-        if (!byMaterial[m.material]) byMaterial[m.material] = { source: m.source, display: m.display }
-      }
+      // For each retire year in window, what fraction of this cohort retires?
+      for (const retireY of RETIRE_YEARS_WFF) {
+        const age = retireY - r.year
+        const frac = triangularAnnualRetirement(age, median)
+        if (frac === 0) continue
+        const retiringThisYear = mw_or_mwh * frac
 
-      // Chemistry-weighted black mass price (BESS only)
-      if (assetClass === 'bess') {
-        const price = bessChemistryWeightedPrice(cohort)
-        bmPriceWeightedSum += price * r.retiring_mw
-        bmPriceWeightedDen += r.retiring_mw
+        cohortMwTotals[cohort.label] = (cohortMwTotals[cohort.label] ?? 0) + retiringThisYear
+
+        for (const m of mats) {
+          const tonnes = (retiringThisYear * m.kg_per_unit) / 1000
+          if (!byYear[retireY]) byYear[retireY] = {}
+          byYear[retireY][m.material] = (byYear[retireY][m.material] ?? 0) + tonnes
+          if (!byMaterial[m.material]) byMaterial[m.material] = { source: m.source, display: m.display }
+        }
+
+        if (assetClass === 'bess') {
+          const price = bessChemistryWeightedPrice(cohort)
+          bmPriceWeightedSum += price * retiringThisYear
+          bmPriceWeightedDen += retiringThisYear
+        }
       }
     }
 
@@ -1255,7 +1290,7 @@ function WasteFlowForecastPanel() {
     }).sort((a, b) => b.total_t_2030 - a.total_t_2030)
 
     return { chartData, detailRows, materialKeys, bessChemistryBlend, totalRange2030 }
-  }, [rows, assetClass])
+  }, [rows, assetClass, median])
 
   const fmtT = (n: number) => n >= 1_000_000 ? `${(n/1_000_000).toFixed(1)}Mt`
                             : n >= 1_000     ? `${(n/1_000).toFixed(0)}kt`
@@ -1269,6 +1304,11 @@ function WasteFlowForecastPanel() {
     <Panel label="PCM" title="Waste Flow Forecast" className="col-span-6"
            meta={
              <div className="flex items-center gap-1.5">
+               <span className="text-[10px] text-ink-4 tabular-nums"
+                     title="Median design life — set in the Asset Retirement Intelligence panel sliders. Drag the matching ARI slider to update both panels in lockstep.">
+                 {median}y design life
+               </span>
+               <span className="text-ink-4 text-[10px]">·</span>
                <div className="flex items-center bg-canvas border border-border rounded-sm p-px">
                  {WFF_ASSET_CLASSES.map(a => (
                    <button key={a.code} onClick={() => setAssetClass(a.code)}
