@@ -843,10 +843,19 @@ function GateFeesTablePanel() {
                 {r.region.replace(/\s*\/\s*/g, ' /​')}
               </td>
               <td className={clsx('px-2 py-1 text-right text-[11px] whitespace-nowrap', GATE_STATUS_STYLE[r.status])}
-                  title={`Range: ${r.range}\nConfidence: ${r.confidence}`}>
-                {r.status === 'cost' && r.median_local != null
-                  ? <>{GATE_CURRENCY_SYMBOL[r.currency]}{r.median_local.toLocaleString('en-US', { maximumFractionDigits: 0 })}<span className="text-[9.5px] text-ink-4 font-normal">/t</span></>
-                  : GATE_STATUS_LABEL[r.status]}
+                  title={`Range: ${r.range}\nConfidence: ${r.confidence}${r.source ? `\n\nSource: ${r.source}\n(click to open)` : ''}`}>
+                {r.source ? (
+                  <a href={r.source} target="_blank" rel="noreferrer"
+                     className="hover:underline cursor-pointer">
+                    {r.status === 'cost' && r.median_local != null
+                      ? <>{GATE_CURRENCY_SYMBOL[r.currency]}{r.median_local.toLocaleString('en-US', { maximumFractionDigits: 0 })}<span className="text-[9.5px] text-ink-4 font-normal">/t</span></>
+                      : GATE_STATUS_LABEL[r.status]}
+                  </a>
+                ) : (
+                  r.status === 'cost' && r.median_local != null
+                    ? <>{GATE_CURRENCY_SYMBOL[r.currency]}{r.median_local.toLocaleString('en-US', { maximumFractionDigits: 0 })}<span className="text-[9.5px] text-ink-4 font-normal">/t</span></>
+                    : GATE_STATUS_LABEL[r.status]
+                )}
                 <div className={clsx('text-[8.5px] font-normal mt-0.5 uppercase tracking-wide',
                   r.confidence === 'confident' ? 'text-emerald-700'
                   : r.confidence === 'plausible' ? 'text-amber-700'
@@ -856,10 +865,6 @@ function GateFeesTablePanel() {
               </td>
               <td className="px-2 py-1 text-[10.5px] text-ink-3 leading-snug">
                 {r.notes}
-                {r.source && (
-                  <> · <a href={r.source} target="_blank" rel="noreferrer"
-                          className="text-ink-4 hover:text-teal hover:underline italic">source</a></>
-                )}
               </td>
             </tr>
           ))}
@@ -952,44 +957,11 @@ const RECOVERY_OFFSET_TABLE: RecoveryOffsetRow[] = [
     notes:'EU LFP refining nascent. Fortum, Tozero pilot scale only. Most LFP black mass exported to CN.',
     source:'https://www.isi.fraunhofer.de/en/blog/themen/batterie-update/batterie-recycling_europa_kapazitaeten_bedarf_update_2025.html' },
 
-  // ── Standard metal-scrap payables (asset owner sells to scrap merchant) ──
-  { asset_classes:['wind','bess'], category:'metal_scrap', pathway:'Steel HMS 1&2',
-    region:'EU', region_group:'EU', payable_pct:'~93%', benchmark:'IODEX HMS 80/20',
-    usd_per_t: 330, confidence:'confident',
-    notes:'Standard ferrous scrap, no chemistry premium. Tracks Fastmarkets / SBB indices.',
-    source:'https://www.fastmarkets.com/scrap/' },
-  { asset_classes:['wind','bess'], category:'metal_scrap', pathway:'Steel HMS 1&2',
-    region:'US', region_group:'US', payable_pct:'~93%', benchmark:'AMM HMS 80/20 Midwest',
-    usd_per_t: 340, confidence:'confident',
-    notes:'AMM Midwest mill index. Wind tower steel grades highest premium.',
-    source:'https://www.amm.com/' },
-  { asset_classes:['wind','solar','bess'], category:'metal_scrap', pathway:'Copper No.2 (LME-linked)',
-    region:'EU', region_group:'EU', payable_pct:'75-80%', benchmark:'LME Cu cash settlement',
-    usd_per_t: 7000, confidence:'confident',
-    notes:'No.2 grade — bare bright copper trades 90%+, mixed/insulated 60-75%.',
-    source:'https://www.lme.com/Metals/Non-ferrous/LME-Copper' },
-  { asset_classes:['wind','solar','bess'], category:'metal_scrap', pathway:'Copper No.2 (LME-linked)',
-    region:'US', region_group:'US', payable_pct:'80-87%', benchmark:'COMEX Cu front month',
-    usd_per_t: 7400, confidence:'confident',
-    notes:'COMEX-linked; ISRI Grade 200. US scrap merchants typically pay tighter % vs EU.',
-    source:'https://www.cmegroup.com/markets/metals/base/copper.html' },
-  { asset_classes:['wind','solar','bess'], category:'metal_scrap', pathway:'Aluminium taint-tabor',
-    region:'EU', region_group:'EU', payable_pct:'65-70%', benchmark:'LME Al cash settlement',
-    usd_per_t: 1500, confidence:'confident',
-    notes:'Mixed/old cast aluminium. Solar PV frames trade closer to taint-tabor; tower/nacelle Al varies.',
-    source:'https://www.lme.com/Metals/Non-ferrous/LME-Aluminium' },
-  { asset_classes:['wind','solar','bess'], category:'metal_scrap', pathway:'Aluminium taint-tabor',
-    region:'US', region_group:'US', payable_pct:'75-80%', benchmark:'LME Al cash + Midwest premium',
-    usd_per_t: 1700, confidence:'confident',
-    notes:'US scrap typically 5-10ppt tighter than EU due to tariff-supported domestic demand.',
-    source:'https://www.platts.com/aluminium-prices' },
-  { asset_classes:['wind'], category:'metal_scrap', pathway:'Zinc galvanising',
-    region:'EU', region_group:'EU', payable_pct:'~65%', benchmark:'LME Zn cash',
-    usd_per_t: 1900, confidence:'plausible',
-    notes:'Wind tower galvanising. Thin market; only worth recovery on bulk volumes.',
-    source:'https://www.lme.com/Metals/Non-ferrous/LME-Zinc' },
-
   // ── Specialist recovery (rare-earth, silver) ──
+  // Standard ferrous / non-ferrous metal scrap payables (steel, copper,
+  // aluminium, zinc) deliberately excluded — those are scrap-merchant
+  // commodity trades, not the specialist off-take pathways this panel
+  // is designed to surface. SMI Decom Material Volume covers those.
   { asset_classes:['wind'], category:'specialist', pathway:'NdPr from PMSG magnets',
     region:'GLOBAL', region_group:'EU', payable_pct:'~25%', benchmark:'NdPr oxide market',
     usd_per_t: 60_000, confidence:'low',
@@ -1106,8 +1078,8 @@ function RecoveryOffsetPanel() {
       </table>
       <div className="flex-shrink-0 border-t border-border bg-canvas px-3 py-1">
         <p className="text-[9.5px] text-ink-4 truncate"
-           title="Off-take payables = % of underlying benchmark price the asset owner receives. Black mass payables are chemistry-specific (NMC valued at Ni+Co+Li sum; LFP at Li only). Standard scrap payables are % of LME/COMEX. Specialist (RE, Ag) payables come from a small handful of refiners with thin price discovery.">
-          Off-take revenue — % of benchmark received by asset owner. Hover for details.
+           title="Specialist off-take payables only — black mass (chemistry-priced via NMC=Ni+Co+Li, LFP=Li) and rare-earth / silver from specialist refiners (Solvay, MP Materials, ROSI, FRELP). Standard ferrous / non-ferrous scrap (steel, copper, aluminium, zinc) excluded — those are commodity trades, see SMI Decom Material Volume.">
+          Specialist off-take revenue only — black mass + RE + silver. Standard scrap excluded. Hover for detail.
         </p>
       </div>
     </Panel>
