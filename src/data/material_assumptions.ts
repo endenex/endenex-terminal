@@ -491,6 +491,15 @@ export const MATERIAL_BUCKET: Record<string, MaterialBucket> = {
   silicon:      'specialist',  // Same PV specialists as silver, but
                                 // output is downcycled construction
                                 // aggregate (no commodity-grade market)
+  glass:        'specialist',  // PV glass requires thermal-mechanical
+                                // EVA decomposition (500°C+) before
+                                // separation. Generic cullet brokers
+                                // can't take contaminated PV laminate —
+                                // only the same PV specialists who do
+                                // silver/silicon (ROSI, FRELP,
+                                // SOLARCYCLE, Reiling, Veolia ProGlass).
+                                // Distinct from container-glass cullet
+                                // recycling (different commodity chain).
 
   // ── SCRAP MERCHANT — SMI Decom Material Volume ─────────────────────
   steel:        'scrap_merchant',
@@ -498,7 +507,6 @@ export const MATERIAL_BUCKET: Record<string, MaterialBucket> = {
   copper:       'scrap_merchant',
   aluminium:    'scrap_merchant',
   zinc:         'scrap_merchant',
-  glass:        'scrap_merchant',  // Cullet broker (weak but commoditised)
 
   // ── WASTE — no recovery, hidden from both panels ───────────────────
   polymer:      'waste',  // Cabling jackets, EVA encapsulant
