@@ -86,23 +86,56 @@ LME_ZINC_OVER_ALUM_RATIO = 1.10
 
 # ── Yahoo Finance fetch ─────────────────────────────────────────────────────────
 
-def _fetch_close(ticker: str) -> float | None:
-    """Returns last close price in raw ticker units, or None if unavailable."""
-    try:
-        import yfinance as yf
-    except ImportError:
-        log.error('yfinance not installed. Add to requirements.txt: yfinance')
-        return None
+# Direct Yahoo v8 chart endpoint (the "official" public chart API). The yfinance
+# Python package historically wrapped this but recently switched to the v7 quote
+# endpoint which Yahoo broke (returns 401). Calling v8 directly avoids the
+# yfinance dependency / breakage cycle entirely.
+#
+# Verified working 2026-05-10 for HG=F, ALI=F, ZNC=F via:
+#   curl https://query1.finance.yahoo.com/v8/finance/chart/HG=F?range=5d&interval=1d
+# Returns regularMarketPrice + close history. No auth required.
 
+YAHOO_V8_URL = 'https://query1.finance.yahoo.com/v8/finance/chart/{ticker}'
+
+
+def _fetch_close(ticker: str) -> float | None:
+    """Returns last close price in raw ticker units, or None if unavailable.
+
+    Calls Yahoo's v8 chart API directly (no yfinance dependency). Reads the
+    most recent non-null close from the 5-day daily series; falls back to
+    regularMarketPrice from the meta block if the timeseries is empty.
+    """
+    import requests
+    url = YAHOO_V8_URL.format(ticker=ticker)
     try:
-        t = yf.Ticker(ticker)
-        hist = t.history(period='5d')   # 5d window in case last day is empty
-        if hist.empty:
-            log.warning(f'  {ticker}: no history returned')
+        r = requests.get(url, params={'range': '5d', 'interval': '1d'},
+                         timeout=20,
+                         headers={'User-Agent': 'Mozilla/5.0'})
+        if r.status_code != 200:
+            log.warning(f'  {ticker}: HTTP {r.status_code}')
             return None
-        close = float(hist['Close'].dropna().iloc[-1])
-        log.info(f'  {ticker} last close = {close:.4f} (native units)')
-        return close
+        data = r.json()
+        result = (data.get('chart') or {}).get('result') or []
+        if not result:
+            log.warning(f'  {ticker}: no result in chart response')
+            return None
+        meta   = result[0].get('meta') or {}
+        # Try the timeseries first (most recent non-null close)
+        indicators = result[0].get('indicators') or {}
+        quote = (indicators.get('quote') or [{}])[0]
+        closes = [c for c in (quote.get('close') or []) if c is not None]
+        if closes:
+            close = float(closes[-1])
+            log.info(f'  {ticker} last close = {close:.4f} (native units)')
+            return close
+        # Fallback: meta regularMarketPrice
+        rmp = meta.get('regularMarketPrice')
+        if rmp is not None:
+            close = float(rmp)
+            log.info(f'  {ticker} regularMarketPrice = {close:.4f} (native units)')
+            return close
+        log.warning(f'  {ticker}: no close in timeseries or meta')
+        return None
     except Exception as e:
         log.warning(f'  {ticker} fetch failed: {e}')
         return None
@@ -110,7 +143,7 @@ def _fetch_close(ticker: str) -> float | None:
 
 def fetch_benchmarks() -> dict[str, float | None]:
     """Returns dict of benchmark → USD/tonne (or None if fetch failed)."""
-    log.info('Fetching primary-metal benchmarks via yfinance…')
+    log.info('Fetching primary-metal benchmarks via Yahoo v8 chart API…')
 
     # COMEX copper (USD/lb) → USD/tonne
     hg = _fetch_close('HG=F')

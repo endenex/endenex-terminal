@@ -34,6 +34,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from io import StringIO
 from datetime import date, timedelta
@@ -43,7 +44,16 @@ import requests
 from base_ingestor import get_supabase_client, log
 
 
+# Two endpoints. The API (api.stlouisfed.org) is rock-solid but requires a
+# free key (sign up at https://fredaccount.stlouisfed.org/apikey). The CSV
+# graph endpoint (fred.stlouisfed.org) is keyless but unreliable —
+# verified 2026-05-10 returning HTTP/2 stream errors and 60s+ timeouts.
+# We try API first when FRED_API_KEY is set, fall back to CSV otherwise.
+
+FRED_API_URL = 'https://api.stlouisfed.org/fred/series/observations'
 FRED_CSV_URL = 'https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}'
+
+FRED_API_KEY = os.environ.get('FRED_API_KEY')
 
 FRED_SERIES = {
     'steel_scrap': {
@@ -75,24 +85,47 @@ FRED_SERIES = {
 BATCH = 500
 
 
-def fetch_fred(series_id: str):
-    """Returns list of (date_iso, index_value) for the FRED series.
+def _fetch_via_api(series_id: str) -> list[tuple[str, float]]:
+    """Pull observations via the FRED API (api.stlouisfed.org). Requires
+    FRED_API_KEY env var. Reliable; minimal failure modes."""
+    try:
+        r = requests.get(FRED_API_URL, timeout=30, params={
+            'series_id':  series_id,
+            'api_key':    FRED_API_KEY,
+            'file_type':  'json',
+        })
+        if r.status_code != 200:
+            log.warning(f'    {series_id}: API HTTP {r.status_code} — {r.text[:200]}')
+            return []
+        observations = (r.json() or {}).get('observations') or []
+        out: list[tuple[str, float]] = []
+        for obs in observations:
+            try:
+                v = float(obs.get('value'))
+            except (TypeError, ValueError):
+                continue
+            if v <= 0 or v != v:
+                continue
+            d = (obs.get('date') or '').strip()
+            if d:
+                out.append((d, v))
+        log.info(f'    {series_id}: {len(out)} obs via API')
+        return out
+    except Exception as e:
+        log.warning(f'    {series_id}: API fetch failed: {e}')
+        return []
 
-    Retries on network timeouts (FRED occasionally takes >60s to respond,
-    especially on cold starts of long-history series). Total elapsed cap
-    ~3 minutes per series before giving up and returning empty list.
-    """
+
+def _fetch_via_csv(series_id: str) -> list[tuple[str, float]]:
+    """Fallback CSV graph endpoint. Unreliable but no key required."""
     try:
         import pandas as pd
     except ImportError:
-        log.error('pandas required: pip install pandas')
-        sys.exit(1)
+        log.error('pandas required for CSV fallback: pip install pandas')
+        return []
 
-    url = FRED_CSV_URL.format(series_id=series_id)
-    log.info(f'  fetching FRED {series_id}…')
-
-    # Retry loop — exponential backoff on connection / read timeouts
     import time as _time
+    url = FRED_CSV_URL.format(series_id=series_id)
     last_exc: Exception | None = None
     for attempt in range(3):
         try:
@@ -104,39 +137,48 @@ def fetch_fred(series_id: str):
                 requests.exceptions.HTTPError) as e:
             last_exc = e
             if attempt < 2:
-                wait = 5 * (2 ** attempt)   # 5s, 10s, 20s
-                log.warning(f'    {series_id}: {type(e).__name__} on attempt {attempt+1}, retrying in {wait}s')
+                wait = 5 * (2 ** attempt)
+                log.warning(f'    {series_id}: CSV {type(e).__name__} on attempt {attempt+1}, retrying in {wait}s')
                 _time.sleep(wait)
             else:
-                log.warning(f'    {series_id}: gave up after 3 attempts: {e}')
+                log.warning(f'    {series_id}: CSV gave up after 3 attempts: {e}')
                 return []
     else:
-        # Loop exhausted without break — defensive fallback
-        log.warning(f'    {series_id}: exhausted retries: {last_exc}')
+        log.warning(f'    {series_id}: CSV exhausted retries: {last_exc}')
         return []
 
     df = pd.read_csv(StringIO(r.text))
     if len(df.columns) < 2:
-        log.warning(f'    unexpected CSV shape: {df.columns.tolist()}')
         return []
-    # First column = DATE, second = series value (named after series_id)
     date_col = df.columns[0]
     val_col  = df.columns[1]
     df[date_col] = df[date_col].astype(str)
-    df = df[[date_col, val_col]].rename(columns={date_col: 'd', val_col: 'v'})
-
     out: list[tuple[str, float]] = []
     for _, row in df.iterrows():
-        d = str(row['d']).strip()
         try:
-            v = float(row['v'])
+            v = float(row[val_col])
         except (TypeError, ValueError):
             continue
-        if v != v or v <= 0:
+        if v <= 0 or v != v:
             continue
-        out.append((d, v))
-    log.info(f'    {len(out)} monthly rows fetched ({out[0][0]} → {out[-1][0]})' if out else '    empty')
+        d = str(row[date_col]).strip()
+        if d:
+            out.append((d, v))
+    log.info(f'    {series_id}: {len(out)} obs via CSV')
     return out
+
+
+def fetch_fred(series_id: str) -> list[tuple[str, float]]:
+    """Returns list of (date_iso, index_value). Tries API first when key
+    is configured (reliable), falls back to CSV graph endpoint otherwise.
+    """
+    log.info(f'  fetching FRED {series_id}…')
+    if FRED_API_KEY:
+        out = _fetch_via_api(series_id)
+        if out:
+            return out
+        log.info(f'    {series_id}: API returned empty, falling back to CSV')
+    return _fetch_via_csv(series_id)
 
 
 def get_anchor_price(client, scrap_grade: str, anchor_region: str) -> tuple[float | None, str | None]:

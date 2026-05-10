@@ -129,11 +129,11 @@ export function BottomFooter() {
           >
             Coverage
           </button>
-          <button className="text-chrome-muted hover:text-chrome-text uppercase tracking-wide font-semibold transition-colors flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-bright inline-block" />
-            Alerts
-          </button>
-          <span className="w-px h-3 bg-chrome-border" />
+          {/* Alerts placeholder removed 2026-05-10 — button had no
+              onClick + dot was hardcoded amber, so it always read as
+              "you have alerts" without any actual alert system behind it.
+              Re-add when the alert subsystem (watch-event triggers,
+              threshold breaches, scheduled-report failures) is wired up. */}
           <button className="text-chrome-muted hover:text-chrome-text uppercase tracking-wide font-semibold transition-colors">
             Account
           </button>

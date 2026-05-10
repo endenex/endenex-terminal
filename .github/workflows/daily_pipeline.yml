@@ -142,6 +142,10 @@ jobs:
         env:
           SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # Optional: if set, uses reliable api.stlouisfed.org instead of
+          # flaky fred.stlouisfed.org graph CSV. Free key at
+          # https://fredaccount.stlouisfed.org/apikey
+          FRED_API_KEY:              ${{ secrets.FRED_API_KEY }}
         run: python fetch_fred_scrap_history.py --years 10
         continue-on-error: true
 
