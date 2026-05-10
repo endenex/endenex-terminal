@@ -180,25 +180,25 @@ const GATE_FEE_TABLE: GateFeeRow[] = [
     source:'https://erefdn.org/product/2024-analysis-of-municipal-solid-waste-msw-landfill-tipping-fees/' },
 
   // ── SOLAR PV ──
-  { asset_classes:['solar'], pathway:'Mechanical (frame + glass)',   region:'EU',                region_group:'EU',      status:'cost',       currency:'EUR', median_local:  60,  range:'€15-150/t',   confidence:'plausible',
+  { asset_classes:['solar'], pathway:'Mechanical processing',   region:'EU',                region_group:'EU',      status:'cost',       currency:'EUR', median_local:  60,  range:'€15-150/t',   confidence:'plausible',
     notes:'Producer eco-fees prepaid (€50-200/t); recyclers still charge €40-100/t at gate. Lower end DE/NL with high-purity flowsheets.',
     source:'https://lighthief.energy/solar-panel-recycling-in-europe-weee-rules-costs-and-end-of-life-strategies/' },
-  { asset_classes:['solar'], pathway:'Mechanical (frame + glass)',   region:'UK',                region_group:'UK',      status:'cost',       currency:'GBP', median_local:  20,  range:'£0-60/t',     confidence:'low',
+  { asset_classes:['solar'], pathway:'Mechanical processing',   region:'UK',                region_group:'UK',      status:'cost',       currency:'GBP', median_local:  20,  range:'£0-60/t',     confidence:'low',
     notes:'PV Cycle UK collective scheme — gate fee suppressed by producer-funded WEEE collection.',
     source:'https://www.theecoexperts.co.uk/solar-panels/solar-panel-recycling' },
-  { asset_classes:['solar'], pathway:'Mechanical (frame + glass)',   region:'US',                region_group:'US',      status:'cost',       currency:'USD', median_local: 200,  range:'$150-400/t',  confidence:'plausible',
+  { asset_classes:['solar'], pathway:'Mechanical processing',   region:'US',                region_group:'US',      status:'cost',       currency:'USD', median_local: 200,  range:'$150-400/t',  confidence:'plausible',
     notes:'No producer-funded levy — recyclers charge $15-45/panel ≈ $750-2,250/t residential. SOLARCYCLE bulk industrial $150-400/t.',
     source:'https://www.empirecenter.org/publications/renewable-solar-comes-with-recurring-waste-costs/' },
-  { asset_classes:['solar'], pathway:'Mechanical (frame + glass)',   region:'CN',                region_group:'AsiaPac', status:'cost',       currency:'CNY', median_local: 500,  range:'¥400-700/t',  confidence:'low',
+  { asset_classes:['solar'], pathway:'Mechanical processing',   region:'CN',                region_group:'AsiaPac', status:'cost',       currency:'CNY', median_local: 500,  range:'¥400-700/t',  confidence:'low',
     notes:'MIIT pilot facilities — figure represents marginal mechanical step only; full processing higher.',
     source:'https://english.www.gov.cn/news/202307/12/content_WS64aea90dc6d0868f4e8ddb9a.html' },
-  { asset_classes:['solar'], pathway:'Specialty (Si + Ag recovery)', region:'EU',                region_group:'EU',      status:'cost',       currency:'EUR', median_local: 100,  range:'€80-150/t',   confidence:'confident',
+  { asset_classes:['solar'], pathway:'Specialist processing', region:'EU',                region_group:'EU',      status:'cost',       currency:'EUR', median_local: 100,  range:'€80-150/t',   confidence:'confident',
     notes:'Reiling Münster (50 kt/yr), Veolia Rousset. Thin-film (CdTe) higher at €200-350/t — separate.',
     source:'https://lighthief.energy/solar-panel-recycling-in-europe-weee-rules-costs-and-end-of-life-strategies/' },
-  { asset_classes:['solar'], pathway:'Specialty (Si + Ag recovery)', region:'US',                region_group:'US',      status:'cost',       currency:'USD', median_local: 140,  range:'$120-250/t',  confidence:'plausible',
+  { asset_classes:['solar'], pathway:'Specialist processing', region:'US',                region_group:'US',      status:'cost',       currency:'USD', median_local: 140,  range:'$120-250/t',  confidence:'plausible',
     notes:'SOLARCYCLE Texas Phase 1, We Recycle Solar AZ. RWE 2025 deal + Prologis announcement.',
     source:'https://www.pv-tech.org/solarcycle-prologis-sign-solar-pv-module-recycling-deal/' },
-  { asset_classes:['solar'], pathway:'Specialty (Si + Ag recovery)', region:'CN',                region_group:'AsiaPac', status:'cost',       currency:'CNY', median_local: 550,  range:'¥400-800/t',  confidence:'low',
+  { asset_classes:['solar'], pathway:'Specialist processing', region:'CN',                region_group:'AsiaPac', status:'cost',       currency:'CNY', median_local: 550,  range:'¥400-800/t',  confidence:'low',
     notes:'Five-region MIIT pilot scheme. 2023 cost ¥75/module against ¥56 recovered value (net ~¥800/t).',
     source:'https://www.chinadaily.com.cn/a/202306/05/WS647d343ba31033ad3f7ba63f.html' },
   { asset_classes:['solar'], pathway:'Landfill',                     region:'EU',                region_group:'EU',      status:'restricted', currency:'EUR', median_local: null, range:'restricted',  confidence:'confident',
@@ -870,8 +870,8 @@ function GateFeesTablePanel() {
       </table>
       <div className="flex-shrink-0 border-t border-border bg-canvas px-3 py-1">
         <p className="text-[9.5px] text-ink-4 truncate"
-           title="Gate fees are costs paid by asset owners to processors / disposers. BESS black mass is a tradeable commodity (revenue, chemistry-priced) and lives in PCM Waste Flow Forecast → unit price column on the Black mass row, weighted by NMC/LFP/NCA/Na-ion mix per cohort.">
-          Gate fees only — costs paid by asset owner. Black mass commodity economics in Waste Flow Forecast (chemistry-weighted). Hover for detail.
+           title="Money OUT — net cost paid by asset owner to whoever takes the material next (disposer, processor, recycler). Includes processing services where the recycler's commodity-output revenue doesn't fully cover their processing cost (asset owner pays the net). Compare with Recovery Offset = money IN. BESS black mass commodity economics live separately in PCM Waste Flow Forecast → unit price column.">
+          Money OUT — net cost paid by asset owner. See Recovery Offset for money IN. Hover for detail.
         </p>
       </div>
     </Panel>
@@ -1076,8 +1076,8 @@ function RecoveryOffsetPanel() {
       </table>
       <div className="flex-shrink-0 border-t border-border bg-canvas px-3 py-1">
         <p className="text-[9.5px] text-ink-4 truncate"
-           title="Specialist off-take payables only — black mass (chemistry-priced via NMC=Ni+Co+Li, LFP=Li) and rare-earth / silver from specialist refiners (Solvay, MP Materials, ROSI, FRELP). Standard ferrous / non-ferrous scrap (steel, copper, aluminium, zinc) excluded — those are commodity trades, see SMI Decom Material Volume.">
-          Specialist off-take revenue only — black mass + RE + silver. Standard scrap excluded. Hover for detail.
+           title="Money IN — revenue received by asset owner from specialist refiners. Black mass payables (chemistry-priced: NMC=Ni+Co+Li, LFP=Li only). Rare-earth / silver payables from specialist refiners (Solvay, MP Materials, ROSI, FRELP). Standard ferrous / non-ferrous scrap (steel, copper, aluminium, zinc) excluded — those are commodity trades surfaced in SMI Decom Material Volume.">
+          Money IN — specialist refiner payables only. See Gate Fees for money OUT. Hover for detail.
         </p>
       </div>
     </Panel>
@@ -1479,19 +1479,19 @@ const CAPACITY_TIGHTNESS: TightnessRow[] = [
   // ── SOLAR PV — capacity broadly slack vs incoming waves
   // EU mechanical: Veolia / SUEZ / national WEEE network ~100 kt/yr.
   // EU panel waste 2024 ~50 kt; collection rate ~40% → ~20 kt actually flowing
-  { asset_class:'solar', region:'EU', pathway:'Mechanical (frame + glass)',  utilisation_pct: 40 },
+  { asset_class:'solar', region:'EU', pathway:'Mechanical processing',  utilisation_pct: 40 },
   // UK mechanical: PV Cycle UK + smaller; UK panel waste tiny <5 kt/yr
-  { asset_class:'solar', region:'UK', pathway:'Mechanical (frame + glass)',  utilisation_pct: 25 },
+  { asset_class:'solar', region:'UK', pathway:'Mechanical processing',  utilisation_pct: 25 },
   // US mechanical: SOLARCYCLE TX 30 kt + We Recycle Solar AZ 10 kt = 40 kt
   // vs ~25 kt panel waste. Genuinely tightening.
-  { asset_class:'solar', region:'US', pathway:'Mechanical (frame + glass)',  utilisation_pct: 60 },
+  { asset_class:'solar', region:'US', pathway:'Mechanical processing',  utilisation_pct: 60 },
   // CN mechanical: emerging recyclers + MIIT pilots; large headroom
-  { asset_class:'solar', region:'CN', pathway:'Mechanical (frame + glass)',  utilisation_pct: 30 },
+  { asset_class:'solar', region:'CN', pathway:'Mechanical processing',  utilisation_pct: 30 },
   // EU specialty Si+Ag: Reiling Münster ~50 kt/yr is the main player; demand
   // for high-recovery is ~15 kt/yr currently — overcapacity
-  { asset_class:'solar', region:'EU', pathway:'Specialty (Si + Ag recovery)', utilisation_pct: 30 },
+  { asset_class:'solar', region:'EU', pathway:'Specialist processing', utilisation_pct: 30 },
   // US specialty: SOLARCYCLE high-recovery line ramping; Prologis + RWE deals
-  { asset_class:'solar', region:'US', pathway:'Specialty (Si + Ag recovery)', utilisation_pct: 45 },
+  { asset_class:'solar', region:'US', pathway:'Specialist processing', utilisation_pct: 45 },
 
   // ── BESS — EU/UK/US still slack; CN is the only tight market
   // EU pre-treatment: Hydrovolt 12 kt + Accurec ~4 kt + BASF Schwarzheide
