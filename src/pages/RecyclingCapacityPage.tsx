@@ -808,13 +808,15 @@ function GateFeesTablePanel() {
            }>
       <table className="w-full table-fixed">
         <colgroup>
-          <col style={{ width: '55%' }} />  {/* Pathway — most narrative */}
+          <col style={{ width: '40%' }} />  {/* Pathway */}
+          <col style={{ width: '17%' }} />  {/* Asset class */}
           <col style={{ width: '20%' }} />  {/* Region */}
-          <col style={{ width: '25%' }} />  {/* Median + confidence */}
+          <col style={{ width: '23%' }} />  {/* Median + confidence */}
         </colgroup>
         <thead>
           <tr className="bg-titlebar border-b border-border sticky top-0 z-10">
             <th className="px-2 py-1 text-left  text-[9.5px] font-semibold text-ink-3 uppercase tracking-wide">Pathway</th>
+            <th className="px-2 py-1 text-left  text-[9.5px] font-semibold text-ink-3 uppercase tracking-wide">Asset</th>
             <th className="px-2 py-1 text-left  text-[9.5px] font-semibold text-ink-3 uppercase tracking-wide">Region</th>
             <th onClick={cycleSort}
                 title={
@@ -832,11 +834,9 @@ function GateFeesTablePanel() {
             <tr key={i} className="border-b border-border/70 hover:bg-raised align-top">
               <td className="px-2 py-1">
                 <div className="text-[11px] text-ink font-medium leading-tight">{r.pathway}</div>
-                {assetClass === 'all' && (
-                  <div className="text-[9px] text-ink-4 uppercase tracking-wide mt-0.5">
-                    {r.asset_classes.join(' · ')}
-                  </div>
-                )}
+              </td>
+              <td className="px-2 py-1 text-[10px] text-ink-3 uppercase tracking-wide leading-snug">
+                {r.asset_classes.join(' · ')}
               </td>
               <td className="px-2 py-1 text-[10.5px] text-ink-2 leading-snug break-words">
                 {/* Insert zero-width spaces after slashes so long lists like
