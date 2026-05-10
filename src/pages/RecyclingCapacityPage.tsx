@@ -805,10 +805,9 @@ function GateFeesTablePanel() {
            }>
       <table className="w-full table-fixed">
         <colgroup>
-          <col style={{ width: '30%' }} />
-          <col style={{ width: '12.5%' }} />
-          <col style={{ width: '12.5%' }} />
-          <col style={{ width: '45%' }} />
+          <col style={{ width: '55%' }} />  {/* Pathway — most narrative */}
+          <col style={{ width: '20%' }} />  {/* Region */}
+          <col style={{ width: '25%' }} />  {/* Median + confidence */}
         </colgroup>
         <thead>
           <tr className="bg-titlebar border-b border-border sticky top-0 z-10">
