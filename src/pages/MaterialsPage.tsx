@@ -1530,7 +1530,7 @@ function DecomVolumeForecastPanel() {
     })
   }, [assetClass, region])
 
-  const { chartData, detailRows, materialKeys } = useMemo(
+  const { chartData, materialKeys } = useMemo(
     () => computeWasteFlow({
       rows, assetClass, windMedian, solarMedian, bessMedian,
       bucket: 'scrap_merchant',     // ← THIS panel = scrap merchant streams only
@@ -1541,10 +1541,6 @@ function DecomVolumeForecastPanel() {
   const fmtT = (n: number) => n >= 1_000_000 ? `${(n/1_000_000).toFixed(1)}Mt`
                             : n >= 1_000     ? `${(n/1_000).toFixed(0)}kt`
                             : `${n.toFixed(0)}t`
-  const fmtUsd = (n: number) => n >= 1_000_000_000 ? `$${(n/1_000_000_000).toFixed(1)}B`
-                              : n >= 1_000_000     ? `$${(n/1_000_000).toFixed(0)}M`
-                              : n >= 1_000         ? `$${(n/1_000).toFixed(0)}k`
-                              : `$${n.toFixed(0)}`
 
   return (
     <Panel
@@ -1585,7 +1581,7 @@ function DecomVolumeForecastPanel() {
       }>
       <div className="flex flex-col h-full">
         {/* Chart */}
-        <div className="flex-shrink-0 h-[180px] px-2 pt-2">
+        <div className="flex-1 min-h-0 px-2 pt-2">
           {loading ? (
             <div className="h-full flex items-center justify-center text-[12px] text-ink-3">Loading…</div>
           ) : chartData.length === 0 ? (
@@ -1617,63 +1613,16 @@ function DecomVolumeForecastPanel() {
           )}
         </div>
 
-        {/* Detail table */}
-        <div className="flex-1 min-h-0 overflow-auto border-t border-border">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-titlebar border-b border-border sticky top-0 z-10">
-                <th rowSpan={2} className="px-2.5 py-1 text-left text-[10px] font-semibold text-ink-3 uppercase tracking-wide align-bottom">Material</th>
-                <th rowSpan={2} className="px-2.5 py-1 text-right text-[10px] font-semibold text-ink-3 uppercase tracking-wide align-bottom">Recovery</th>
-                <th rowSpan={2} className="px-2.5 py-1 text-right text-[10px] font-semibold text-ink-3 uppercase tracking-wide align-bottom">Unit price</th>
-                <th rowSpan={2} className="px-2.5 py-1 text-right text-[10px] font-semibold text-ink-3 uppercase tracking-wide align-bottom">2030 total</th>
-                <th colSpan={3}  className="px-2.5 pt-1 text-center text-[10px] font-semibold text-ink-3 uppercase tracking-wide border-b border-border/40">2030 recovered</th>
-                <th rowSpan={2} className="px-2.5 py-1 text-right text-[10px] font-semibold text-ink-3 uppercase tracking-wide align-bottom">2035 recovered</th>
-                <th rowSpan={2} className="px-2.5 py-1 text-left text-[10px] font-semibold text-ink-3 uppercase tracking-wide align-bottom">Source</th>
-              </tr>
-              <tr className="bg-titlebar border-b border-border sticky top-7 z-10">
-                <th className="px-2.5 pb-1 text-right text-[9px] font-semibold text-ink-4 normal-case tracking-wide">P10 low</th>
-                <th className="px-2.5 pb-1 text-right text-[9px] font-semibold text-teal normal-case tracking-wide">P50 central</th>
-                <th className="px-2.5 pb-1 text-right text-[9px] font-semibold text-ink-4 normal-case tracking-wide">P90 high</th>
-              </tr>
-            </thead>
-            <tbody>
-              {detailRows.map(r => (
-                <tr key={r.material} className="border-b border-border/70 hover:bg-raised">
-                  <td className="px-2.5 py-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-sm flex-shrink-0"
-                            style={{ background: MATERIAL_COLORS[r.material] ?? '#9ca3af' }} />
-                      <span className="text-[11.5px] text-ink font-medium">{materialName(r.material)}</span>
-                    </div>
-                  </td>
-                  <td className={clsx('px-2.5 py-1 text-right text-[11.5px] tabular-nums',
-                                      r.recovery_pct === 0 ? 'text-ink-4' : 'text-ink')}>
-                    {r.recovery_pct}%
-                  </td>
-                  <td className="px-2.5 py-1 text-right text-[11.5px] tabular-nums text-ink-2">
-                    {r.unit_price_usd_t > 0 ? fmtUsd(r.unit_price_usd_t) + '/t' : '—'}
-                  </td>
-                  <td className="px-2.5 py-1 text-right text-[11.5px] tabular-nums text-ink-2">{fmtT(r.total_t_2030)}</td>
-                  <td className="px-2.5 py-1 text-right text-[11.5px] tabular-nums text-ink-3">
-                    {r.recovery_pct > 0 ? fmtT(r.recovered_t_2030_p10) : '—'}
-                  </td>
-                  <td className="px-2.5 py-1 text-right text-[11.5px] tabular-nums text-ink font-semibold">
-                    {r.recovery_pct > 0 ? fmtT(r.recovered_t_2030) : '—'}
-                  </td>
-                  <td className="px-2.5 py-1 text-right text-[11.5px] tabular-nums text-ink-3">
-                    {r.recovery_pct > 0 ? fmtT(r.recovered_t_2030_p90) : '—'}
-                  </td>
-                  <td className="px-2.5 py-1 text-right text-[11.5px] tabular-nums text-ink font-semibold">{fmtT(r.recovered_t_2035)}</td>
-                  <td className="px-2.5 py-1 text-[10px] text-ink-4 max-w-[180px] truncate" title={r.source}>{r.source}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Footer note */}
+        {/* Footer note — single line. Detail table removed per user
+            (kept on PCM Waste Flow Forecast where the per-row
+            P10/P50/P90 + sources are more useful for specialist
+            recycling-pathway evaluation). */}
         <div className="flex-shrink-0 px-3 py-1 border-t border-border bg-canvas">
-          <p className="text-[9.5px] text-ink-4 leading-snug">{METHODOLOGY_NOTE}</p>
+          <p className="text-[9.5px] text-ink-4 truncate"
+             title={METHODOLOGY_NOTE.replace(/\n/g, ' ')}>
+            First-degree recovery only · scrap merchant streams ·
+            ARI design life · 2026-2035 · ±{assetClass === 'all' ? '15-35' : assetClass === 'wind' ? '15' : assetClass === 'solar' ? '25' : '35'}% confidence band · hover for full methodology
+          </p>
         </div>
       </div>
     </Panel>
