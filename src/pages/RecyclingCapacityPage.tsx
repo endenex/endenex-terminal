@@ -1098,8 +1098,8 @@ interface MaterialDetailRow {
   recovered_t_2030:   number      // P50 central
   recovered_t_2030_p10: number
   recovered_t_2030_p90: number
-  total_t_2040:       number
-  recovered_t_2040:   number
+  total_t_2035:       number
+  recovered_t_2035:   number
   source:             string
 }
 
@@ -1119,7 +1119,7 @@ function dbAssetClassFilter(ac: AssetClass): string[] {
   return ['bess']
 }
 
-const RETIRE_YEARS_WFF = Array.from({ length: 27 }, (_, i) => 2024 + i)  // 2024-2050
+const RETIRE_YEARS_WFF = Array.from({ length: 10 }, (_, i) => 2026 + i)  // 2026-2035 (matches ARI panels)
 
 function WasteFlowForecastPanel() {
   const [assetClass, setAssetClass] = useState<AssetClass>('wind')
@@ -1263,7 +1263,7 @@ function WasteFlowForecastPanel() {
     const detailRows: MaterialDetailRow[] = materialKeys.map(k => {
       const acc = byMaterial[k]
       const t30 = byYear[2030]?.[k] ?? 0
-      const t40 = byYear[2040]?.[k] ?? 0
+      const t35 = byYear[2035]?.[k] ?? 0
       const recPct = recovery[k] ?? 0
       const rec30 = t30 * recPct / 100
       const band30 = applyUncertainty(rec30, assetClass)
@@ -1283,8 +1283,8 @@ function WasteFlowForecastPanel() {
         recovered_t_2030:     Math.round(rec30),
         recovered_t_2030_p10: Math.round(band30.p10),
         recovered_t_2030_p90: Math.round(band30.p90),
-        total_t_2040:         Math.round(t40),
-        recovered_t_2040:     Math.round(t40 * recPct / 100),
+        total_t_2035:         Math.round(t35),
+        recovered_t_2035:     Math.round(t35 * recPct / 100),
         source:               acc?.source ?? '—',
       }
     }).sort((a, b) => b.total_t_2030 - a.total_t_2030)
@@ -1415,7 +1415,7 @@ function WasteFlowForecastPanel() {
                   2030 recovered
                   <span className="ml-1 text-[9px] font-normal normal-case text-ink-4">P10–P90</span>
                 </th>
-                <th className="px-2.5 py-1 text-right text-[10px] font-semibold text-ink-3 uppercase tracking-wide">2040 recovered</th>
+                <th className="px-2.5 py-1 text-right text-[10px] font-semibold text-ink-3 uppercase tracking-wide">2035 recovered</th>
                 <th className="px-2.5 py-1 text-left text-[10px] font-semibold text-ink-3 uppercase tracking-wide">Source</th>
               </tr>
             </thead>
@@ -1445,7 +1445,7 @@ function WasteFlowForecastPanel() {
                       </span>
                     )}
                   </td>
-                  <td className="px-2.5 py-1 text-right text-[11.5px] tabular-nums text-ink font-semibold">{fmtT(r.recovered_t_2040)}</td>
+                  <td className="px-2.5 py-1 text-right text-[11.5px] tabular-nums text-ink font-semibold">{fmtT(r.recovered_t_2035)}</td>
                   <td className="px-2.5 py-1 text-[10px] text-ink-4 max-w-[180px] truncate" title={r.source}>{r.source}</td>
                 </tr>
               ))}
