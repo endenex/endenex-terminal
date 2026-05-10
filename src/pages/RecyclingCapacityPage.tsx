@@ -212,33 +212,12 @@ const GATE_FEE_TABLE: GateFeeRow[] = [
     source:'https://www.vic.gov.au/e-waste-ban' },
 
   // ── BESS / batteries ──
-  { asset_classes:['bess'],  pathway:'Pre-treatment to black mass',  region:'EU',                region_group:'EU',      status:'cost',       currency:'EUR', median_local: 1800, range:'€1,200-3,000/t', confidence:'plausible',
-    notes:'Hydrovolt, Accurec, BASF Schwarzheide. Fraunhofer ISI 2025 notes overcapacity compressing fees.',
-    source:'https://www.isi.fraunhofer.de/en/blog/themen/batterie-update/batterie-recycling_europa_kapazitaeten_bedarf_update_2025.html' },
-  { asset_classes:['bess'],  pathway:'Pre-treatment to black mass',  region:'UK',                region_group:'UK',      status:'cost',       currency:'GBP', median_local: 2000, range:'£1,400-2,400/t', confidence:'plausible',
-    notes:'Veolia, Recycling Lives battery line. Tracks EU mainland with ~10% transport premium.',
-    source:'https://www.canarymedia.com/articles/recycling-renewables/ev-battery-recycling-had-a-rough-2024' },
-  { asset_classes:['bess'],  pathway:'Pre-treatment to black mass',  region:'US',                region_group:'US',      status:'cost',       currency:'USD', median_local: 2000, range:'$1,500-3,000/t', confidence:'plausible',
-    notes:'Li-Cycle (Glencore-acquired Aug 2025), Redwood Materials NV. Pricing compressed post-merger.',
-    source:'https://www.canarymedia.com/articles/recycling-renewables/ev-battery-recycling-had-a-rough-2024' },
-  { asset_classes:['bess'],  pathway:'Pre-treatment to black mass',  region:'CN',                region_group:'AsiaPac', status:'cost',       currency:'CNY', median_local: 3500, range:'¥2,500-4,500/t', confidence:'plausible',
-    notes:'Whitelisted recyclers — CATL, GEM, Brunp. NMC inputs often payable; LFP/pack-format scrap takes a fee.',
-    source:'https://www.fastmarkets.com/insights/launch-of-china-ev-battery-scrap-black-mass-prices/' },
-  { asset_classes:['bess'],  pathway:'Pre-treatment to black mass',  region:'KR',                region_group:'AsiaPac', status:'cost',       currency:'USD', median_local: 1650, range:'$1,300-2,000/t', confidence:'plausible',
-    notes:'SungEel HiTech, Posco GS. Cost economics ~70-80% of US level.',
-    source:'https://www.fastmarkets.com/insights/launch-of-south-korean-black-mass-payable-indicators-pricing-notice/' },
-  { asset_classes:['bess'],  pathway:'Pyrometallurgical',            region:'EU',                region_group:'EU',      status:'cost',       currency:'EUR', median_local: 1400, range:'€1,200-1,800/t', confidence:'plausible',
-    notes:'Umicore Hoboken (7 kt/yr Li-ion). Pure-pyro figure synthetic — Umicore integrates pyro+hydro.',
-    source:'https://www.umicore.com/en/about/battery-materials-solutions/battery-recycling-solutions/pyro-hydro-technology' },
-  { asset_classes:['bess'],  pathway:'Hydrometallurgical refining',  region:'CN',                region_group:'AsiaPac', status:'payable',    currency:'CNY', median_local: null, range:'75-85% payable',  confidence:'confident',
-    notes:'Payable 75-85% of NiSO4 / CoSO4 / Li2CO3 prices for NMC black mass (Fastmarkets ddp China, Nov 2025).',
-    source:'https://www.fastmarkets.com/insights/launch-of-china-ev-battery-scrap-black-mass-prices/' },
-  { asset_classes:['bess'],  pathway:'Hydrometallurgical refining',  region:'EU',                region_group:'EU',      status:'cost',       currency:'EUR', median_local:  900, range:'€600-1,400/t',  confidence:'plausible',
-    notes:'Hydrovolt, Eramet, Revolt-acquired assets. Capacity overshoot has cut fees ~25-35% since 2023.',
-    source:'https://www.capgemini.com/de-de/wp-content/uploads/sites/8/2025/07/POV-Battery-Recycling_Capgemini-Engineering_2025-07.pdf' },
-  { asset_classes:['bess'],  pathway:'Hydrometallurgical refining',  region:'US',                region_group:'US',      status:'cost',       currency:'USD', median_local:  900, range:'$700-1,200/t',  confidence:'plausible',
-    notes:'Redwood Nevada, Li-Cycle (Glencore) hubs. IRA-funded capacity scale-up still bringing fees down.',
-    source:'https://www.canarymedia.com/articles/recycling-renewables/ev-battery-recycling-had-a-rough-2024' },
+  // NOTE: BESS pre-treatment / pyromet / hydromet pathways REMOVED from
+  // this table per user 2026-05-10. Black mass is a tradeable commodity
+  // — not a gate-fee cost. Black mass economics (chemistry-weighted
+  // pricing, vintage-aware mix) live in PCM Waste Flow Forecast as the
+  // unit price on the Black mass row. Only landfill / disposal entries
+  // (real policy facts) remain here.
   { asset_classes:['bess'],  pathway:'Landfill',                     region:'EU',                region_group:'EU',      status:'banned',     currency:'EUR', median_local: null, range:'banned',      confidence:'confident',
     notes:'Battery Regulation 2023/1542 prohibits landfill of waste batteries.',
     source:'https://eur-lex.europa.eu/eli/reg/2023/1542/oj' },
@@ -886,6 +865,12 @@ function GateFeesTablePanel() {
           ))}
         </tbody>
       </table>
+      <div className="flex-shrink-0 border-t border-border bg-canvas px-3 py-1">
+        <p className="text-[9.5px] text-ink-4 truncate"
+           title="Gate fees are costs paid by asset owners to processors / disposers. BESS black mass is a tradeable commodity (revenue, chemistry-priced) and lives in PCM Waste Flow Forecast → unit price column on the Black mass row, weighted by NMC/LFP/NCA/Na-ion mix per cohort.">
+          Gate fees only — costs paid by asset owner. Black mass commodity economics in Waste Flow Forecast (chemistry-weighted). Hover for detail.
+        </p>
+      </div>
     </Panel>
   )
 }
