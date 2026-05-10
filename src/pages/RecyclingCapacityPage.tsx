@@ -589,7 +589,7 @@ function BladeOutlookPanel() {
   const tone         = tightnessTone(selectedObs?.capacity_tightness_pct ?? null)
 
   return (
-    <Panel label="PCM" title="Endenex Eye" className="col-span-6 row-span-2"
+    <Panel label="PCM" title="Endenex Eye" className="col-span-6 row-span-3"
            meta={<span className="text-[10.5px] text-ink-4 uppercase tracking-wide">Satellite surveillance</span>}>
       {/* 3-column layout: facility list (25%) · imagery (50%) · assessment (25%) */}
       <div className="grid grid-cols-4 h-full min-h-0">
@@ -1087,7 +1087,7 @@ function WasteFlowForecastPanel() {
                               : `$${n.toFixed(0)}`
 
   return (
-    <Panel label="PCM" title="Waste Flow Forecast · specialist recycling" className="col-span-6"
+    <Panel label="PCM" title="Waste Flow Forecast · specialist recycling" className="col-span-3"
            meta={
              <div className="flex items-center gap-1.5">
                <span className="text-[10px] text-ink-4 tabular-nums"
@@ -1389,7 +1389,7 @@ function CapacityTightnessPanel() {
   }, [assetClass, region])
 
   return (
-    <Panel label="PCM" title="Capacity Tightness" className="col-span-6"
+    <Panel label="PCM" title="Capacity Tightness" className="col-span-3"
            meta={
              <div className="flex items-center gap-1.5">
                <div className="flex items-center bg-canvas border border-border rounded-sm p-px">
@@ -1467,14 +1467,16 @@ export function RecyclingCapacityPage() {
       </div>
 
       <div className="flex-1 min-h-0 overflow-hidden p-1.5">
-        {/* 12-col × 3-row grid. Right column (cols 7-12) is dedicated
-            to the Endenex Eye flagship panel which spans rows 1-2.
-            Left column (cols 1-6) stacks WFF (row 1) + Capacity
-            Tightness (row 2). Row 3 splits: Gate Fees | Regulatory. */}
+        {/* 12-col × 3-row grid. Right half (cols 7-12) is dedicated
+            entirely to the Endenex Eye flagship panel — full height
+            (row-span-3). Left half (cols 1-6) is split:
+              Row 1: WFF (cols 1-3) | Capacity Tightness (cols 4-6)
+              Row 2: Gate Fees (cols 1-6, full half-width)
+              Row 3: Regulatory Context (cols 1-6, full half-width) */}
         <div className="h-full grid grid-cols-12 grid-rows-3 gap-1.5">
           <WasteFlowForecastPanel />
-          <BladeOutlookPanel />
           <CapacityTightnessPanel />
+          <BladeOutlookPanel />
           <GateFeesTablePanel />
           <RegulatoryContextPanel />
         </div>
