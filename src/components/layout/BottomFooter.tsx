@@ -42,13 +42,34 @@ function fmtClock(d: Date): string {
   })
 }
 
+/**
+ * Tracks "when did our sync pipeline last successfully complete".
+ *
+ * Earlier version asked watch_events.updated_at — but if Airtable had
+ * no changed rows on a given day, no watch_events.updated_at got
+ * touched even though sync_airtable_watch ran fine. Result: STALE
+ * indicator on a quiet day.
+ *
+ * Better signal: the most recent SUCCESSFUL ingestion_runs row from
+ * any of the daily-pipeline jobs. That tracks "did the sync run",
+ * not "did data change". Threshold = 36h (1.5x daily cadence) so
+ * we don't false-alarm on overnight timezone edges.
+ */
 function useFeedSync() {
   const [lastSync, setLastSync] = useState<string | null>(null)
   useEffect(() => {
-    supabase.from('watch_events')
-      .select('updated_at').order('updated_at', { ascending: false })
-      .limit(1).single()
-      .then(({ data }) => { if (data?.updated_at) setLastSync(data.updated_at as string) })
+    supabase.from('ingestion_runs')
+      .select('finished_at')
+      .eq('status', 'success')
+      .in('pipeline', [
+        'sync_airtable_watch',  // primary signal — Airtable feed
+        'sync_uswtdb',           // fallback — daily USWTDB sync
+        'compute_dci',           // fallback — daily DCI publication
+        'fetch_fx_rates',        // fallback — daily ECB FX rates
+      ])
+      .order('finished_at', { ascending: false })
+      .limit(1).maybeSingle()
+      .then(({ data }) => { if (data?.finished_at) setLastSync(data.finished_at as string) })
   }, [])
   return lastSync
 }
@@ -58,7 +79,13 @@ export function BottomFooter() {
   const [overlay, setOverlay] = useState<null | 'health' | 'methodology'>(null)
   const now      = useClock()
   const lastSync = useFeedSync()
-  const synced   = lastSync && new Date(lastSync).toDateString() === new Date().toDateString()
+  // Threshold: 36h tolerates timezone edges (browser-local vs UTC) and
+  // some pipeline-run variance, while still catching genuine multi-day
+  // outages.
+  const hoursStale = lastSync
+    ? (Date.now() - new Date(lastSync).getTime()) / (1000 * 60 * 60)
+    : Infinity
+  const synced = hoursStale < 36
 
   return (
     <>

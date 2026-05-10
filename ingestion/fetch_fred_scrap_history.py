@@ -76,7 +76,12 @@ BATCH = 500
 
 
 def fetch_fred(series_id: str):
-    """Returns list of (date_iso, index_value) for the FRED series."""
+    """Returns list of (date_iso, index_value) for the FRED series.
+
+    Retries on network timeouts (FRED occasionally takes >60s to respond,
+    especially on cold starts of long-history series). Total elapsed cap
+    ~3 minutes per series before giving up and returning empty list.
+    """
     try:
         import pandas as pd
     except ImportError:
@@ -85,8 +90,30 @@ def fetch_fred(series_id: str):
 
     url = FRED_CSV_URL.format(series_id=series_id)
     log.info(f'  fetching FRED {series_id}…')
-    r = requests.get(url, timeout=60, headers={'User-Agent': 'endenex-terminal/1.0'})
-    r.raise_for_status()
+
+    # Retry loop — exponential backoff on connection / read timeouts
+    import time as _time
+    last_exc: Exception | None = None
+    for attempt in range(3):
+        try:
+            r = requests.get(url, timeout=(30, 90), headers={'User-Agent': 'endenex-terminal/1.0'})
+            r.raise_for_status()
+            break
+        except (requests.exceptions.Timeout,
+                requests.exceptions.ConnectionError,
+                requests.exceptions.HTTPError) as e:
+            last_exc = e
+            if attempt < 2:
+                wait = 5 * (2 ** attempt)   # 5s, 10s, 20s
+                log.warning(f'    {series_id}: {type(e).__name__} on attempt {attempt+1}, retrying in {wait}s')
+                _time.sleep(wait)
+            else:
+                log.warning(f'    {series_id}: gave up after 3 attempts: {e}')
+                return []
+    else:
+        # Loop exhausted without break — defensive fallback
+        log.warning(f'    {series_id}: exhausted retries: {last_exc}')
+        return []
 
     df = pd.read_csv(StringIO(r.text))
     if len(df.columns) < 2:
