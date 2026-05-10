@@ -568,7 +568,7 @@ function BladeOutlookPanel() {
   const tone         = tightnessTone(selectedObs?.capacity_tightness_pct ?? null)
 
   return (
-    <Panel label="PCM" title="Endenex Eye" className="col-span-6 row-span-3"
+    <Panel label="PCM" title="Endenex Eye" className="col-span-4 row-span-3"
            meta={<span className="text-[10.5px] text-ink-4 uppercase tracking-wide">Satellite surveillance</span>}>
       {/* 3-column layout: facility list (25%) · imagery (50%) · assessment (25%) */}
       <div className="grid grid-cols-4 h-full min-h-0">
@@ -776,7 +776,7 @@ function GateFeesTablePanel() {
   const sortArrow = sort === 'cost_asc' ? ' ↑' : sort === 'cost_desc' ? ' ↓' : ''
 
   return (
-    <Panel label="PCM" title="Gate Fees" className="col-span-3"
+    <Panel label="PCM" title="Gate Fees" className="col-span-4"
            meta={
              <div className="flex items-center gap-1.5">
                <div className="flex items-center bg-canvas border border-border rounded-sm p-px">
@@ -1000,7 +1000,7 @@ function RecoveryOffsetPanel() {
     })
 
   return (
-    <Panel label="PCM" title="Recovery Offset" className="col-span-3"
+    <Panel label="PCM" title="Recovery Offset" className="col-span-4"
            meta={
              <div className="flex items-center gap-1.5">
                <div className="flex items-center bg-canvas border border-border rounded-sm p-px">
@@ -1125,7 +1125,7 @@ function RegulatoryContextPanel() {
   })
 
   return (
-    <Panel label="PCM" title="Regulatory Context" className="col-span-6"
+    <Panel label="PCM" title="Regulatory Context" className="col-span-8"
            meta={
              <div className="flex items-center gap-1.5">
                <div className="flex items-center bg-canvas border border-border rounded-sm p-px">
@@ -1278,7 +1278,7 @@ function WasteFlowForecastPanel() {
                               : `$${n.toFixed(0)}`
 
   return (
-    <Panel label="PCM" title="Waste Flow Forecast · specialist recycling" className="col-span-3"
+    <Panel label="PCM" title="Waste Flow Forecast · specialist recycling" className="col-span-4"
            meta={
              <div className="flex items-center gap-1.5">
                <span className="text-[10px] text-ink-4 tabular-nums"
@@ -1580,7 +1580,7 @@ function CapacityTightnessPanel() {
   }, [assetClass, region])
 
   return (
-    <Panel label="PCM" title="Capacity Tightness" className="col-span-3"
+    <Panel label="PCM" title="Capacity Tightness" className="col-span-4"
            meta={
              <div className="flex items-center gap-1.5">
                <div className="flex items-center bg-canvas border border-border rounded-sm p-px">
@@ -1658,12 +1658,13 @@ export function RecyclingCapacityPage() {
       </div>
 
       <div className="flex-1 min-h-0 overflow-hidden p-1.5">
-        {/* 12-col × 3-row grid. Right half (cols 7-12) hosts the
-            Endenex Eye flagship full-height. Left half is now fully
-            split:
-              Row 1: WFF (cols 1-3)        | Capacity Tightness (cols 4-6)
-              Row 2: Gate Fees (cols 1-3)  | Recovery Offset    (cols 4-6)
-              Row 3: Regulatory Context (cols 1-6, full half-width)
+        {/* 12-col × 3-row grid. 2/3 left, 1/3 right.
+            Right third (cols 9-12) hosts Endenex Eye flagship,
+            full height (col-span-4 row-span-3).
+            Left two-thirds (cols 1-8):
+              Row 1: WFF (cols 1-4)        | Capacity Tightness (cols 5-8)
+              Row 2: Gate Fees (cols 1-4)  | Recovery Offset    (cols 5-8)
+              Row 3: Regulatory Context (cols 1-8, full 2/3 width)
             Gate Fees = costs paid; Recovery Offset = revenue received. */}
         <div className="h-full grid grid-cols-12 grid-rows-3 gap-1.5">
           <WasteFlowForecastPanel />
