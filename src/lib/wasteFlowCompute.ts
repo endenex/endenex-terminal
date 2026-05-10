@@ -280,18 +280,8 @@ export function materialName(key: string): string {
   return MATERIAL_DISPLAY[key] ?? key.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase())
 }
 
-export const MATERIAL_COLORS: Record<string, string> = {
-  steel:        '#6b7280',
-  cast_iron:    '#9ca3af',
-  copper:       '#b87333',
-  aluminium:    '#94a3b8',
-  zinc:         '#a1a1aa',
-  rare_earth:   '#9333ea',
-  composite:    '#dc2626',
-  polymer:      '#9b9b9b',
-  glass:        '#06b6d4',
-  silicon:      '#1e293b',
-  silver:       '#d4d4d8',
-  black_mass:   '#000000',
-  electrolyte:  '#7c7c7c',
-}
+// Endenex brand-aligned material palette. Re-exported from
+// chartStyle.ts so charts and the wasteFlowCompute module share one
+// source of truth.
+import { MATERIAL_BRAND_COLORS } from '@/lib/chartStyle'
+export const MATERIAL_COLORS = MATERIAL_BRAND_COLORS

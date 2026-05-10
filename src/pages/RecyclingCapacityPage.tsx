@@ -11,11 +11,13 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tool
 import { supabase } from '@/lib/supabase'
 import { BladePathwayBars } from '@/components/charts/BladePathwayBars'
 import { METHODOLOGY_NOTE } from '@/data/material_assumptions'
+import { AXIS_TICK, AXIS_LINE, GRID_PROPS, TOOLTIP_CONTENT_STYLE, TOOLTIP_LABEL_STYLE, TOOLTIP_ITEM_STYLE, LEGEND_PROPS } from '@/lib/chartStyle'
 import {
   computeWasteFlow, classesForSelection, dbAssetClassFilter,
   materialName, MATERIAL_COLORS, type WFFAssetClass, type InstallHistoryRow,
 } from '@/lib/wasteFlowCompute'
 import { useDesignLife } from '@/store/designLife'
+import { PillToggleGroup } from '@/components/ui/Pill'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -792,28 +794,8 @@ function GateFeesTablePanel() {
     <Panel label="PCM" title="Gate Fees" className="col-span-4"
            meta={
              <div className="flex items-center gap-1.5">
-               <div className="flex items-center bg-canvas border border-border rounded-sm p-px">
-                 {GATE_ASSET_TABS.map(t => (
-                   <button key={t.code} onClick={() => setAssetClass(t.code)}
-                           className={clsx(
-                             'px-1.5 py-0.5 text-[10px] font-semibold tracking-wide rounded-sm',
-                             assetClass === t.code ? 'bg-active text-teal' : 'text-ink-3 hover:text-ink',
-                           )}>
-                     {t.label}
-                   </button>
-                 ))}
-               </div>
-               <div className="flex items-center bg-canvas border border-border rounded-sm p-px">
-                 {GATE_REGION_TABS.map(t => (
-                   <button key={t.code} onClick={() => setRegion(t.code)}
-                           className={clsx(
-                             'px-1.5 py-0.5 text-[10px] font-semibold tracking-wide rounded-sm',
-                             region === t.code ? 'bg-active text-teal' : 'text-ink-3 hover:text-ink',
-                           )}>
-                     {t.label}
-                   </button>
-                 ))}
-               </div>
+               <PillToggleGroup options={GATE_ASSET_TABS} value={assetClass} onChange={setAssetClass} />
+               <PillToggleGroup options={GATE_REGION_TABS} value={region} onChange={setRegion} />
              </div>
            }>
       <table className="w-full table-fixed">
@@ -1016,28 +998,8 @@ function RecoveryOffsetPanel() {
     <Panel label="PCM" title="Recovery Offset" className="col-span-4"
            meta={
              <div className="flex items-center gap-1.5">
-               <div className="flex items-center bg-canvas border border-border rounded-sm p-px">
-                 {OFFSET_ASSET_TABS.map(t => (
-                   <button key={t.code} onClick={() => setAssetClass(t.code)}
-                           className={clsx(
-                             'px-1.5 py-0.5 text-[10px] font-semibold tracking-wide rounded-sm',
-                             assetClass === t.code ? 'bg-active text-teal' : 'text-ink-3 hover:text-ink',
-                           )}>
-                     {t.label}
-                   </button>
-                 ))}
-               </div>
-               <div className="flex items-center bg-canvas border border-border rounded-sm p-px">
-                 {OFFSET_REGION_TABS.map(t => (
-                   <button key={t.code} onClick={() => setRegion(t.code)}
-                           className={clsx(
-                             'px-1.5 py-0.5 text-[10px] font-bold tracking-wide rounded-sm',
-                             region === t.code ? 'bg-active text-teal' : 'text-ink-3 hover:text-ink',
-                           )}>
-                     {t.label}
-                   </button>
-                 ))}
-               </div>
+               <PillToggleGroup options={OFFSET_ASSET_TABS} value={assetClass} onChange={setAssetClass} />
+               <PillToggleGroup options={OFFSET_REGION_TABS} value={region} onChange={setRegion} weight="bold" />
              </div>
            }>
       <table className="w-full">
@@ -1301,28 +1263,8 @@ function WasteFlowForecastPanel() {
                    : `${assetClass === 'wind' ? windMedian : assetClass === 'solar' ? solarMedian : bessMedian}y design life`}
                </span>
                <span className="text-ink-4 text-[10px]">·</span>
-               <div className="flex items-center bg-canvas border border-border rounded-sm p-px">
-                 {WFF_ASSET_CLASSES.map(a => (
-                   <button key={a.code} onClick={() => setAssetClass(a.code)}
-                           className={clsx(
-                             'px-1.5 py-0.5 text-[10px] font-semibold tracking-wide rounded-sm',
-                             assetClass === a.code ? 'bg-active text-teal' : 'text-ink-3 hover:text-ink',
-                           )}>
-                     {a.label}
-                   </button>
-                 ))}
-               </div>
-               <div className="flex items-center bg-canvas border border-border rounded-sm p-px">
-                 {WFF_REGIONS.map(r => (
-                   <button key={r.code} onClick={() => setRegion(r.code)}
-                           className={clsx(
-                             'px-1.5 py-0.5 text-[10px] font-bold tracking-wide rounded-sm',
-                             region === r.code ? 'bg-active text-teal' : 'text-ink-3 hover:text-ink',
-                           )}>
-                     {r.label}
-                   </button>
-                 ))}
-               </div>
+               <PillToggleGroup options={WFF_ASSET_CLASSES} value={assetClass} onChange={setAssetClass} />
+               <PillToggleGroup options={WFF_REGIONS} value={region} onChange={setRegion} weight="bold" />
              </div>
            }>
       <div className="flex flex-col h-full">
@@ -1337,20 +1279,15 @@ function WasteFlowForecastPanel() {
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData} margin={{ top: 6, right: 8, left: -8, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="2 4" stroke="#e5e7eb" vertical={false} />
-                <XAxis dataKey="year"
-                       tick={{ fontSize: 9, fill: '#6b7280' }}
-                       axisLine={{ stroke: '#d1d5db' }}
-                       tickLine={false} />
-                <YAxis tick={{ fontSize: 9, fill: '#6b7280' }}
-                       axisLine={false}
-                       tickLine={false}
+                <CartesianGrid {...GRID_PROPS} />
+                <XAxis dataKey="year" tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} />
+                <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false}
                        tickFormatter={(v: number) => fmtT(v)} />
-                <RTooltip contentStyle={{ fontSize: 9, padding: '4px 6px', borderRadius: 2 }}
-                          labelStyle={{ fontSize: 9, fontWeight: 600 }}
-                          itemStyle={{ fontSize: 9 }}
+                <RTooltip contentStyle={TOOLTIP_CONTENT_STYLE}
+                          labelStyle={TOOLTIP_LABEL_STYLE}
+                          itemStyle={TOOLTIP_ITEM_STYLE}
                           formatter={(v: any) => fmtT(Number(v))} />
-                <Legend wrapperStyle={{ fontSize: 9, paddingTop: 2 }} iconSize={7} />
+                <Legend {...LEGEND_PROPS} />
                 {materialKeys.map(k => (
                   <Area key={k}
                         type="monotone"
