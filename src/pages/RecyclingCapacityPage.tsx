@@ -1467,12 +1467,16 @@ export function RecyclingCapacityPage() {
       </div>
 
       <div className="flex-1 min-h-0 overflow-hidden p-1.5">
+        {/* 12-col × 3-row grid. Right column (cols 7-12) is dedicated
+            to the Endenex Eye flagship panel which spans rows 1-2.
+            Left column (cols 1-6) stacks WFF (row 1) + Capacity
+            Tightness (row 2). Row 3 splits: Gate Fees | Regulatory. */}
         <div className="h-full grid grid-cols-12 grid-rows-3 gap-1.5">
           <WasteFlowForecastPanel />
           <BladeOutlookPanel />
+          <CapacityTightnessPanel />
           <GateFeesTablePanel />
           <RegulatoryContextPanel />
-          <CapacityTightnessPanel />
         </div>
       </div>
 
