@@ -823,7 +823,6 @@ function GateFeesTablePanel() {
                 className="px-2 py-1 text-right text-[9.5px] font-semibold text-ink-3 uppercase tracking-wide cursor-pointer hover:text-teal select-none whitespace-nowrap">
               Median{sortArrow}
             </th>
-            <th className="px-2 py-1 text-left  text-[9.5px] font-semibold text-ink-3 uppercase tracking-wide">Notes</th>
           </tr>
         </thead>
         <tbody>
@@ -843,7 +842,7 @@ function GateFeesTablePanel() {
                 {r.region.replace(/\s*\/\s*/g, ' /​')}
               </td>
               <td className={clsx('px-2 py-1 text-right text-[11px] whitespace-nowrap', GATE_STATUS_STYLE[r.status])}
-                  title={`Range: ${r.range}\nConfidence: ${r.confidence}${r.source ? `\n\nSource: ${r.source}\n(click to open)` : ''}`}>
+                  title={`Range: ${r.range}\nConfidence: ${r.confidence}${r.notes ? `\n\n${r.notes}` : ''}${r.source ? `\n\nSource: ${r.source}\n(click to open)` : ''}`}>
                 {r.source ? (
                   <a href={r.source} target="_blank" rel="noreferrer"
                      className="hover:underline cursor-pointer">
@@ -862,9 +861,6 @@ function GateFeesTablePanel() {
                   : 'text-ink-4')}>
                   {r.confidence}
                 </div>
-              </td>
-              <td className="px-2 py-1 text-[10.5px] text-ink-3 leading-snug">
-                {r.notes}
               </td>
             </tr>
           ))}
