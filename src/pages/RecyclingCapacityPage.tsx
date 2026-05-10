@@ -7,8 +7,16 @@
 import { useState, useEffect, useMemo } from 'react'
 import { clsx } from 'clsx'
 import { ExternalLink } from 'lucide-react'
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, Legend } from 'recharts'
 import { supabase } from '@/lib/supabase'
 import { BladePathwayBars } from '@/components/charts/BladePathwayBars'
+import {
+  WIND_COHORTS, SOLAR_COHORTS, BESS_COHORTS, cohortForYear,
+  WIND_INTENSITIES, SOLAR_INTENSITIES, BESS_INTENSITIES,
+  FIRST_DEGREE_RECOVERY, FIRST_DEGREE_PRICING_USD_PER_T,
+  METHODOLOGY_NOTE,
+  type AssetClass, type MaterialIntensity, type VintageCohort,
+} from '@/data/material_assumptions'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1009,37 +1017,312 @@ function RegulatoryContextPanel() {
   )
 }
 
-// ── 05 Waste Flow Forecast panel (placeholder) ───────────────────────────────
+// ── 05 Waste Flow Forecast panel ─────────────────────────────────────────────
 //
-// Will derive annual end-of-life waste tonnage by asset class × region from
-// the Asset Retirement Intelligence module's retirement schedule once that
-// is finalised. Multiplies each retiring asset's MW capacity by the
-// material-intensity matrix (kg/MW per material) to project waste flow by
-// year. Currently rendered as a placeholder.
+// First-degree material recovery forecast. Pipes:
+//   1. retirement_schedule_v (migration 053): retiring MW × year × country ×
+//      asset_class × commission_year (preserves vintage cohort)
+//   2. material_assumptions.ts: cohort-aware kg/MW intensities + first-degree
+//      recovery rates
+//   3. Aggregate by year × material → stacked area chart + detail table
+//
+// Asset class + region toggles match the rest of the PCM page aesthetic.
+// Methodology note in footer documents the first-degree convention.
+
+const WFF_REGIONS: { code: string; label: string; countries: string[] | null }[] = [
+  { code: 'EU',     label: 'EU',     countries: ['DE','FR','ES','IT','NL','DK','SE','PL','PT','BE','AT','CZ','GR','IE','FI'] },
+  { code: 'UK',     label: 'UK',     countries: ['GB'] },
+  { code: 'US',     label: 'US',     countries: ['US'] },
+  { code: 'GLOBAL', label: 'Global', countries: null }, // null = no filter
+]
+
+const WFF_ASSET_CLASSES: { code: AssetClass; label: string }[] = [
+  { code: 'wind',  label: 'Wind' },
+  { code: 'solar', label: 'Solar PV' },
+  { code: 'bess',  label: 'BESS' },
+]
+
+// Stacked-area band colors. Standard 8-color industrial palette,
+// muted to match the panel aesthetic. Materials map deterministically.
+const MATERIAL_COLORS: Record<string, string> = {
+  steel:        '#6b7280',  // grey
+  cast_iron:    '#9ca3af',  // light grey
+  copper:       '#b87333',  // copper
+  aluminium:    '#94a3b8',  // slate
+  zinc:         '#a1a1aa',  // zinc grey
+  rare_earth:   '#9333ea',  // purple
+  composite:    '#dc2626',  // red (waste)
+  polymer:      '#9b9b9b',  // dim grey (waste)
+  glass:        '#06b6d4',  // cyan
+  silicon:      '#1e293b',  // dark slate
+  silver:       '#d4d4d8',  // silver
+  black_mass:   '#000000',  // black (literal)
+  electrolyte:  '#7c7c7c',  // mid grey (waste)
+}
+
+interface RetirementRow {
+  asset_class:     'onshore_wind' | 'offshore_wind' | 'solar_pv' | 'bess'
+  country:         string
+  retire_year:     number
+  commission_year: number
+  retiring_mw:     number
+}
+
+interface YearMaterialBand {
+  year:            number
+  total_t:         number
+  recovered_t:     number
+  recoverable_value_usd: number
+  // Plus dynamic per-material columns set on the object
+  [material_key:   string]: number
+}
+
+interface MaterialDetailRow {
+  material:           string
+  display:            string
+  recovery_pct:       number
+  unit_price_usd_t:   number
+  total_t_2030:       number
+  recovered_t_2030:   number
+  total_t_2040:       number
+  recovered_t_2040:   number
+  source:             string
+}
+
+function getCohortsFor(ac: AssetClass): VintageCohort[] {
+  return ac === 'wind' ? WIND_COHORTS : ac === 'solar' ? SOLAR_COHORTS : BESS_COHORTS
+}
+
+function getIntensitiesFor(ac: AssetClass): Record<string, MaterialIntensity[]> {
+  return ac === 'wind' ? WIND_INTENSITIES : ac === 'solar' ? SOLAR_INTENSITIES : BESS_INTENSITIES
+}
+
+// Map our AssetClass (wind/solar/bess) to the schema enum values used in
+// retirement_schedule_v (onshore_wind, offshore_wind, solar_pv, bess).
+function dbAssetClassFilter(ac: AssetClass): string[] {
+  if (ac === 'wind')  return ['onshore_wind', 'offshore_wind']
+  if (ac === 'solar') return ['solar_pv']
+  return ['bess']
+}
 
 function WasteFlowForecastPanel() {
+  const [assetClass, setAssetClass] = useState<AssetClass>('wind')
+  const [region, setRegion]         = useState('GLOBAL')
+  const [rows, setRows]             = useState<RetirementRow[]>([])
+  const [loading, setLoading]       = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    let q = supabase
+      .from('retirement_schedule_v')
+      .select('asset_class, country, retire_year, commission_year, retiring_mw')
+      .in('asset_class', dbAssetClassFilter(assetClass))
+      .gte('retire_year', 2024)
+      .lte('retire_year', 2050)
+
+    const cfg = WFF_REGIONS.find(r => r.code === region)
+    if (cfg?.countries) q = q.in('country', cfg.countries)
+
+    q.then(({ data }) => {
+      setRows((data ?? []) as RetirementRow[])
+      setLoading(false)
+    })
+  }, [assetClass, region])
+
+  // Compute the chart series + detail rows in one pass using cohort-aware
+  // intensities. For each retiring (year, commission_year) we look up the
+  // cohort, multiply MW × intensity_kg_per_unit / 1000 = tonnes per material.
+  const { chartData, detailRows, materialKeys } = useMemo(() => {
+    const cohorts     = getCohortsFor(assetClass)
+    const intensities = getIntensitiesFor(assetClass)
+    const recovery    = FIRST_DEGREE_RECOVERY[assetClass]
+
+    // Tally by year × material
+    const byYear: Record<number, Record<string, number>> = {}
+    // Detail accumulator
+    const byMaterial: Record<string, { intensity_kg_per_unit_avg: number; weight: number; source: string; display: string }> = {}
+
+    for (const r of rows) {
+      const cohort = cohortForYear(cohorts, r.commission_year)
+      const mats   = intensities[cohort.label] ?? []
+      for (const m of mats) {
+        const tonnes = (r.retiring_mw * m.kg_per_unit) / 1000
+        if (!byYear[r.retire_year]) byYear[r.retire_year] = {}
+        byYear[r.retire_year][m.material] = (byYear[r.retire_year][m.material] ?? 0) + tonnes
+        // Detail accumulator (weighted by retiring MW so cohort-averaged
+        // intensity makes sense)
+        if (!byMaterial[m.material]) {
+          byMaterial[m.material] = { intensity_kg_per_unit_avg: 0, weight: 0, source: m.source, display: m.display }
+        }
+        byMaterial[m.material].intensity_kg_per_unit_avg += m.kg_per_unit * r.retiring_mw
+        byMaterial[m.material].weight                    += r.retiring_mw
+      }
+    }
+
+    // Materials present in any cohort
+    const materialKeys = Array.from(new Set(
+      Object.values(intensities).flat().map(m => m.material),
+    ))
+
+    // Chart data: sorted by year, with one column per material
+    const chartData: YearMaterialBand[] = Object.entries(byYear)
+      .map(([year, mats]) => {
+        const row: YearMaterialBand = { year: +year, total_t: 0, recovered_t: 0, recoverable_value_usd: 0 }
+        for (const k of materialKeys) {
+          const t      = mats[k] ?? 0
+          row[k]       = Math.round(t)
+          row.total_t += t
+          const rec    = t * (recovery[k] ?? 0) / 100
+          row.recovered_t += rec
+          row.recoverable_value_usd += rec * (FIRST_DEGREE_PRICING_USD_PER_T[k] ?? 0)
+        }
+        return row
+      })
+      .sort((a, b) => a.year - b.year)
+
+    // Detail rows for the table
+    const detailRows: MaterialDetailRow[] = materialKeys.map(k => {
+      const acc = byMaterial[k]
+      const t30 = byYear[2030]?.[k] ?? 0
+      const t40 = byYear[2040]?.[k] ?? 0
+      const recPct = recovery[k] ?? 0
+      return {
+        material:         k,
+        display:          acc?.display ?? k,
+        recovery_pct:     recPct,
+        unit_price_usd_t: FIRST_DEGREE_PRICING_USD_PER_T[k] ?? 0,
+        total_t_2030:     Math.round(t30),
+        recovered_t_2030: Math.round(t30 * recPct / 100),
+        total_t_2040:     Math.round(t40),
+        recovered_t_2040: Math.round(t40 * recPct / 100),
+        source:           acc?.source ?? '—',
+      }
+    }).sort((a, b) => b.total_t_2030 - a.total_t_2030)
+
+    return { chartData, detailRows, materialKeys }
+  }, [rows, assetClass])
+
+  const fmtT = (n: number) => n >= 1_000_000 ? `${(n/1_000_000).toFixed(1)}Mt`
+                            : n >= 1_000     ? `${(n/1_000).toFixed(0)}kt`
+                            : `${n.toFixed(0)}t`
+  const fmtUsd = (n: number) => n >= 1_000_000_000 ? `$${(n/1_000_000_000).toFixed(1)}B`
+                              : n >= 1_000_000     ? `$${(n/1_000_000).toFixed(0)}M`
+                              : n >= 1_000         ? `$${(n/1_000).toFixed(0)}k`
+                              : `$${n.toFixed(0)}`
+
   return (
     <Panel label="PCM" title="Waste Flow Forecast" className="col-span-6"
-           meta={<span className="text-[10.5px] text-ink-4 uppercase tracking-wide">Placeholder</span>}>
-      <div className="h-full flex items-center justify-center px-6">
-        <div className="max-w-md text-center">
-          <div className="text-[10px] font-semibold text-ink-4 uppercase tracking-wider mb-2">
-            Coming soon
-          </div>
-          <div className="text-[13px] text-ink font-semibold mb-2 leading-tight">
-            Annual blade / PV / battery waste by region
-          </div>
-          <div className="text-[11.5px] text-ink-3 leading-snug">
-            This panel will project end-of-life material tonnage by year, by asset class,
-            by region — derived from the retirement schedule in the
-            <span className="text-ink-2 font-semibold"> Asset Retirement Intelligence</span> module
-            multiplied by the per-MW material-intensity matrix from
-            <span className="text-ink-2 font-semibold"> SMI</span>.
-          </div>
-          <div className="mt-3 text-[10px] text-ink-4 italic leading-snug">
-            Awaiting completion of the ARI retirement-schedule view (asset-level
-            commissioning + design-life + repowering signals → annual MW retiring).
-          </div>
+           meta={
+             <div className="flex items-center gap-1.5">
+               <div className="flex items-center bg-canvas border border-border rounded-sm p-px">
+                 {WFF_ASSET_CLASSES.map(a => (
+                   <button key={a.code} onClick={() => setAssetClass(a.code)}
+                           className={clsx(
+                             'px-1.5 py-0.5 text-[10px] font-semibold tracking-wide rounded-sm',
+                             assetClass === a.code ? 'bg-active text-teal' : 'text-ink-3 hover:text-ink',
+                           )}>
+                     {a.label}
+                   </button>
+                 ))}
+               </div>
+               <div className="flex items-center bg-canvas border border-border rounded-sm p-px">
+                 {WFF_REGIONS.map(r => (
+                   <button key={r.code} onClick={() => setRegion(r.code)}
+                           className={clsx(
+                             'px-1.5 py-0.5 text-[10px] font-bold tracking-wide rounded-sm',
+                             region === r.code ? 'bg-active text-teal' : 'text-ink-3 hover:text-ink',
+                           )}>
+                     {r.label}
+                   </button>
+                 ))}
+               </div>
+             </div>
+           }>
+      <div className="flex flex-col h-full">
+        {/* Chart */}
+        <div className="flex-shrink-0 h-[180px] px-2 pt-2">
+          {loading ? (
+            <div className="h-full flex items-center justify-center text-[12px] text-ink-3">Loading…</div>
+          ) : chartData.length === 0 ? (
+            <div className="h-full flex items-center justify-center text-[12px] text-ink-3">
+              No retiring assets in this region for {assetClass}
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData} margin={{ top: 6, right: 8, left: -8, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="2 4" stroke="#e5e7eb" vertical={false} />
+                <XAxis dataKey="year"
+                       tick={{ fontSize: 9, fill: '#6b7280' }}
+                       axisLine={{ stroke: '#d1d5db' }}
+                       tickLine={false} />
+                <YAxis tick={{ fontSize: 9, fill: '#6b7280' }}
+                       axisLine={false}
+                       tickLine={false}
+                       tickFormatter={(v: number) => fmtT(v)} />
+                <RTooltip contentStyle={{ fontSize: 9, padding: '4px 6px', borderRadius: 2 }}
+                          labelStyle={{ fontSize: 9, fontWeight: 600 }}
+                          itemStyle={{ fontSize: 9 }}
+                          formatter={(v: any) => fmtT(Number(v))} />
+                <Legend wrapperStyle={{ fontSize: 9, paddingTop: 2 }} iconSize={7} />
+                {materialKeys.map(k => (
+                  <Area key={k}
+                        type="monotone"
+                        dataKey={k}
+                        stackId="materials"
+                        stroke={MATERIAL_COLORS[k] ?? '#9ca3af'}
+                        fill={MATERIAL_COLORS[k] ?? '#9ca3af'}
+                        fillOpacity={0.75}
+                        name={detailRows.find(r => r.material === k)?.display ?? k} />
+                ))}
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        {/* Detail table */}
+        <div className="flex-1 min-h-0 overflow-auto border-t border-border">
+          <table className="w-full">
+            <thead>
+              <tr className="bg-titlebar border-b border-border sticky top-0 z-10">
+                <th className="px-2.5 py-1 text-left text-[10px] font-semibold text-ink-3 uppercase tracking-wide">Material</th>
+                <th className="px-2.5 py-1 text-right text-[10px] font-semibold text-ink-3 uppercase tracking-wide">Recovery</th>
+                <th className="px-2.5 py-1 text-right text-[10px] font-semibold text-ink-3 uppercase tracking-wide">Unit price</th>
+                <th className="px-2.5 py-1 text-right text-[10px] font-semibold text-ink-3 uppercase tracking-wide">2030 total</th>
+                <th className="px-2.5 py-1 text-right text-[10px] font-semibold text-ink-3 uppercase tracking-wide">2030 recovered</th>
+                <th className="px-2.5 py-1 text-right text-[10px] font-semibold text-ink-3 uppercase tracking-wide">2040 recovered</th>
+                <th className="px-2.5 py-1 text-left text-[10px] font-semibold text-ink-3 uppercase tracking-wide">Source</th>
+              </tr>
+            </thead>
+            <tbody>
+              {detailRows.map(r => (
+                <tr key={r.material} className="border-b border-border/70 hover:bg-raised">
+                  <td className="px-2.5 py-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-sm flex-shrink-0"
+                            style={{ background: MATERIAL_COLORS[r.material] ?? '#9ca3af' }} />
+                      <span className="text-[11.5px] text-ink font-medium">{r.display}</span>
+                    </div>
+                  </td>
+                  <td className={clsx('px-2.5 py-1 text-right text-[11.5px] tabular-nums',
+                                      r.recovery_pct === 0 ? 'text-ink-4' : 'text-ink')}>
+                    {r.recovery_pct}%
+                  </td>
+                  <td className="px-2.5 py-1 text-right text-[11.5px] tabular-nums text-ink-2">
+                    {r.unit_price_usd_t > 0 ? fmtUsd(r.unit_price_usd_t) + '/t' : '—'}
+                  </td>
+                  <td className="px-2.5 py-1 text-right text-[11.5px] tabular-nums text-ink-2">{fmtT(r.total_t_2030)}</td>
+                  <td className="px-2.5 py-1 text-right text-[11.5px] tabular-nums text-ink font-semibold">{fmtT(r.recovered_t_2030)}</td>
+                  <td className="px-2.5 py-1 text-right text-[11.5px] tabular-nums text-ink font-semibold">{fmtT(r.recovered_t_2040)}</td>
+                  <td className="px-2.5 py-1 text-[10px] text-ink-4 max-w-[180px] truncate" title={r.source}>{r.source}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Footer note */}
+        <div className="flex-shrink-0 px-3 py-1 border-t border-border bg-canvas">
+          <p className="text-[9.5px] text-ink-4 leading-snug">{METHODOLOGY_NOTE}</p>
         </div>
       </div>
     </Panel>
