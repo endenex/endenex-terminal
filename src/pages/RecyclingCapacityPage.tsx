@@ -570,11 +570,14 @@ function BladeOutlookPanel() {
   return (
     <Panel label="PCM" title="Endenex Eye" className="col-span-4 row-span-3"
            meta={<span className="text-[10.5px] text-ink-4 uppercase tracking-wide">Satellite surveillance</span>}>
-      {/* 3-column layout: facility list (25%) · imagery (50%) · assessment (25%) */}
-      <div className="grid grid-cols-4 h-full min-h-0">
+      {/* 2×2 layout:
+            Top-left:  facility list
+            Top-right: AI assessment + meta
+            Bottom:    imagery (spans both columns) */}
+      <div className="grid grid-cols-2 grid-rows-2 h-full min-h-0">
 
-        {/* Col 1: facility list */}
-        <div className="col-span-1 border-r border-border overflow-y-auto bg-canvas/30">
+        {/* Top-left: facility list */}
+        <div className="col-span-1 row-span-1 border-r border-b border-border overflow-y-auto bg-canvas/30">
           {loading ? (
             <div className="px-3 py-4 text-[11px] text-ink-3 text-center">Loading…</div>
           ) : facilities.length === 0 ? (
@@ -608,33 +611,8 @@ function BladeOutlookPanel() {
           })}
         </div>
 
-        {/* Col 2: imagery (50% of panel) */}
-        <div className="col-span-2 bg-slate-900 flex items-center justify-center relative overflow-hidden border-r border-border">
-          {!selected ? (
-            <div className="text-[11.5px] text-slate-300">Select a facility</div>
-          ) : selectedObs?.image_url ? (
-            <img src={selectedObs.image_url}
-                 alt={`${selected.name} on ${selectedObs.observation_date}`}
-                 className="max-h-full max-w-full object-contain" />
-          ) : (
-            <div className="text-center px-4">
-              <div className="text-[11px] font-semibold text-slate-200 uppercase tracking-wider mb-1">
-                No imagery yet
-              </div>
-              <div className="text-[10px] text-slate-400 leading-snug max-w-xs">
-                Run <code className="bg-slate-800 px-1 rounded">fetch_satellite_imagery.py</code> to pull imagery + AI assessment for this facility.
-              </div>
-            </div>
-          )}
-          {selected && selectedObs?.observation_date && (
-            <div className="absolute top-1.5 left-1.5 text-[9.5px] text-white bg-black/60 px-1.5 py-0.5 rounded-sm font-mono">
-              {selectedObs.observation_date} · {selectedObs.imagery_provider} · {selectedObs.resolution_m ?? '—'} m/px
-            </div>
-          )}
-        </div>
-
-        {/* Col 3: assessment + meta */}
-        <div className="col-span-1 overflow-y-auto bg-canvas/40">
+        {/* Top-right: assessment + meta */}
+        <div className="col-span-1 row-span-1 border-b border-border overflow-y-auto bg-canvas/40">
           {!selected ? (
             <div className="flex h-full items-center justify-center text-[11.5px] text-ink-3 px-3 text-center">
               Select a facility for assessment
@@ -721,6 +699,31 @@ function BladeOutlookPanel() {
                   </a>
                 </div>
               )}
+            </div>
+          )}
+        </div>
+
+        {/* Bottom row: imagery — spans both columns */}
+        <div className="col-span-2 row-span-1 bg-slate-900 flex items-center justify-center relative overflow-hidden">
+          {!selected ? (
+            <div className="text-[11.5px] text-slate-300">Select a facility</div>
+          ) : selectedObs?.image_url ? (
+            <img src={selectedObs.image_url}
+                 alt={`${selected.name} on ${selectedObs.observation_date}`}
+                 className="max-h-full max-w-full object-contain" />
+          ) : (
+            <div className="text-center px-4">
+              <div className="text-[11px] font-semibold text-slate-200 uppercase tracking-wider mb-1">
+                No imagery yet
+              </div>
+              <div className="text-[10px] text-slate-400 leading-snug max-w-xs">
+                Run <code className="bg-slate-800 px-1 rounded">fetch_satellite_imagery.py</code> to pull imagery + AI assessment for this facility.
+              </div>
+            </div>
+          )}
+          {selected && selectedObs?.observation_date && (
+            <div className="absolute top-1.5 left-1.5 text-[9.5px] text-white bg-black/60 px-1.5 py-0.5 rounded-sm font-mono">
+              {selectedObs.observation_date} · {selectedObs.imagery_provider} · {selectedObs.resolution_m ?? '—'} m/px
             </div>
           )}
         </div>
