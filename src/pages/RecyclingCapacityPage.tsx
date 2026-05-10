@@ -116,6 +116,16 @@ const GATE_CURRENCY_SYMBOL: Record<GateCurrency, string> = {
   USD: '$', EUR: '€', GBP: '£', CNY: '¥',
 }
 
+// Map asset_class → physical waste-product label that the gate-fee
+// processor actually receives. Used in the Waste column (replaces the
+// abstract "wind / solar / bess" terminology with what's physically
+// being processed at the recycler / disposer).
+const GATE_WASTE_LABEL: Record<GateAssetClass, string> = {
+  wind:  'Blade',
+  solar: 'PV panel',
+  bess:  'Battery',
+}
+
 const medianUsd = (r: GateFeeRow): number | null =>
   r.median_local != null ? r.median_local * GATE_FX_TO_USD[r.currency] : null
 
@@ -808,15 +818,15 @@ function GateFeesTablePanel() {
            }>
       <table className="w-full table-fixed">
         <colgroup>
+          <col style={{ width: '17%' }} />  {/* Waste type — Blade / PV panel / Battery */}
           <col style={{ width: '40%' }} />  {/* Pathway */}
-          <col style={{ width: '17%' }} />  {/* Asset class */}
           <col style={{ width: '20%' }} />  {/* Region */}
           <col style={{ width: '23%' }} />  {/* Median + confidence */}
         </colgroup>
         <thead>
           <tr className="bg-titlebar border-b border-border sticky top-0 z-10">
+            <th className="px-2 py-1 text-left  text-[9.5px] font-semibold text-ink-3 uppercase tracking-wide">Waste</th>
             <th className="px-2 py-1 text-left  text-[9.5px] font-semibold text-ink-3 uppercase tracking-wide">Pathway</th>
-            <th className="px-2 py-1 text-left  text-[9.5px] font-semibold text-ink-3 uppercase tracking-wide">Asset</th>
             <th className="px-2 py-1 text-left  text-[9.5px] font-semibold text-ink-3 uppercase tracking-wide">Region</th>
             <th onClick={cycleSort}
                 title={
@@ -832,11 +842,11 @@ function GateFeesTablePanel() {
         <tbody>
           {sorted.map((r, i) => (
             <tr key={i} className="border-b border-border/70 hover:bg-raised align-top">
+              <td className="px-2 py-1 text-[10.5px] text-ink-2 font-medium leading-snug">
+                {r.asset_classes.map(ac => GATE_WASTE_LABEL[ac]).join(' · ')}
+              </td>
               <td className="px-2 py-1">
                 <div className="text-[11px] text-ink font-medium leading-tight">{r.pathway}</div>
-              </td>
-              <td className="px-2 py-1 text-[10px] text-ink-3 uppercase tracking-wide leading-snug">
-                {r.asset_classes.join(' · ')}
               </td>
               <td className="px-2 py-1 text-[10.5px] text-ink-2 leading-snug break-words">
                 {/* Insert zero-width spaces after slashes so long lists like
