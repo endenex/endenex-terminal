@@ -8,6 +8,12 @@ import { useState, useEffect, useMemo, useCallback, Fragment } from 'react'
 import { clsx } from 'clsx'
 import { ResponsiveContainer, AreaChart, Area, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid, Legend, ReferenceArea, ComposedChart } from 'recharts'
 import { supabase } from '@/lib/supabase'
+import { METHODOLOGY_NOTE } from '@/data/material_assumptions'
+import {
+  computeWasteFlow, classesForSelection, dbAssetClassFilter,
+  materialName, MATERIAL_COLORS, type WFFAssetClass, type InstallHistoryRow,
+} from '@/lib/wasteFlowCompute'
+import { useDesignLife } from '@/store/designLife'
 import { MaterialDonut } from '@/components/charts/MaterialDonut'
 import { VintageCurveChart } from '@/components/charts/VintageCurveChart'
 import { ScrapMerchantMapModal } from '@/components/overlays/ScrapMerchantMapModal'
@@ -1472,127 +1478,89 @@ function HistoricalPricesPanel() {
   )
 }
 
-// ── 07 Decom Material Volume Forecast ─────────────────────────────────────────
+// ── 07 Decom Material Volume Forecast — SCRAP MERCHANT STREAMS ───────────────
 //
-// Headline analytical panel: "How many tonnes of each material come out of
-// decommissioning by year and region?"
+// Standard commodity scrap streams: steel, cast iron, copper, aluminium,
+// zinc, glass cullet. Pathway = call a scrap merchant, get an LME-linked
+// bid, sell. Multiple bidders, transparent pricing.
 //
-// Powered by decom_material_forecast_v (Migration 053): unions retirement
-// schedule from assets (REPD) + us_wind_assets (USWTDB) × material_intensities.
-// Stacked area chart by material; region + asset-class toggles in header.
+// Specialist recycling streams (composite, black mass, rare earths,
+// silver, silicon) live in PCM Waste Flow Forecast — those need bespoke
+// processors. Polymer + electrolyte (no recovery) hidden from both.
+//
+// Compute is shared with PCM panel via src/lib/wasteFlowCompute.ts —
+// only difference is the bucket filter.
 
-type ForecastRegion     = 'ALL' | 'GB' | 'US' | 'EU'
-type ForecastAssetClass = 'onshore_wind' | 'offshore_wind' | 'solar_pv' | 'bess'
-
-const FORECAST_REGIONS: { code: ForecastRegion; label: string }[] = [
-  { code: 'ALL', label: 'All' },
-  { code: 'GB',  label: 'UK'  },
-  { code: 'US',  label: 'US'  },
-  { code: 'EU',  label: 'EU'  },
+const SMI_REGIONS: { code: string; label: string; countries: string[] | null }[] = [
+  { code: 'EU',     label: 'EU',     countries: ['DE','FR','ES','IT','NL','DK','SE','PL','PT','BE','AT','CZ','GR','IE','FI'] },
+  { code: 'UK',     label: 'UK',     countries: ['GB'] },
+  { code: 'US',     label: 'US',     countries: ['US'] },
+  { code: 'GLOBAL', label: 'Global', countries: null },
 ]
 
-const FORECAST_ASSET_CLASSES: { code: ForecastAssetClass; label: string }[] = [
-  { code: 'onshore_wind',  label: 'Wind on'  },
-  { code: 'offshore_wind', label: 'Wind off' },
-  { code: 'solar_pv',      label: 'Solar'    },
-  { code: 'bess',          label: 'BESS'     },
+const SMI_ASSET_CLASSES: { code: WFFAssetClass; label: string }[] = [
+  { code: 'all',   label: 'All' },
+  { code: 'wind',  label: 'Wind' },
+  { code: 'solar', label: 'Solar PV' },
+  { code: 'bess',  label: 'BESS' },
 ]
-
-interface DecomForecastRow {
-  retire_year:        number
-  country:            string
-  asset_class:        string
-  retiring_mw:        number
-  asset_count:        number
-  material:           string
-  total_tonnes:       number | null
-  recoverable_tonnes: number | null
-}
-
-// Material colour palette — keep stable across renders so users learn
-const MATERIAL_COLOR: Record<string, string> = {
-  steel:                       '#475569',   // slate
-  cast_iron:                   '#78716C',   // stone
-  copper:                      '#B45309',   // copper
-  aluminium:                   '#0EA5E9',   // sky
-  composite_gfrp:              '#84CC16',   // lime
-  permanent_magnet_ndfeb:      '#A855F7',   // purple
-  glass:                       '#06B6D4',   // cyan
-  silicon:                     '#F59E0B',   // amber
-  silver:                      '#9CA3AF',   // grey
-  eva:                         '#FBBF24',
-  backsheet:                   '#FDE047',
-  cadmium_telluride:           '#65A30D',
-  black_mass:                  '#1F2937',   // dark slate
-}
-const colorFor = (m: string) => MATERIAL_COLOR[m] ?? '#94A3B8'
 
 function DecomVolumeForecastPanel() {
-  const [region,     setRegion]     = useState<ForecastRegion>('ALL')
-  const [assetClass, setAssetClass] = useState<ForecastAssetClass>('onshore_wind')
-  const [rows,       setRows]       = useState<DecomForecastRow[]>([])
-  const [loading,    setLoading]    = useState(true)
+  const [assetClass, setAssetClass] = useState<WFFAssetClass>('all')
+  const [region, setRegion]         = useState('GLOBAL')
+  const [rows, setRows]             = useState<InstallHistoryRow[]>([])
+  const [loading, setLoading]       = useState(true)
+
+  const windMedian  = useDesignLife(s => s.windMedianYears)
+  const solarMedian = useDesignLife(s => s.solarMedianYears)
+  const bessMedian  = useDesignLife(s => s.bessMedianYears)
 
   useEffect(() => {
-    let alive = true
     setLoading(true)
-    let q = supabase.from('decom_material_forecast_v')
-      .select('retire_year, country, asset_class, retiring_mw, asset_count, material, total_tonnes, recoverable_tonnes')
-      .eq('asset_class', assetClass)
-      .gte('retire_year', 2024)
-      .lte('retire_year', 2050)
-      .order('retire_year', { ascending: true })
-    if (region !== 'ALL') {
-      q = q.eq('country', region)
-    }
+    const dbClasses = classesForSelection(assetClass).flatMap(dbAssetClassFilter)
+    let q = supabase
+      .from('installation_history')
+      .select('asset_class, country, region, year, capacity_mw, duration_h')
+      .in('asset_class', dbClasses)
+    const cfg = SMI_REGIONS.find(r => r.code === region)
+    if (cfg?.countries) q = q.in('country', cfg.countries)
     q.then(({ data }) => {
-      if (!alive) return
-      setRows((data ?? []) as DecomForecastRow[])
+      setRows((data ?? []) as InstallHistoryRow[])
       setLoading(false)
     })
-    return () => { alive = false }
-  }, [region, assetClass])
+  }, [assetClass, region])
 
-  // Pivot rows → chart data: one row per year, columns per material (kt for readability)
-  const { chartData, materials, totalKt } = useMemo(() => {
-    const yearMap: Record<number, Record<string, number>> = {}
-    const matSet = new Set<string>()
-    let totalT = 0
-    for (const r of rows) {
-      const y = Number(r.retire_year)
-      if (!yearMap[y]) yearMap[y] = {}
-      const t = Number(r.recoverable_tonnes ?? 0)
-      yearMap[y][r.material] = (yearMap[y][r.material] ?? 0) + t
-      matSet.add(r.material)
-      totalT += t
-    }
-    const data: any[] = []
-    const years = Object.keys(yearMap).map(Number).sort((a,b) => a-b)
-    for (const y of years) {
-      const row: any = { year: y }
-      let yearTotal = 0
-      for (const m of matSet) {
-        const tonnes = yearMap[y][m] ?? 0
-        row[m] = Math.round(tonnes / 1000 * 10) / 10   // kt
-        yearTotal += tonnes
-      }
-      row._total = Math.round(yearTotal / 1000 * 10) / 10
-      data.push(row)
-    }
-    return { chartData: data, materials: Array.from(matSet).sort(), totalKt: Math.round(totalT / 1000) }
-  }, [rows])
+  const { chartData, detailRows, materialKeys } = useMemo(
+    () => computeWasteFlow({
+      rows, assetClass, windMedian, solarMedian, bessMedian,
+      bucket: 'scrap_merchant',     // ← THIS panel = scrap merchant streams only
+    }),
+    [rows, assetClass, windMedian, solarMedian, bessMedian],
+  )
 
-  const fmtKt = (n: number) => n >= 1000 ? `${(n/1000).toFixed(1)}Mt` : `${n.toFixed(0)}kt`
+  const fmtT = (n: number) => n >= 1_000_000 ? `${(n/1_000_000).toFixed(1)}Mt`
+                            : n >= 1_000     ? `${(n/1_000).toFixed(0)}kt`
+                            : `${n.toFixed(0)}t`
+  const fmtUsd = (n: number) => n >= 1_000_000_000 ? `$${(n/1_000_000_000).toFixed(1)}B`
+                              : n >= 1_000_000     ? `$${(n/1_000_000).toFixed(0)}M`
+                              : n >= 1_000         ? `$${(n/1_000).toFixed(0)}k`
+                              : `$${n.toFixed(0)}`
 
   return (
     <Panel
       label="SMI"
-      title="Decom Material Volume Forecast"
-      status="in-build"
+      title="Decom Material Volume · scrap merchant streams"
       meta={
         <div className="flex items-center gap-1.5">
+          <span className="text-[10px] text-ink-4 tabular-nums"
+                title="Median design life per asset class — set in the Asset Retirement Intelligence panel sliders.">
+            {assetClass === 'all'
+              ? `${windMedian}/${solarMedian}/${bessMedian}y W·S·B`
+              : `${assetClass === 'wind' ? windMedian : assetClass === 'solar' ? solarMedian : bessMedian}y design life`}
+          </span>
+          <span className="text-ink-4 text-[10px]">·</span>
           <div className="flex items-center bg-canvas border border-border rounded-sm p-px">
-            {FORECAST_ASSET_CLASSES.map(a => (
+            {SMI_ASSET_CLASSES.map(a => (
               <button key={a.code} onClick={() => setAssetClass(a.code)}
                       className={clsx(
                         'px-1.5 py-0.5 text-[10px] font-semibold tracking-wide rounded-sm',
@@ -1603,7 +1571,7 @@ function DecomVolumeForecastPanel() {
             ))}
           </div>
           <div className="flex items-center bg-canvas border border-border rounded-sm p-px">
-            {FORECAST_REGIONS.map(r => (
+            {SMI_REGIONS.map(r => (
               <button key={r.code} onClick={() => setRegion(r.code)}
                       className={clsx(
                         'px-1.5 py-0.5 text-[10px] font-bold tracking-wide rounded-sm',
@@ -1615,88 +1583,98 @@ function DecomVolumeForecastPanel() {
           </div>
         </div>
       }>
-
       <div className="flex flex-col h-full">
-        {loading ? (
-          <div className="flex-1 flex items-center justify-center text-[12px] text-ink-3">Loading…</div>
-        ) : chartData.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center px-4 text-[11.5px] text-ink-3 text-center leading-snug">
-            No retirement data for {assetClass.replace('_', ' ')} in {region === 'ALL' ? 'any region' : region}.<br />
-            <span className="text-ink-4 mt-1 block">
-              {assetClass === 'onshore_wind'
-                ? 'Run ingest_repd.py + sync_uswtdb.py to populate UK/US fleet.'
-                : 'Retirement schedule for this asset class not yet ingested. Pending: 4C Offshore (offshore wind), IEA-PVPS database (solar), BNEF storage (BESS).'}
-            </span>
-          </div>
-        ) : (
-          <>
-            {/* Headline stats */}
-            <div className="flex-shrink-0 border-b border-border bg-canvas px-2.5 py-1.5 grid grid-cols-3 gap-2">
-              <div>
-                <div className="text-[9.5px] font-semibold text-ink-4 uppercase tracking-wide">Window</div>
-                <div className="text-[12px] text-ink font-semibold tabular-nums leading-none mt-0.5">2024–2050</div>
-              </div>
-              <div>
-                <div className="text-[9.5px] font-semibold text-ink-4 uppercase tracking-wide">Total recoverable</div>
-                <div className="text-[12px] text-emerald-700 font-semibold tabular-nums leading-none mt-0.5">{fmtKt(totalKt)}</div>
-              </div>
-              <div>
-                <div className="text-[9.5px] font-semibold text-ink-4 uppercase tracking-wide">Materials</div>
-                <div className="text-[12px] text-ink font-semibold tabular-nums leading-none mt-0.5">{materials.length}</div>
-              </div>
+        {/* Chart */}
+        <div className="flex-shrink-0 h-[180px] px-2 pt-2">
+          {loading ? (
+            <div className="h-full flex items-center justify-center text-[12px] text-ink-3">Loading…</div>
+          ) : chartData.length === 0 ? (
+            <div className="h-full flex items-center justify-center text-[12px] text-ink-3">
+              No retiring assets in this region {assetClass !== 'all' ? `for ${assetClass}` : ''}
             </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData} margin={{ top: 6, right: 8, left: -8, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="2 4" stroke="#e5e7eb" vertical={false} />
+                <XAxis dataKey="year" tick={{ fontSize: 9, fill: '#6b7280' }}
+                       axisLine={{ stroke: '#d1d5db' }} tickLine={false} />
+                <YAxis tick={{ fontSize: 9, fill: '#6b7280' }} axisLine={false} tickLine={false}
+                       tickFormatter={(v: number) => fmtT(v)} />
+                <Tooltip contentStyle={{ fontSize: 9, padding: '4px 6px', borderRadius: 2 }}
+                         labelStyle={{ fontSize: 9, fontWeight: 600 }}
+                         itemStyle={{ fontSize: 9 }}
+                         formatter={(v: any) => fmtT(Number(v))} />
+                <Legend wrapperStyle={{ fontSize: 9, paddingTop: 2 }} iconSize={7} />
+                {materialKeys.map(k => (
+                  <Area key={k} type="monotone" dataKey={k} stackId="materials"
+                        stroke={MATERIAL_COLORS[k] ?? '#9ca3af'}
+                        fill={MATERIAL_COLORS[k] ?? '#9ca3af'}
+                        fillOpacity={0.75}
+                        name={materialName(k)} />
+                ))}
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
+        </div>
 
-            {/* Stacked area chart */}
-            <div className="flex-1 min-h-0 px-1 pt-1">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid stroke="#E5E7EB" strokeDasharray="3 3" vertical={false} />
-                  <XAxis
-                    dataKey="year"
-                    tick={{ fontSize: 9, fill: '#6B7280' }}
-                    axisLine={{ stroke: '#E5E7EB' }}
-                    tickLine={false}
-                    minTickGap={20}
-                  />
-                  <YAxis
-                    tick={{ fontSize: 9, fill: '#6B7280' }}
-                    tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(1)}Mt` : `${v}kt`}
-                    width={48}
-                    axisLine={{ stroke: '#E5E7EB' }}
-                    tickLine={false}
-                  />
-                  <Tooltip
-                    formatter={(v: number, name: string) => [`${v.toFixed(1)} kt`, name.replace(/_/g, ' ')]}
-                    labelFormatter={y => `Retire year: ${y}`}
-                    contentStyle={{ fontSize: 11, padding: '4px 8px', border: '1px solid #E5E7EB', background: 'white' }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: 9 }} iconSize={8} />
-                  {materials.map(m => (
-                    <Area
-                      key={m}
-                      type="monotone"
-                      dataKey={m}
-                      stackId="1"
-                      stroke={colorFor(m)}
-                      fill={colorFor(m)}
-                      fillOpacity={0.85}
-                      strokeWidth={0.5}
-                      isAnimationActive={false}
-                      name={m.replace(/_/g, ' ')}
-                    />
-                  ))}
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
+        {/* Detail table */}
+        <div className="flex-1 min-h-0 overflow-auto border-t border-border">
+          <table className="w-full">
+            <thead>
+              <tr className="bg-titlebar border-b border-border sticky top-0 z-10">
+                <th rowSpan={2} className="px-2.5 py-1 text-left text-[10px] font-semibold text-ink-3 uppercase tracking-wide align-bottom">Material</th>
+                <th rowSpan={2} className="px-2.5 py-1 text-right text-[10px] font-semibold text-ink-3 uppercase tracking-wide align-bottom">Recovery</th>
+                <th rowSpan={2} className="px-2.5 py-1 text-right text-[10px] font-semibold text-ink-3 uppercase tracking-wide align-bottom">Unit price</th>
+                <th rowSpan={2} className="px-2.5 py-1 text-right text-[10px] font-semibold text-ink-3 uppercase tracking-wide align-bottom">2030 total</th>
+                <th colSpan={3}  className="px-2.5 pt-1 text-center text-[10px] font-semibold text-ink-3 uppercase tracking-wide border-b border-border/40">2030 recovered</th>
+                <th rowSpan={2} className="px-2.5 py-1 text-right text-[10px] font-semibold text-ink-3 uppercase tracking-wide align-bottom">2035 recovered</th>
+                <th rowSpan={2} className="px-2.5 py-1 text-left text-[10px] font-semibold text-ink-3 uppercase tracking-wide align-bottom">Source</th>
+              </tr>
+              <tr className="bg-titlebar border-b border-border sticky top-7 z-10">
+                <th className="px-2.5 pb-1 text-right text-[9px] font-semibold text-ink-4 normal-case tracking-wide">P10 low</th>
+                <th className="px-2.5 pb-1 text-right text-[9px] font-semibold text-teal normal-case tracking-wide">P50 central</th>
+                <th className="px-2.5 pb-1 text-right text-[9px] font-semibold text-ink-4 normal-case tracking-wide">P90 high</th>
+              </tr>
+            </thead>
+            <tbody>
+              {detailRows.map(r => (
+                <tr key={r.material} className="border-b border-border/70 hover:bg-raised">
+                  <td className="px-2.5 py-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-sm flex-shrink-0"
+                            style={{ background: MATERIAL_COLORS[r.material] ?? '#9ca3af' }} />
+                      <span className="text-[11.5px] text-ink font-medium">{materialName(r.material)}</span>
+                    </div>
+                  </td>
+                  <td className={clsx('px-2.5 py-1 text-right text-[11.5px] tabular-nums',
+                                      r.recovery_pct === 0 ? 'text-ink-4' : 'text-ink')}>
+                    {r.recovery_pct}%
+                  </td>
+                  <td className="px-2.5 py-1 text-right text-[11.5px] tabular-nums text-ink-2">
+                    {r.unit_price_usd_t > 0 ? fmtUsd(r.unit_price_usd_t) + '/t' : '—'}
+                  </td>
+                  <td className="px-2.5 py-1 text-right text-[11.5px] tabular-nums text-ink-2">{fmtT(r.total_t_2030)}</td>
+                  <td className="px-2.5 py-1 text-right text-[11.5px] tabular-nums text-ink-3">
+                    {r.recovery_pct > 0 ? fmtT(r.recovered_t_2030_p10) : '—'}
+                  </td>
+                  <td className="px-2.5 py-1 text-right text-[11.5px] tabular-nums text-ink font-semibold">
+                    {r.recovery_pct > 0 ? fmtT(r.recovered_t_2030) : '—'}
+                  </td>
+                  <td className="px-2.5 py-1 text-right text-[11.5px] tabular-nums text-ink-3">
+                    {r.recovery_pct > 0 ? fmtT(r.recovered_t_2030_p90) : '—'}
+                  </td>
+                  <td className="px-2.5 py-1 text-right text-[11.5px] tabular-nums text-ink font-semibold">{fmtT(r.recovered_t_2035)}</td>
+                  <td className="px-2.5 py-1 text-[10px] text-ink-4 max-w-[180px] truncate" title={r.source}>{r.source}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
-            {/* Source footer */}
-            <div className="flex-shrink-0 border-t border-border px-2.5 py-1 text-[9.5px] text-ink-4 leading-snug">
-              Retirement schedule: REPD (UK) + USWTDB (US) · 25y design life ·
-              Material intensities: NREL / IEA Wind / WindEurope / IEA PVPS / BNEF (averaged across seeded OEM models) ·
-              Recoverable = mass × recoverability%
-            </div>
-          </>
-        )}
+        {/* Footer note */}
+        <div className="flex-shrink-0 px-3 py-1 border-t border-border bg-canvas">
+          <p className="text-[9.5px] text-ink-4 leading-snug">{METHODOLOGY_NOTE}</p>
+        </div>
       </div>
     </Panel>
   )

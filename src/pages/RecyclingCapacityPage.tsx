@@ -10,15 +10,11 @@ import { ExternalLink } from 'lucide-react'
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, Legend } from 'recharts'
 import { supabase } from '@/lib/supabase'
 import { BladePathwayBars } from '@/components/charts/BladePathwayBars'
+import { METHODOLOGY_NOTE } from '@/data/material_assumptions'
 import {
-  WIND_COHORTS, SOLAR_COHORTS, BESS_COHORTS, cohortForYear,
-  WIND_INTENSITIES, SOLAR_INTENSITIES, BESS_INTENSITIES,
-  FIRST_DEGREE_RECOVERY, FIRST_DEGREE_PRICING_USD_PER_T,
-  METHODOLOGY_NOTE,
-  BESS_CHEMISTRY_MIX, bessChemistryWeightedPrice,
-  applyUncertainty, UNCERTAINTY_PCT,
-  type AssetClass, type MaterialIntensity, type VintageCohort,
-} from '@/data/material_assumptions'
+  computeWasteFlow, classesForSelection, dbAssetClassFilter,
+  materialName, MATERIAL_COLORS, type WFFAssetClass, type InstallHistoryRow,
+} from '@/lib/wasteFlowCompute'
 import { useDesignLife } from '@/store/designLife'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -1020,32 +1016,27 @@ function RegulatoryContextPanel() {
   )
 }
 
-// ── 05 Waste Flow Forecast panel ─────────────────────────────────────────────
+// ── 05 Waste Flow Forecast panel — SPECIALIST RECYCLING ─────────────────────
 //
-// First-degree material recovery forecast. Pipes:
-//   1. retirement_schedule_v (migration 053): retiring MW × year × country ×
-//      asset_class × commission_year (preserves vintage cohort)
-//   2. material_assumptions.ts: cohort-aware kg/MW intensities + first-degree
-//      recovery rates
-//   3. Aggregate by year × material → stacked area chart + detail table
+// Specialist recycling streams: composite blade waste (cement co-process /
+// pyrolysis), BESS black mass (Glencore / Umicore hydromet), rare earths
+// (Solvay / MP Materials), solar silver + silicon (ROSI / FRELP / SOLARCYCLE).
+// Pathway = bespoke processor, ~10 facilities globally per stream, capacity-
+// constrained, geographic dependency.
 //
-// Asset class + region toggles match the rest of the PCM page aesthetic.
-// Methodology note in footer documents the first-degree convention.
+// Standard scrap-merchant streams (steel/cast iron/copper/aluminium/zinc/
+// glass) live in SMI · Decom Material Volume. Polymer + electrolyte
+// (no recovery) hidden from both.
+//
+// Compute is shared with SMI panel via src/lib/wasteFlowCompute.ts —
+// only difference is the bucket filter.
 
 const WFF_REGIONS: { code: string; label: string; countries: string[] | null }[] = [
   { code: 'EU',     label: 'EU',     countries: ['DE','FR','ES','IT','NL','DK','SE','PL','PT','BE','AT','CZ','GR','IE','FI'] },
   { code: 'UK',     label: 'UK',     countries: ['GB'] },
   { code: 'US',     label: 'US',     countries: ['US'] },
-  { code: 'GLOBAL', label: 'Global', countries: null }, // null = no filter
+  { code: 'GLOBAL', label: 'Global', countries: null },
 ]
-
-/** Panel-level asset-class state. 'all' aggregates wind + solar + bess
- * onto one chart, applying each class's own median design life from the
- * shared store + each class's vintage cohort intensities. Materials are
- * union'd across classes (steel/copper appear in multiple classes; black
- * mass only in BESS; composite only in wind, etc.). Chemistry blend
- * indicator is suppressed in 'all' mode to keep the header readable. */
-type WFFAssetClass = AssetClass | 'all'
 
 const WFF_ASSET_CLASSES: { code: WFFAssetClass; label: string }[] = [
   { code: 'all',   label: 'All' },
@@ -1054,334 +1045,38 @@ const WFF_ASSET_CLASSES: { code: WFFAssetClass; label: string }[] = [
   { code: 'bess',  label: 'BESS' },
 ]
 
-/** Asset classes to iterate when computing for the given selection. */
-function classesForSelection(sel: WFFAssetClass): AssetClass[] {
-  return sel === 'all' ? ['wind', 'solar', 'bess'] : [sel]
-}
-
-// Stacked-area band colors. Standard 8-color industrial palette,
-// muted to match the panel aesthetic. Materials map deterministically.
-const MATERIAL_COLORS: Record<string, string> = {
-  steel:        '#6b7280',  // grey
-  cast_iron:    '#9ca3af',  // light grey
-  copper:       '#b87333',  // copper
-  aluminium:    '#94a3b8',  // slate
-  zinc:         '#a1a1aa',  // zinc grey
-  rare_earth:   '#9333ea',  // purple
-  composite:    '#dc2626',  // red (waste)
-  polymer:      '#9b9b9b',  // dim grey (waste)
-  glass:        '#06b6d4',  // cyan
-  silicon:      '#1e293b',  // dark slate
-  silver:       '#d4d4d8',  // silver
-  black_mass:   '#000000',  // black (literal)
-  electrolyte:  '#7c7c7c',  // mid grey (waste)
-}
-
-interface InstallHistoryRow {
-  asset_class:  'wind_onshore' | 'wind_offshore' | 'solar' | 'bess'
-  country:      string
-  region:       string | null
-  year:         number       // commission year
-  capacity_mw:  number
-  duration_h:   number | null  // BESS only — used to derive MWh
-}
-
-/** Same triangular distribution as ARI panels — median ±2y window. */
-function triangularAnnualRetirement(age: number, median: number): number {
-  if (age < 0) return 0
-  const offset = Math.abs(Math.round(age) - median)
-  if (offset > 2) return 0
-  return (3 - offset) / 9
-}
-
-/** Plain-language material name for the legend / table — no "where it
- *  comes from" parentheticals. e.g. 'cast_iron' → 'Cast iron'. */
-const MATERIAL_DISPLAY: Record<string, string> = {
-  steel:        'Steel',
-  cast_iron:    'Cast iron',
-  copper:       'Copper',
-  aluminium:    'Aluminium',
-  zinc:         'Zinc',
-  rare_earth:   'Rare earths',
-  composite:    'Composite',
-  polymer:      'Polymer',
-  glass:        'Glass',
-  silicon:      'Silicon',
-  silver:       'Silver',
-  black_mass:   'Black mass',
-  electrolyte:  'Electrolyte',
-}
-function materialName(key: string): string {
-  return MATERIAL_DISPLAY[key] ?? key.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase())
-}
-
-interface YearMaterialBand {
-  year:            number
-  total_t:         number
-  recovered_t:     number
-  recoverable_value_usd: number
-  // Plus dynamic per-material columns set on the object
-  [material_key:   string]: number
-}
-
-interface MaterialDetailRow {
-  material:           string
-  display:            string
-  recovery_pct:       number
-  unit_price_usd_t:   number      // central estimate (chemistry-weighted for BESS black mass)
-  total_t_2030:       number      // P50 central
-  recovered_t_2030:   number      // P50 central
-  recovered_t_2030_p10: number
-  recovered_t_2030_p90: number
-  total_t_2035:       number
-  recovered_t_2035:   number
-  source:             string
-}
-
-function getCohortsFor(ac: AssetClass): VintageCohort[] {
-  return ac === 'wind' ? WIND_COHORTS : ac === 'solar' ? SOLAR_COHORTS : BESS_COHORTS
-}
-
-function getIntensitiesFor(ac: AssetClass): Record<string, MaterialIntensity[]> {
-  return ac === 'wind' ? WIND_INTENSITIES : ac === 'solar' ? SOLAR_INTENSITIES : BESS_INTENSITIES
-}
-
-// Map our AssetClass (wind/solar/bess) to the installation_history
-// asset_class enum values (wind_onshore, wind_offshore, solar, bess).
-function dbAssetClassFilter(ac: AssetClass): string[] {
-  if (ac === 'wind')  return ['wind_onshore', 'wind_offshore']
-  if (ac === 'solar') return ['solar']
-  return ['bess']
-}
-
-/** Inverse: map a DB enum value back to its parent AssetClass for
- *  selecting the correct cohorts / intensities / median during 'all' mode. */
-function parentAssetClass(dbAc: string): AssetClass {
-  if (dbAc === 'wind_onshore' || dbAc === 'wind_offshore') return 'wind'
-  if (dbAc === 'solar')                                     return 'solar'
-  return 'bess'
-}
-
-const RETIRE_YEARS_WFF = Array.from({ length: 10 }, (_, i) => 2026 + i)  // 2026-2035 (matches ARI panels)
-
 function WasteFlowForecastPanel() {
   const [assetClass, setAssetClass] = useState<WFFAssetClass>('all')
   const [region, setRegion]         = useState('GLOBAL')
   const [rows, setRows]             = useState<InstallHistoryRow[]>([])
   const [loading, setLoading]       = useState(true)
 
-  // Read all three medians from the store. When 'all' is selected we
-  // need all three; otherwise just the active one. Fine to read all
-  // three always — Zustand selectors are cheap.
   const windMedian  = useDesignLife(s => s.windMedianYears)
   const solarMedian = useDesignLife(s => s.solarMedianYears)
   const bessMedian  = useDesignLife(s => s.bessMedianYears)
-  const medianFor = (ac: AssetClass): number =>
-    ac === 'wind' ? windMedian : ac === 'solar' ? solarMedian : bessMedian
 
   useEffect(() => {
     setLoading(true)
-    // Build the asset-class enum filter — single class or union for 'all'
     const dbClasses = classesForSelection(assetClass).flatMap(dbAssetClassFilter)
     let q = supabase
       .from('installation_history')
       .select('asset_class, country, region, year, capacity_mw, duration_h')
       .in('asset_class', dbClasses)
-
     const cfg = WFF_REGIONS.find(r => r.code === region)
     if (cfg?.countries) q = q.in('country', cfg.countries)
-
     q.then(({ data }) => {
       setRows((data ?? []) as InstallHistoryRow[])
       setLoading(false)
     })
   }, [assetClass, region])
 
-  // Compute chart series + detail rows + chemistry-weighted BESS pricing
-  // + confidence bands. Mirrors ARI panels' triangular-distribution
-  // retirement model with the SAME slider-driven median design life
-  // (sourced from the shared design-life store).
-  //
-  // Pipeline:
-  //   installation_history (commission year × country × MW)
-  //     × triangular distribution(age, median)
-  //     × cohort-aware intensity per MW
-  //     × first-degree recovery %
-  //   = recovered tonnes per (retire year × material)
-  const { chartData, detailRows, materialKeys, bessChemistryBlend, totalRange2030 } = useMemo(() => {
-    // Tally by retire-year × material (across all selected classes)
-    const byYear: Record<number, Record<string, number>> = {}
-    // Detail accumulator (per material, ACROSS all classes — material
-    // displayed once even if both wind+bess contribute steel)
-    const byMaterial: Record<string, { source: string; display: string }> = {}
-    // Recovery rates per material — when 'all', if a material exists
-    // in multiple classes (steel: wind 95% + bess 95%; copper: wind 85%
-    // + bess 85%), they're typically identical so collapse on first hit
-    const recoveryByMaterial: Record<string, number> = {}
-    // BESS-only: track chemistry-weighted black mass price by retiring MWh
-    let bmPriceWeightedSum = 0
-    let bmPriceWeightedDen = 0
-    // Cohort MW totals (BESS only — for chemistry blend display)
-    const bessCohortMwTotals: Record<string, number> = {}
-    // Track per-class total tonnage (used for weighted uncertainty)
-    const tonnageByClass: Record<AssetClass, number> = { wind: 0, solar: 0, bess: 0 }
-
-    for (const r of rows) {
-      const parentAc = parentAssetClass(r.asset_class)
-      // Skip rows whose parent class isn't in scope (defensive — DB
-      // filter should already exclude them)
-      if (!classesForSelection(assetClass).includes(parentAc)) continue
-
-      const median      = medianFor(parentAc)
-      const cohorts     = getCohortsFor(parentAc)
-      const intensities = getIntensitiesFor(parentAc)
-      const recovery    = FIRST_DEGREE_RECOVERY[parentAc]
-
-      // BESS uses MWh (capacity_mw × duration_h); wind/solar use MW
-      const mw_or_mwh = (parentAc === 'bess' && r.duration_h != null)
-        ? r.capacity_mw * r.duration_h
-        : r.capacity_mw
-
-      const cohort = cohortForYear(cohorts, r.year)
-      const mats   = intensities[cohort.label] ?? []
-
-      for (const retireY of RETIRE_YEARS_WFF) {
-        const age  = retireY - r.year
-        const frac = triangularAnnualRetirement(age, median)
-        if (frac === 0) continue
-        const retiringThisYear = mw_or_mwh * frac
-
-        for (const m of mats) {
-          const tonnes = (retiringThisYear * m.kg_per_unit) / 1000
-          if (!byYear[retireY]) byYear[retireY] = {}
-          byYear[retireY][m.material] = (byYear[retireY][m.material] ?? 0) + tonnes
-          if (!byMaterial[m.material]) byMaterial[m.material] = { source: m.source, display: m.display }
-          if (recoveryByMaterial[m.material] === undefined) {
-            recoveryByMaterial[m.material] = recovery[m.material] ?? 0
-          }
-          tonnageByClass[parentAc] += tonnes
-        }
-
-        if (parentAc === 'bess') {
-          bessCohortMwTotals[cohort.label] = (bessCohortMwTotals[cohort.label] ?? 0) + retiringThisYear
-          const price = bessChemistryWeightedPrice(cohort)
-          bmPriceWeightedSum += price * retiringThisYear
-          bmPriceWeightedDen += retiringThisYear
-        }
-      }
-    }
-
-    // Materials present across ALL classes in scope (union)
-    const materialKeys = Array.from(new Set(
-      classesForSelection(assetClass).flatMap(ac =>
-        Object.values(getIntensitiesFor(ac)).flat().map(m => m.material),
-      ),
-    ))
-
-    // Tonnage-weighted uncertainty when 'all' selected — heavier classes
-    // dominate the band. Defensive fallback to BESS's 35% (most
-    // conservative) if all tonnage zero (early state, no installed base).
-    const totalTonnageAcrossClasses =
-      tonnageByClass.wind + tonnageByClass.solar + tonnageByClass.bess
-    const effectiveUncertainty: AssetClass | null =
-      assetClass !== 'all'
-        ? assetClass
-        : null   // signal: compute weighted
-
-    // Chart data: sorted by year, one column per material (P50 / central)
-    const chartData: YearMaterialBand[] = Object.entries(byYear)
-      .map(([year, mats]) => {
-        const row: YearMaterialBand = { year: +year, total_t: 0, recovered_t: 0, recoverable_value_usd: 0 }
-        for (const k of materialKeys) {
-          const t      = mats[k] ?? 0
-          row[k]       = Math.round(t)
-          row.total_t += t
-          const rec    = t * (recoveryByMaterial[k] ?? 0) / 100
-          row.recovered_t += rec
-        }
-        return row
-      })
-      .sort((a, b) => a.year - b.year)
-
-    // Apply uncertainty — weighted average for 'all' mode
-    const applyEffectiveUncertainty = (central: number) => {
-      if (effectiveUncertainty) return applyUncertainty(central, effectiveUncertainty)
-      // Weighted: sum(class_tonnage / total × class_uncertainty)
-      if (totalTonnageAcrossClasses === 0) return applyUncertainty(central, 'bess')
-      const weightedPct =
-        (tonnageByClass.wind  * UNCERTAINTY_PCT.wind  +
-         tonnageByClass.solar * UNCERTAINTY_PCT.solar +
-         tonnageByClass.bess  * UNCERTAINTY_PCT.bess) / totalTonnageAcrossClasses
-      const u = weightedPct / 100
-      return { p10: central * (1 - u), p50: central, p90: central * (1 + u) }
-    }
-
-    // Total range for 2030 (P10 → P90 across all materials combined)
-    const total2030 = chartData.find(c => c.year === 2030)?.total_t ?? 0
-    const totalRange2030 = applyEffectiveUncertainty(total2030)
-
-    // BESS chemistry blend (only when BESS is included in selection
-    // AND BESS contributed retiring tonnage — shown for both 'bess'
-    // and 'all' modes since black mass valuation matters either way)
-    const bessChemistryBlend = (() => {
-      const bessIncluded = classesForSelection(assetClass).includes('bess')
-      if (!bessIncluded) return null
-      const mixWeighted: { nmc: number; lfp: number; nca: number; na_ion: number } =
-        { nmc: 0, lfp: 0, nca: 0, na_ion: 0 }
-      let totalMw = 0
-      for (const [label, mw] of Object.entries(bessCohortMwTotals)) {
-        const mix = BESS_CHEMISTRY_MIX[label]
-        if (!mix) continue
-        mixWeighted.nmc    += mix.nmc    * mw
-        mixWeighted.lfp    += mix.lfp    * mw
-        mixWeighted.nca    += mix.nca    * mw
-        mixWeighted.na_ion += mix.na_ion * mw
-        totalMw += mw
-      }
-      if (totalMw === 0) return null
-      const norm = (n: number) => Math.round((n / totalMw) * 100)
-      return {
-        nmc:    norm(mixWeighted.nmc),
-        lfp:    norm(mixWeighted.lfp),
-        nca:    norm(mixWeighted.nca),
-        na_ion: norm(mixWeighted.na_ion),
-        avg_price: bmPriceWeightedDen > 0 ? Math.round(bmPriceWeightedSum / bmPriceWeightedDen) : 0,
-      }
-    })()
-
-    // Detail rows for the table — with confidence bands on recovered tonnage
-    const detailRows: MaterialDetailRow[] = materialKeys.map(k => {
-      const acc = byMaterial[k]
-      const t30 = byYear[2030]?.[k] ?? 0
-      const t35 = byYear[2035]?.[k] ?? 0
-      const recPct = recoveryByMaterial[k] ?? 0
-      const rec30 = t30 * recPct / 100
-      const band30 = applyEffectiveUncertainty(rec30)
-
-      // BESS black mass uses chemistry-weighted price; everything else
-      // uses the static FIRST_DEGREE_PRICING table. Black mass appears
-      // in 'bess' AND 'all' selections.
-      const unitPrice = (k === 'black_mass' && bessChemistryBlend)
-        ? bessChemistryBlend.avg_price
-        : (FIRST_DEGREE_PRICING_USD_PER_T[k] ?? 0)
-
-      return {
-        material:             k,
-        display:              acc?.display ?? k,
-        recovery_pct:         recPct,
-        unit_price_usd_t:     unitPrice,
-        total_t_2030:         Math.round(t30),
-        recovered_t_2030:     Math.round(rec30),
-        recovered_t_2030_p10: Math.round(band30.p10),
-        recovered_t_2030_p90: Math.round(band30.p90),
-        total_t_2035:         Math.round(t35),
-        recovered_t_2035:     Math.round(t35 * recPct / 100),
-        source:               acc?.source ?? '—',
-      }
-    }).sort((a, b) => b.total_t_2030 - a.total_t_2030)
-
-    return { chartData, detailRows, materialKeys, bessChemistryBlend, totalRange2030 }
-  }, [rows, assetClass, windMedian, solarMedian, bessMedian])
+  const { chartData, detailRows, materialKeys } = useMemo(
+    () => computeWasteFlow({
+      rows, assetClass, windMedian, solarMedian, bessMedian,
+      bucket: 'specialist',     // ← THIS panel = specialist recycling only
+    }),
+    [rows, assetClass, windMedian, solarMedian, bessMedian],
+  )
 
   const fmtT = (n: number) => n >= 1_000_000 ? `${(n/1_000_000).toFixed(1)}Mt`
                             : n >= 1_000     ? `${(n/1_000).toFixed(0)}kt`
@@ -1392,7 +1087,7 @@ function WasteFlowForecastPanel() {
                               : `$${n.toFixed(0)}`
 
   return (
-    <Panel label="PCM" title="Waste Flow Forecast" className="col-span-6"
+    <Panel label="PCM" title="Waste Flow Forecast · specialist recycling" className="col-span-6"
            meta={
              <div className="flex items-center gap-1.5">
                <span className="text-[10px] text-ink-4 tabular-nums"

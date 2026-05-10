@@ -459,6 +459,56 @@ export const LEFT_IN_PLACE_NOTE = {
   bess:  'BESS containers are skid-mounted; nothing left in place once skid removed.',
 }
 
+// ── Material recycling pathway buckets ───────────────────────────────
+
+/**
+ * Two distinct EOL pathways serve fundamentally different audiences:
+ *
+ *   SPECIALIST — bespoke processing, ~10 facilities worldwide each,
+ *     capacity-constrained, geographic dependency. Asset owner has to
+ *     FIND a processor. Pricing opaque. Surfaces in PCM Waste Flow
+ *     Forecast (Recycling Capacity Monitor).
+ *
+ *   SCRAP_MERCHANT — commodity transactions. Asset owner picks up the
+ *     phone and sells. LME / Fastmarkets pricing. Multiple bidders.
+ *     Surfaces in SMI Decom Material Volume.
+ *
+ *   WASTE — no recovery pathway, just landfill / energy recovery.
+ *     Hidden from both panels (would clutter without informing).
+ */
+export type MaterialBucket = 'specialist' | 'scrap_merchant' | 'waste'
+
+export const MATERIAL_BUCKET: Record<string, MaterialBucket> = {
+  // ── SPECIALIST recycling — PCM Waste Flow Forecast ─────────────────
+  composite:    'specialist',  // Cement co-processing or pyrolysis
+                                // (Holcim, Anmet, Roche, Conenor, GFS)
+  black_mass:   'specialist',  // Hydromet refining (Glencore, Umicore,
+                                // Li-Cycle, Redwood, Tozero)
+  rare_earth:   'specialist',  // REE recycling (Solvay, Less Common
+                                // Metals, MP Materials Mountain Pass)
+  silver:       'specialist',  // Acid leach post-glass-separation
+                                // (ROSI, FRELP, SOLARCYCLE, Reiling)
+  silicon:      'specialist',  // Same PV specialists as silver, but
+                                // output is downcycled construction
+                                // aggregate (no commodity-grade market)
+
+  // ── SCRAP MERCHANT — SMI Decom Material Volume ─────────────────────
+  steel:        'scrap_merchant',
+  cast_iron:    'scrap_merchant',
+  copper:       'scrap_merchant',
+  aluminium:    'scrap_merchant',
+  zinc:         'scrap_merchant',
+  glass:        'scrap_merchant',  // Cullet broker (weak but commoditised)
+
+  // ── WASTE — no recovery, hidden from both panels ───────────────────
+  polymer:      'waste',  // Cabling jackets, EVA encapsulant
+  electrolyte:  'waste',  // LiPF6, organic carbonates
+}
+
+export function isInBucket(material: string, bucket: MaterialBucket): boolean {
+  return MATERIAL_BUCKET[material] === bucket
+}
+
 // ── Methodology disclaimer (used in panel footer) ──
 
 export const METHODOLOGY_NOTE = `
