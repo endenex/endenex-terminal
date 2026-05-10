@@ -776,7 +776,7 @@ function GateFeesTablePanel() {
   const sortArrow = sort === 'cost_asc' ? ' ↑' : sort === 'cost_desc' ? ' ↓' : ''
 
   return (
-    <Panel label="PCM" title="Gate Fees" className="col-span-6"
+    <Panel label="PCM" title="Gate Fees" className="col-span-3"
            meta={
              <div className="flex items-center gap-1.5">
                <div className="flex items-center bg-canvas border border-border rounded-sm p-px">
@@ -869,6 +869,245 @@ function GateFeesTablePanel() {
         <p className="text-[9.5px] text-ink-4 truncate"
            title="Gate fees are costs paid by asset owners to processors / disposers. BESS black mass is a tradeable commodity (revenue, chemistry-priced) and lives in PCM Waste Flow Forecast → unit price column on the Black mass row, weighted by NMC/LFP/NCA/Na-ion mix per cohort.">
           Gate fees only — costs paid by asset owner. Black mass commodity economics in Waste Flow Forecast (chemistry-weighted). Hover for detail.
+        </p>
+      </div>
+    </Panel>
+  )
+}
+
+// ── 03b Recovery Offset panel ────────────────────────────────────────────────
+//
+// Companion to Gate Fees. Where Gate Fees = costs PAID by asset owner,
+// Recovery Offset = revenue RECEIVED by asset owner via off-take payables.
+//
+// Two streams covered:
+//   1. BESS black mass payables — chemistry-priced, % of underlying metal
+//      benchmarks (NMC = NiSO4 + CoSO4 + Li2CO3 ; LFP = Li2CO3 only).
+//   2. Standard scrap commodity payables — % of LME / COMEX / FRED PPI
+//      benchmarks for steel, copper, aluminium, zinc when sold to scrap
+//      merchants. Rare earth payables from specialist refiners (very thin
+//      market, indicative).
+
+type OffsetCategory = 'black_mass' | 'metal_scrap' | 'specialist'
+
+interface RecoveryOffsetRow {
+  asset_classes: GateAssetClass[]
+  category:      OffsetCategory
+  pathway:       string
+  region:        string             // display label
+  region_group:  GateRegion
+  /** Payable as % of underlying benchmark, or null if absolute price. */
+  payable_pct:   string | null      // e.g. "75-85%", "60-70%"
+  /** Underlying benchmark the payable refers to. */
+  benchmark:     string             // e.g. "NMC metal value", "LME Cu"
+  /** Indicative absolute price USD/t when available. */
+  usd_per_t:     number | null
+  notes:         string
+  confidence:    GateConfidence
+  source:        string
+}
+
+const OFFSET_CAT_LABEL: Record<OffsetCategory, string> = {
+  black_mass:  'BLACK MASS',
+  metal_scrap: 'METAL SCRAP',
+  specialist:  'SPECIALIST',
+}
+
+const OFFSET_CAT_STYLE: Record<OffsetCategory, string> = {
+  black_mass:  'bg-slate-900 text-white',
+  metal_scrap: 'bg-amber-100 text-amber-800 border border-amber-300',
+  specialist:  'bg-purple-100 text-purple-800 border border-purple-300',
+}
+
+const RECOVERY_OFFSET_TABLE: RecoveryOffsetRow[] = [
+  // ── BESS black mass off-take payables ──
+  { asset_classes:['bess'], category:'black_mass', pathway:'NMC black mass — hydromet',
+    region:'CN', region_group:'AsiaPac', payable_pct:'75-85%', benchmark:'NiSO4 + CoSO4 + Li2CO3 metal value',
+    usd_per_t: 8500, confidence:'confident',
+    notes:'Fastmarkets ddp China index, Nov 2025. CATL / GEM / Brunp dominant buyers.',
+    source:'https://www.fastmarkets.com/insights/launch-of-china-ev-battery-scrap-black-mass-prices/' },
+  { asset_classes:['bess'], category:'black_mass', pathway:'NMC black mass — hydromet',
+    region:'KR', region_group:'AsiaPac', payable_pct:'70-80%', benchmark:'NiSO4 + CoSO4 + Li2CO3 metal value',
+    usd_per_t: 8000, confidence:'confident',
+    notes:'SungEel HiTech, Posco GS payable indicators. Fastmarkets KR.',
+    source:'https://www.fastmarkets.com/insights/launch-of-south-korean-black-mass-payable-indicators-pricing-notice/' },
+  { asset_classes:['bess'], category:'black_mass', pathway:'NMC black mass — hydromet',
+    region:'EU', region_group:'EU', payable_pct:'55-65%', benchmark:'NiSO4 + CoSO4 + Li2CO3 metal value',
+    usd_per_t: 6500, confidence:'plausible',
+    notes:'Hydrovolt, Eramet, Glencore Nikkelverk indicative. Below Asian payables — capacity overshoot.',
+    source:'https://www.capgemini.com/de-de/wp-content/uploads/sites/8/2025/07/POV-Battery-Recycling_Capgemini-Engineering_2025-07.pdf' },
+  { asset_classes:['bess'], category:'black_mass', pathway:'NMC black mass — hydromet',
+    region:'US', region_group:'US', payable_pct:'55-65%', benchmark:'NiSO4 + CoSO4 + Li2CO3 metal value',
+    usd_per_t: 6500, confidence:'plausible',
+    notes:'Redwood Nevada, Li-Cycle (Glencore) hubs. IRA-funded scale-up keeps payables compressed.',
+    source:'https://www.canarymedia.com/articles/recycling-renewables/ev-battery-recycling-had-a-rough-2024' },
+  { asset_classes:['bess'], category:'black_mass', pathway:'LFP black mass — hydromet',
+    region:'CN', region_group:'AsiaPac', payable_pct:'40-55%', benchmark:'Li2CO3 only (Fe + P little value)',
+    usd_per_t: 2000, confidence:'plausible',
+    notes:'LFP black mass much lower payable — only Li worth refining. Tozero, BMW, others entering specialty.',
+    source:'https://www.fastmarkets.com/insights/launch-of-china-ev-battery-scrap-black-mass-prices/' },
+  { asset_classes:['bess'], category:'black_mass', pathway:'LFP black mass — hydromet',
+    region:'EU', region_group:'EU', payable_pct:'30-45%', benchmark:'Li2CO3 only',
+    usd_per_t: 1500, confidence:'low',
+    notes:'EU LFP refining nascent. Fortum, Tozero pilot scale only. Most LFP black mass exported to CN.',
+    source:'https://www.isi.fraunhofer.de/en/blog/themen/batterie-update/batterie-recycling_europa_kapazitaeten_bedarf_update_2025.html' },
+
+  // ── Standard metal-scrap payables (asset owner sells to scrap merchant) ──
+  { asset_classes:['wind','bess'], category:'metal_scrap', pathway:'Steel HMS 1&2',
+    region:'EU', region_group:'EU', payable_pct:'~93%', benchmark:'IODEX HMS 80/20',
+    usd_per_t: 330, confidence:'confident',
+    notes:'Standard ferrous scrap, no chemistry premium. Tracks Fastmarkets / SBB indices.',
+    source:'https://www.fastmarkets.com/scrap/' },
+  { asset_classes:['wind','bess'], category:'metal_scrap', pathway:'Steel HMS 1&2',
+    region:'US', region_group:'US', payable_pct:'~93%', benchmark:'AMM HMS 80/20 Midwest',
+    usd_per_t: 340, confidence:'confident',
+    notes:'AMM Midwest mill index. Wind tower steel grades highest premium.',
+    source:'https://www.amm.com/' },
+  { asset_classes:['wind','solar','bess'], category:'metal_scrap', pathway:'Copper No.2 (LME-linked)',
+    region:'EU', region_group:'EU', payable_pct:'75-80%', benchmark:'LME Cu cash settlement',
+    usd_per_t: 7000, confidence:'confident',
+    notes:'No.2 grade — bare bright copper trades 90%+, mixed/insulated 60-75%.',
+    source:'https://www.lme.com/Metals/Non-ferrous/LME-Copper' },
+  { asset_classes:['wind','solar','bess'], category:'metal_scrap', pathway:'Copper No.2 (LME-linked)',
+    region:'US', region_group:'US', payable_pct:'80-87%', benchmark:'COMEX Cu front month',
+    usd_per_t: 7400, confidence:'confident',
+    notes:'COMEX-linked; ISRI Grade 200. US scrap merchants typically pay tighter % vs EU.',
+    source:'https://www.cmegroup.com/markets/metals/base/copper.html' },
+  { asset_classes:['wind','solar','bess'], category:'metal_scrap', pathway:'Aluminium taint-tabor',
+    region:'EU', region_group:'EU', payable_pct:'65-70%', benchmark:'LME Al cash settlement',
+    usd_per_t: 1500, confidence:'confident',
+    notes:'Mixed/old cast aluminium. Solar PV frames trade closer to taint-tabor; tower/nacelle Al varies.',
+    source:'https://www.lme.com/Metals/Non-ferrous/LME-Aluminium' },
+  { asset_classes:['wind','solar','bess'], category:'metal_scrap', pathway:'Aluminium taint-tabor',
+    region:'US', region_group:'US', payable_pct:'75-80%', benchmark:'LME Al cash + Midwest premium',
+    usd_per_t: 1700, confidence:'confident',
+    notes:'US scrap typically 5-10ppt tighter than EU due to tariff-supported domestic demand.',
+    source:'https://www.platts.com/aluminium-prices' },
+  { asset_classes:['wind'], category:'metal_scrap', pathway:'Zinc galvanising',
+    region:'EU', region_group:'EU', payable_pct:'~65%', benchmark:'LME Zn cash',
+    usd_per_t: 1900, confidence:'plausible',
+    notes:'Wind tower galvanising. Thin market; only worth recovery on bulk volumes.',
+    source:'https://www.lme.com/Metals/Non-ferrous/LME-Zinc' },
+
+  // ── Specialist recovery (rare-earth, silver) ──
+  { asset_classes:['wind'], category:'specialist', pathway:'NdPr from PMSG magnets',
+    region:'GLOBAL', region_group:'EU', payable_pct:'~25%', benchmark:'NdPr oxide market',
+    usd_per_t: 60_000, confidence:'low',
+    notes:'Solvay / Less Common Metals / MP Materials. Tiny commercial volumes; thin price discovery.',
+    source:'https://pubs.usgs.gov/periodicals/mcs2024/mcs2024-rare-earths.pdf' },
+  { asset_classes:['solar'], category:'specialist', pathway:'Silver from c-Si cells',
+    region:'EU', region_group:'EU', payable_pct:'40-55%', benchmark:'LBMA silver fix',
+    usd_per_t: 750_000, confidence:'plausible',
+    notes:'ROSI (FR), FRELP (IT) — acid leach post glass-separation. Mainstream PV recyclers leave Ag in cullet.',
+    source:'https://www.rosi-solar.com/' },
+]
+
+const OFFSET_ASSET_TABS: { code: GateAssetClass | 'all'; label: string }[] = [
+  { code: 'all',   label: 'All'   },
+  { code: 'wind',  label: 'Wind'  },
+  { code: 'solar', label: 'Solar' },
+  { code: 'bess',  label: 'BESS'  },
+]
+const OFFSET_REGION_TABS = GATE_REGION_TABS
+
+const OFFSET_CONFIDENCE_STYLE: Record<GateConfidence, string> = {
+  confident: 'text-emerald-700',
+  plausible: 'text-amber-700',
+  low:       'text-rose-700',
+}
+
+function RecoveryOffsetPanel() {
+  const [assetClass, setAssetClass] = useState<GateAssetClass | 'all'>('all')
+  const [region,     setRegion]     = useState<GateRegion | 'all'>('all')
+
+  const filtered = RECOVERY_OFFSET_TABLE
+    .filter(r => assetClass === 'all' || r.asset_classes.includes(assetClass))
+    .filter(r => region === 'all' || r.region_group === region)
+    .sort((a, b) => {
+      // Group by category in display order: black_mass → metal_scrap → specialist
+      const order: OffsetCategory[] = ['black_mass', 'metal_scrap', 'specialist']
+      const da = order.indexOf(a.category) - order.indexOf(b.category)
+      if (da !== 0) return da
+      // Then by USD value descending — highest-value off-takes first within category
+      return (b.usd_per_t ?? 0) - (a.usd_per_t ?? 0)
+    })
+
+  return (
+    <Panel label="PCM" title="Recovery Offset" className="col-span-3"
+           meta={
+             <div className="flex items-center gap-1.5">
+               <div className="flex items-center bg-canvas border border-border rounded-sm p-px">
+                 {OFFSET_ASSET_TABS.map(t => (
+                   <button key={t.code} onClick={() => setAssetClass(t.code)}
+                           className={clsx(
+                             'px-1.5 py-0.5 text-[10px] font-semibold tracking-wide rounded-sm',
+                             assetClass === t.code ? 'bg-active text-teal' : 'text-ink-3 hover:text-ink',
+                           )}>
+                     {t.label}
+                   </button>
+                 ))}
+               </div>
+               <div className="flex items-center bg-canvas border border-border rounded-sm p-px">
+                 {OFFSET_REGION_TABS.map(t => (
+                   <button key={t.code} onClick={() => setRegion(t.code)}
+                           className={clsx(
+                             'px-1.5 py-0.5 text-[10px] font-bold tracking-wide rounded-sm',
+                             region === t.code ? 'bg-active text-teal' : 'text-ink-3 hover:text-ink',
+                           )}>
+                     {t.label}
+                   </button>
+                 ))}
+               </div>
+             </div>
+           }>
+      <table className="w-full">
+        <thead>
+          <tr className="bg-titlebar border-b border-border sticky top-0 z-10">
+            <th className="px-2 py-1 text-left text-[9.5px] font-semibold text-ink-3 uppercase tracking-wide">Stream</th>
+            <th className="px-2 py-1 text-left text-[9.5px] font-semibold text-ink-3 uppercase tracking-wide">Region</th>
+            <th className="px-2 py-1 text-right text-[9.5px] font-semibold text-ink-3 uppercase tracking-wide">Payable</th>
+            <th className="px-2 py-1 text-right text-[9.5px] font-semibold text-ink-3 uppercase tracking-wide">USD/t</th>
+            <th className="px-2 py-1 text-left text-[9.5px] font-semibold text-ink-3 uppercase tracking-wide">Conf</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filtered.map((r, i) => (
+            <tr key={i} className="border-b border-border/70 hover:bg-raised">
+              <td className="px-2 py-1">
+                <div className="flex items-center gap-1.5">
+                  <span className={clsx('text-[8px] font-bold px-1 py-px rounded-sm tracking-wider flex-shrink-0', OFFSET_CAT_STYLE[r.category])}>
+                    {OFFSET_CAT_LABEL[r.category]}
+                  </span>
+                  <span className="text-[10.5px] text-ink font-medium truncate" title={r.pathway}>
+                    {r.pathway}
+                  </span>
+                </div>
+                <div className="text-[9.5px] text-ink-4 mt-0.5 truncate" title={`${r.benchmark} — ${r.notes}`}>
+                  vs {r.benchmark}
+                </div>
+              </td>
+              <td className="px-2 py-1 text-[10.5px] text-ink-2">{r.region}</td>
+              <td className="px-2 py-1 text-right text-[10.5px] tabular-nums text-emerald-700 font-bold">
+                {r.payable_pct ?? '—'}
+              </td>
+              <td className="px-2 py-1 text-right text-[10.5px] tabular-nums text-ink-2">
+                {r.usd_per_t != null
+                  ? r.usd_per_t >= 1000
+                    ? `$${(r.usd_per_t/1000).toFixed(r.usd_per_t >= 100_000 ? 0 : 1)}k`
+                    : `$${r.usd_per_t}`
+                  : '—'}
+              </td>
+              <td className={clsx('px-2 py-1 text-[10px] capitalize', OFFSET_CONFIDENCE_STYLE[r.confidence])}>
+                {r.confidence}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="flex-shrink-0 border-t border-border bg-canvas px-3 py-1">
+        <p className="text-[9.5px] text-ink-4 truncate"
+           title="Off-take payables = % of underlying benchmark price the asset owner receives. Black mass payables are chemistry-specific (NMC valued at Ni+Co+Li sum; LFP at Li only). Standard scrap payables are % of LME/COMEX. Specialist (RE, Ag) payables come from a small handful of refiners with thin price discovery.">
+          Off-take revenue — % of benchmark received by asset owner. Hover for details.
         </p>
       </div>
     </Panel>
@@ -1452,17 +1691,19 @@ export function RecyclingCapacityPage() {
       </div>
 
       <div className="flex-1 min-h-0 overflow-hidden p-1.5">
-        {/* 12-col × 3-row grid. Right half (cols 7-12) is dedicated
-            entirely to the Endenex Eye flagship panel — full height
-            (row-span-3). Left half (cols 1-6) is split:
-              Row 1: WFF (cols 1-3) | Capacity Tightness (cols 4-6)
-              Row 2: Gate Fees (cols 1-6, full half-width)
-              Row 3: Regulatory Context (cols 1-6, full half-width) */}
+        {/* 12-col × 3-row grid. Right half (cols 7-12) hosts the
+            Endenex Eye flagship full-height. Left half is now fully
+            split:
+              Row 1: WFF (cols 1-3)        | Capacity Tightness (cols 4-6)
+              Row 2: Gate Fees (cols 1-3)  | Recovery Offset    (cols 4-6)
+              Row 3: Regulatory Context (cols 1-6, full half-width)
+            Gate Fees = costs paid; Recovery Offset = revenue received. */}
         <div className="h-full grid grid-cols-12 grid-rows-3 gap-1.5">
           <WasteFlowForecastPanel />
           <CapacityTightnessPanel />
           <BladeOutlookPanel />
           <GateFeesTablePanel />
+          <RecoveryOffsetPanel />
           <RegulatoryContextPanel />
         </div>
       </div>
