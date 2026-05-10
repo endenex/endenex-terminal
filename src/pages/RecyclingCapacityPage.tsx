@@ -1094,6 +1094,27 @@ function triangularAnnualRetirement(age: number, median: number): number {
   return (3 - offset) / 9
 }
 
+/** Plain-language material name for the legend / table — no "where it
+ *  comes from" parentheticals. e.g. 'cast_iron' → 'Cast iron'. */
+const MATERIAL_DISPLAY: Record<string, string> = {
+  steel:        'Steel',
+  cast_iron:    'Cast iron',
+  copper:       'Copper',
+  aluminium:    'Aluminium',
+  zinc:         'Zinc',
+  rare_earth:   'Rare earths',
+  composite:    'Composite',
+  polymer:      'Polymer',
+  glass:        'Glass',
+  silicon:      'Silicon',
+  silver:       'Silver',
+  black_mass:   'Black mass',
+  electrolyte:  'Electrolyte',
+}
+function materialName(key: string): string {
+  return MATERIAL_DISPLAY[key] ?? key.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase())
+}
+
 interface YearMaterialBand {
   year:            number
   total_t:         number
@@ -1439,46 +1460,12 @@ function WasteFlowForecastPanel() {
                         stroke={MATERIAL_COLORS[k] ?? '#9ca3af'}
                         fill={MATERIAL_COLORS[k] ?? '#9ca3af'}
                         fillOpacity={0.75}
-                        name={detailRows.find(r => r.material === k)?.display ?? k} />
+                        name={materialName(k)} />
                 ))}
               </AreaChart>
             </ResponsiveContainer>
           )}
         </div>
-
-        {/* Total-range indicator (P10 / P50 / P90) + BESS chemistry blend */}
-        {!loading && chartData.length > 0 && (
-          <div className="flex-shrink-0 px-3 py-1 border-t border-border bg-canvas flex items-center justify-between gap-3">
-            <div className="text-[10px] text-ink-3">
-              <span className="text-ink-4 uppercase tracking-wider font-semibold mr-1.5">2030 total range</span>
-              <span className="text-ink tabular-nums font-semibold">
-                {fmtT(totalRange2030.p10)} – {fmtT(totalRange2030.p90)}
-              </span>
-              <span className="text-ink-4 ml-1">
-                (P10 / P50 {fmtT(totalRange2030.p50)} / P90 ·{' '}
-                {assetClass === 'all'
-                  ? 'tonnage-weighted ±'
-                  : '±'}
-                {assetClass === 'all'
-                  ? Math.round(((totalRange2030.p90 - totalRange2030.p50) / Math.max(1, totalRange2030.p50)) * 100)
-                  : UNCERTAINTY_PCT[assetClass]}%)
-              </span>
-            </div>
-            {bessChemistryBlend && (
-              <div className="text-[10px] text-ink-3 flex items-center gap-2">
-                <span className="text-ink-4 uppercase tracking-wider font-semibold">Chemistry blend</span>
-                <span className="text-ink tabular-nums">
-                  LFP {bessChemistryBlend.lfp}% · NMC {bessChemistryBlend.nmc}%
-                  {bessChemistryBlend.nca > 0 && ` · NCA ${bessChemistryBlend.nca}%`}
-                  {bessChemistryBlend.na_ion > 0 && ` · Na-ion ${bessChemistryBlend.na_ion}%`}
-                </span>
-                <span className="text-ink-4 tabular-nums">
-                  → black mass ${bessChemistryBlend.avg_price.toLocaleString('en-GB')}/t
-                </span>
-              </div>
-            )}
-          </div>
-        )}
 
         {/* Detail table */}
         <div className="flex-1 min-h-0 overflow-auto border-t border-border">
@@ -1504,7 +1491,7 @@ function WasteFlowForecastPanel() {
                     <div className="flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-sm flex-shrink-0"
                             style={{ background: MATERIAL_COLORS[r.material] ?? '#9ca3af' }} />
-                      <span className="text-[11.5px] text-ink font-medium">{r.display}</span>
+                      <span className="text-[11.5px] text-ink font-medium">{materialName(r.material)}</span>
                     </div>
                   </td>
                   <td className={clsx('px-2.5 py-1 text-right text-[11.5px] tabular-nums',
