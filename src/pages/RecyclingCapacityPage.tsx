@@ -1472,16 +1472,20 @@ function WasteFlowForecastPanel() {
           <table className="w-full">
             <thead>
               <tr className="bg-titlebar border-b border-border sticky top-0 z-10">
-                <th className="px-2.5 py-1 text-left text-[10px] font-semibold text-ink-3 uppercase tracking-wide">Material</th>
-                <th className="px-2.5 py-1 text-right text-[10px] font-semibold text-ink-3 uppercase tracking-wide">Recovery</th>
-                <th className="px-2.5 py-1 text-right text-[10px] font-semibold text-ink-3 uppercase tracking-wide">Unit price</th>
-                <th className="px-2.5 py-1 text-right text-[10px] font-semibold text-ink-3 uppercase tracking-wide">2030 total</th>
-                <th className="px-2.5 py-1 text-right text-[10px] font-semibold text-ink-3 uppercase tracking-wide">
+                <th rowSpan={2} className="px-2.5 py-1 text-left text-[10px] font-semibold text-ink-3 uppercase tracking-wide align-bottom">Material</th>
+                <th rowSpan={2} className="px-2.5 py-1 text-right text-[10px] font-semibold text-ink-3 uppercase tracking-wide align-bottom">Recovery</th>
+                <th rowSpan={2} className="px-2.5 py-1 text-right text-[10px] font-semibold text-ink-3 uppercase tracking-wide align-bottom">Unit price</th>
+                <th rowSpan={2} className="px-2.5 py-1 text-right text-[10px] font-semibold text-ink-3 uppercase tracking-wide align-bottom">2030 total</th>
+                <th colSpan={3}  className="px-2.5 pt-1 text-center text-[10px] font-semibold text-ink-3 uppercase tracking-wide border-b border-border/40">
                   2030 recovered
-                  <span className="ml-1 text-[9px] font-normal normal-case text-ink-4">P10–P90</span>
                 </th>
-                <th className="px-2.5 py-1 text-right text-[10px] font-semibold text-ink-3 uppercase tracking-wide">2035 recovered</th>
-                <th className="px-2.5 py-1 text-left text-[10px] font-semibold text-ink-3 uppercase tracking-wide">Source</th>
+                <th rowSpan={2} className="px-2.5 py-1 text-right text-[10px] font-semibold text-ink-3 uppercase tracking-wide align-bottom">2035 recovered</th>
+                <th rowSpan={2} className="px-2.5 py-1 text-left text-[10px] font-semibold text-ink-3 uppercase tracking-wide align-bottom">Source</th>
+              </tr>
+              <tr className="bg-titlebar border-b border-border sticky top-7 z-10">
+                <th className="px-2.5 pb-1 text-right text-[9px] font-semibold text-ink-4 normal-case tracking-wide">P10 low</th>
+                <th className="px-2.5 pb-1 text-right text-[9px] font-semibold text-teal normal-case tracking-wide">P50 central</th>
+                <th className="px-2.5 pb-1 text-right text-[9px] font-semibold text-ink-4 normal-case tracking-wide">P90 high</th>
               </tr>
             </thead>
             <tbody>
@@ -1502,13 +1506,14 @@ function WasteFlowForecastPanel() {
                     {r.unit_price_usd_t > 0 ? fmtUsd(r.unit_price_usd_t) + '/t' : '—'}
                   </td>
                   <td className="px-2.5 py-1 text-right text-[11.5px] tabular-nums text-ink-2">{fmtT(r.total_t_2030)}</td>
-                  <td className="px-2.5 py-1 text-right text-[11.5px] tabular-nums">
-                    <span className="text-ink font-semibold">{fmtT(r.recovered_t_2030)}</span>
-                    {r.recovery_pct > 0 && (
-                      <span className="text-ink-4 text-[10px] ml-1">
-                        ({fmtT(r.recovered_t_2030_p10)}–{fmtT(r.recovered_t_2030_p90)})
-                      </span>
-                    )}
+                  <td className="px-2.5 py-1 text-right text-[11.5px] tabular-nums text-ink-3">
+                    {r.recovery_pct > 0 ? fmtT(r.recovered_t_2030_p10) : '—'}
+                  </td>
+                  <td className="px-2.5 py-1 text-right text-[11.5px] tabular-nums text-ink font-semibold">
+                    {r.recovery_pct > 0 ? fmtT(r.recovered_t_2030) : '—'}
+                  </td>
+                  <td className="px-2.5 py-1 text-right text-[11.5px] tabular-nums text-ink-3">
+                    {r.recovery_pct > 0 ? fmtT(r.recovered_t_2030_p90) : '—'}
                   </td>
                   <td className="px-2.5 py-1 text-right text-[11.5px] tabular-nums text-ink font-semibold">{fmtT(r.recovered_t_2035)}</td>
                   <td className="px-2.5 py-1 text-[10px] text-ink-4 max-w-[180px] truncate" title={r.source}>{r.source}</td>
