@@ -15,6 +15,8 @@ import {
   WIND_INTENSITIES, SOLAR_INTENSITIES, BESS_INTENSITIES,
   FIRST_DEGREE_RECOVERY, FIRST_DEGREE_PRICING_USD_PER_T,
   METHODOLOGY_NOTE,
+  BESS_CHEMISTRY_MIX, bessChemistryWeightedPrice,
+  applyUncertainty, UNCERTAINTY_PCT,
   type AssetClass, type MaterialIntensity, type VintageCohort,
 } from '@/data/material_assumptions'
 
@@ -1081,9 +1083,11 @@ interface MaterialDetailRow {
   material:           string
   display:            string
   recovery_pct:       number
-  unit_price_usd_t:   number
-  total_t_2030:       number
-  recovered_t_2030:   number
+  unit_price_usd_t:   number      // central estimate (chemistry-weighted for BESS black mass)
+  total_t_2030:       number      // P50 central
+  recovered_t_2030:   number      // P50 central
+  recovered_t_2030_p10: number
+  recovered_t_2030_p90: number
   total_t_2040:       number
   recovered_t_2040:   number
   source:             string
@@ -1129,33 +1133,44 @@ function WasteFlowForecastPanel() {
     })
   }, [assetClass, region])
 
-  // Compute the chart series + detail rows in one pass using cohort-aware
-  // intensities. For each retiring (year, commission_year) we look up the
-  // cohort, multiply MW × intensity_kg_per_unit / 1000 = tonnes per material.
-  const { chartData, detailRows, materialKeys } = useMemo(() => {
+  // Compute chart series + detail rows + chemistry-weighted BESS pricing
+  // + confidence bands. For each retiring (year, commission_year) we look
+  // up the cohort, multiply MW × intensity_kg_per_unit / 1000 = tonnes per
+  // material. For BESS black mass specifically, the unit price is
+  // weighted by the cohort's chemistry mix (NMC / LFP / NCA / Na-ion).
+  const { chartData, detailRows, materialKeys, bessChemistryBlend, totalRange2030 } = useMemo(() => {
     const cohorts     = getCohortsFor(assetClass)
     const intensities = getIntensitiesFor(assetClass)
     const recovery    = FIRST_DEGREE_RECOVERY[assetClass]
 
     // Tally by year × material
     const byYear: Record<number, Record<string, number>> = {}
-    // Detail accumulator
-    const byMaterial: Record<string, { intensity_kg_per_unit_avg: number; weight: number; source: string; display: string }> = {}
+    // Detail accumulator (per material)
+    const byMaterial: Record<string, { source: string; display: string }> = {}
+    // BESS-only: track chemistry-weighted black mass price by year
+    // (because cohorts feed different years; weight by retiring MW)
+    let bmPriceWeightedSum = 0
+    let bmPriceWeightedDen = 0
+    // Cohort retiring-MW totals — used for chemistry blend display
+    const cohortMwTotals: Record<string, number> = {}
 
     for (const r of rows) {
       const cohort = cohortForYear(cohorts, r.commission_year)
       const mats   = intensities[cohort.label] ?? []
+      cohortMwTotals[cohort.label] = (cohortMwTotals[cohort.label] ?? 0) + r.retiring_mw
+
       for (const m of mats) {
         const tonnes = (r.retiring_mw * m.kg_per_unit) / 1000
         if (!byYear[r.retire_year]) byYear[r.retire_year] = {}
         byYear[r.retire_year][m.material] = (byYear[r.retire_year][m.material] ?? 0) + tonnes
-        // Detail accumulator (weighted by retiring MW so cohort-averaged
-        // intensity makes sense)
-        if (!byMaterial[m.material]) {
-          byMaterial[m.material] = { intensity_kg_per_unit_avg: 0, weight: 0, source: m.source, display: m.display }
-        }
-        byMaterial[m.material].intensity_kg_per_unit_avg += m.kg_per_unit * r.retiring_mw
-        byMaterial[m.material].weight                    += r.retiring_mw
+        if (!byMaterial[m.material]) byMaterial[m.material] = { source: m.source, display: m.display }
+      }
+
+      // Chemistry-weighted black mass price (BESS only)
+      if (assetClass === 'bess') {
+        const price = bessChemistryWeightedPrice(cohort)
+        bmPriceWeightedSum += price * r.retiring_mw
+        bmPriceWeightedDen += r.retiring_mw
       }
     }
 
@@ -1164,7 +1179,7 @@ function WasteFlowForecastPanel() {
       Object.values(intensities).flat().map(m => m.material),
     ))
 
-    // Chart data: sorted by year, with one column per material
+    // Chart data: sorted by year, one column per material (P50 / central)
     const chartData: YearMaterialBand[] = Object.entries(byYear)
       .map(([year, mats]) => {
         const row: YearMaterialBand = { year: +year, total_t: 0, recovered_t: 0, recoverable_value_usd: 0 }
@@ -1174,32 +1189,72 @@ function WasteFlowForecastPanel() {
           row.total_t += t
           const rec    = t * (recovery[k] ?? 0) / 100
           row.recovered_t += rec
-          row.recoverable_value_usd += rec * (FIRST_DEGREE_PRICING_USD_PER_T[k] ?? 0)
         }
         return row
       })
       .sort((a, b) => a.year - b.year)
 
-    // Detail rows for the table
+    // Total range for 2030 (P10 → P90 across all materials combined)
+    const total2030 = chartData.find(c => c.year === 2030)?.total_t ?? 0
+    const totalRange2030 = applyUncertainty(total2030, assetClass)
+
+    // BESS chemistry blend (for footer display)
+    const bessChemistryBlend = (() => {
+      if (assetClass !== 'bess') return null
+      const mixWeighted: { nmc: number; lfp: number; nca: number; na_ion: number } =
+        { nmc: 0, lfp: 0, nca: 0, na_ion: 0 }
+      let totalMw = 0
+      for (const [label, mw] of Object.entries(cohortMwTotals)) {
+        const mix = BESS_CHEMISTRY_MIX[label]
+        if (!mix) continue
+        mixWeighted.nmc    += mix.nmc    * mw
+        mixWeighted.lfp    += mix.lfp    * mw
+        mixWeighted.nca    += mix.nca    * mw
+        mixWeighted.na_ion += mix.na_ion * mw
+        totalMw += mw
+      }
+      if (totalMw === 0) return null
+      const norm = (n: number) => Math.round((n / totalMw) * 100)
+      return {
+        nmc:    norm(mixWeighted.nmc),
+        lfp:    norm(mixWeighted.lfp),
+        nca:    norm(mixWeighted.nca),
+        na_ion: norm(mixWeighted.na_ion),
+        avg_price: bmPriceWeightedDen > 0 ? Math.round(bmPriceWeightedSum / bmPriceWeightedDen) : 0,
+      }
+    })()
+
+    // Detail rows for the table — with confidence bands on recovered tonnage
     const detailRows: MaterialDetailRow[] = materialKeys.map(k => {
       const acc = byMaterial[k]
       const t30 = byYear[2030]?.[k] ?? 0
       const t40 = byYear[2040]?.[k] ?? 0
       const recPct = recovery[k] ?? 0
+      const rec30 = t30 * recPct / 100
+      const band30 = applyUncertainty(rec30, assetClass)
+
+      // BESS black mass uses chemistry-weighted price; everything else
+      // uses the static FIRST_DEGREE_PRICING table.
+      const unitPrice = (assetClass === 'bess' && k === 'black_mass' && bessChemistryBlend)
+        ? bessChemistryBlend.avg_price
+        : (FIRST_DEGREE_PRICING_USD_PER_T[k] ?? 0)
+
       return {
-        material:         k,
-        display:          acc?.display ?? k,
-        recovery_pct:     recPct,
-        unit_price_usd_t: FIRST_DEGREE_PRICING_USD_PER_T[k] ?? 0,
-        total_t_2030:     Math.round(t30),
-        recovered_t_2030: Math.round(t30 * recPct / 100),
-        total_t_2040:     Math.round(t40),
-        recovered_t_2040: Math.round(t40 * recPct / 100),
-        source:           acc?.source ?? '—',
+        material:             k,
+        display:              acc?.display ?? k,
+        recovery_pct:         recPct,
+        unit_price_usd_t:     unitPrice,
+        total_t_2030:         Math.round(t30),
+        recovered_t_2030:     Math.round(rec30),
+        recovered_t_2030_p10: Math.round(band30.p10),
+        recovered_t_2030_p90: Math.round(band30.p90),
+        total_t_2040:         Math.round(t40),
+        recovered_t_2040:     Math.round(t40 * recPct / 100),
+        source:               acc?.source ?? '—',
       }
     }).sort((a, b) => b.total_t_2030 - a.total_t_2030)
 
-    return { chartData, detailRows, materialKeys }
+    return { chartData, detailRows, materialKeys, bessChemistryBlend, totalRange2030 }
   }, [rows, assetClass])
 
   const fmtT = (n: number) => n >= 1_000_000 ? `${(n/1_000_000).toFixed(1)}Mt`
@@ -1279,6 +1334,34 @@ function WasteFlowForecastPanel() {
           )}
         </div>
 
+        {/* Total-range indicator (P10 / P50 / P90) + BESS chemistry blend */}
+        {!loading && chartData.length > 0 && (
+          <div className="flex-shrink-0 px-3 py-1 border-t border-border bg-canvas flex items-center justify-between gap-3">
+            <div className="text-[10px] text-ink-3">
+              <span className="text-ink-4 uppercase tracking-wider font-semibold mr-1.5">2030 total range</span>
+              <span className="text-ink tabular-nums font-semibold">
+                {fmtT(totalRange2030.p10)} – {fmtT(totalRange2030.p90)}
+              </span>
+              <span className="text-ink-4 ml-1">
+                (P10 / P50 {fmtT(totalRange2030.p50)} / P90 · ±{UNCERTAINTY_PCT[assetClass]}%)
+              </span>
+            </div>
+            {bessChemistryBlend && (
+              <div className="text-[10px] text-ink-3 flex items-center gap-2">
+                <span className="text-ink-4 uppercase tracking-wider font-semibold">Chemistry blend</span>
+                <span className="text-ink tabular-nums">
+                  LFP {bessChemistryBlend.lfp}% · NMC {bessChemistryBlend.nmc}%
+                  {bessChemistryBlend.nca > 0 && ` · NCA ${bessChemistryBlend.nca}%`}
+                  {bessChemistryBlend.na_ion > 0 && ` · Na-ion ${bessChemistryBlend.na_ion}%`}
+                </span>
+                <span className="text-ink-4 tabular-nums">
+                  → black mass ${bessChemistryBlend.avg_price.toLocaleString('en-GB')}/t
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Detail table */}
         <div className="flex-1 min-h-0 overflow-auto border-t border-border">
           <table className="w-full">
@@ -1288,7 +1371,10 @@ function WasteFlowForecastPanel() {
                 <th className="px-2.5 py-1 text-right text-[10px] font-semibold text-ink-3 uppercase tracking-wide">Recovery</th>
                 <th className="px-2.5 py-1 text-right text-[10px] font-semibold text-ink-3 uppercase tracking-wide">Unit price</th>
                 <th className="px-2.5 py-1 text-right text-[10px] font-semibold text-ink-3 uppercase tracking-wide">2030 total</th>
-                <th className="px-2.5 py-1 text-right text-[10px] font-semibold text-ink-3 uppercase tracking-wide">2030 recovered</th>
+                <th className="px-2.5 py-1 text-right text-[10px] font-semibold text-ink-3 uppercase tracking-wide">
+                  2030 recovered
+                  <span className="ml-1 text-[9px] font-normal normal-case text-ink-4">P10–P90</span>
+                </th>
                 <th className="px-2.5 py-1 text-right text-[10px] font-semibold text-ink-3 uppercase tracking-wide">2040 recovered</th>
                 <th className="px-2.5 py-1 text-left text-[10px] font-semibold text-ink-3 uppercase tracking-wide">Source</th>
               </tr>
@@ -1311,7 +1397,14 @@ function WasteFlowForecastPanel() {
                     {r.unit_price_usd_t > 0 ? fmtUsd(r.unit_price_usd_t) + '/t' : '—'}
                   </td>
                   <td className="px-2.5 py-1 text-right text-[11.5px] tabular-nums text-ink-2">{fmtT(r.total_t_2030)}</td>
-                  <td className="px-2.5 py-1 text-right text-[11.5px] tabular-nums text-ink font-semibold">{fmtT(r.recovered_t_2030)}</td>
+                  <td className="px-2.5 py-1 text-right text-[11.5px] tabular-nums">
+                    <span className="text-ink font-semibold">{fmtT(r.recovered_t_2030)}</span>
+                    {r.recovery_pct > 0 && (
+                      <span className="text-ink-4 text-[10px] ml-1">
+                        ({fmtT(r.recovered_t_2030_p10)}–{fmtT(r.recovered_t_2030_p90)})
+                      </span>
+                    )}
+                  </td>
                   <td className="px-2.5 py-1 text-right text-[11.5px] tabular-nums text-ink font-semibold">{fmtT(r.recovered_t_2040)}</td>
                   <td className="px-2.5 py-1 text-[10px] text-ink-4 max-w-[180px] truncate" title={r.source}>{r.source}</td>
                 </tr>

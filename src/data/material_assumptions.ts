@@ -295,6 +295,111 @@ export const FIRST_DEGREE_RECOVERY: Record<AssetClass, Record<string, number>> =
   },
 }
 
+// ── BESS chemistry mix per vintage cohort ──────────────────────────
+
+/**
+ * Chemistry mix for BESS retiring in each vintage cohort, expressed as
+ * fractions of the cohort's total MWh (sum to 1.0).
+ *
+ * Sources:
+ *   - BNEF Battery Recycling 2025 — utility-scale BESS chemistry shares
+ *   - IEA Battery Recycling Outlook 2024 — chemistry transition timeline
+ *   - WoodMac 2024 — sodium-ion commercial entry forecast (utility ESS)
+ *
+ * Notes:
+ *   - 2015-19: NMC dominant (Tesla Powerpack, AES + Fluence on NMC)
+ *   - 2020-24: LFP shift accelerated by China utility deployments (CATL,
+ *     BYD, EVE all utility-scale LFP) and CCS/safety considerations
+ *   - 2025+: LFP dominant with sodium-ion entering (CATL, HiNa, Faradion
+ *     commercial deployments 2026+); flow batteries (V-Redox) excluded —
+ *     not yet at utility scale enough to disclose
+ */
+export interface ChemistryMix {
+  nmc:    number   // NMC 111 / 532 / 622 / 811 — high Ni+Co
+  lfp:    number   // LiFePO4 — low metal value, abundant
+  nca:    number   // NCA — Tesla-pioneered, high Ni
+  na_ion: number   // sodium-ion — emerging
+}
+
+export const BESS_CHEMISTRY_MIX: Record<string, ChemistryMix> = {
+  '2015-19 — NMC dominant':              { nmc: 0.75, lfp: 0.20, nca: 0.05, na_ion: 0.00 },
+  '2020-24 — LFP shift':                 { nmc: 0.45, lfp: 0.50, nca: 0.05, na_ion: 0.00 },
+  '2025+ — LFP / sodium-ion entering':   { nmc: 0.15, lfp: 0.78, nca: 0.02, na_ion: 0.05 },
+}
+
+/**
+ * Per-chemistry black mass pricing, USD/t. Sourced 2025-Q2:
+ *   - NMC black mass: $5k-12k/t depending on Ni+Co share; mid ~$8,500
+ *     (Glencore + Umicore disclosed bid range)
+ *   - LFP black mass: $1.5k-2.5k/t — only Li worth extracting; mid ~$2,000
+ *   - NCA black mass: $8k-15k/t — highest Ni content; mid ~$11,000
+ *   - Sodium-ion black mass: $200-500/t — Na + Mn cheap; mid ~$350
+ *     (early/indicative, real market doesn't exist yet)
+ */
+export const BLACK_MASS_PRICING_BY_CHEMISTRY_USD_PER_T = {
+  nmc:    8_500,
+  lfp:    2_000,
+  nca:   11_000,
+  na_ion:   350,
+}
+
+/**
+ * Weighted-average black mass price for a given BESS vintage cohort.
+ * Simple linear weight: sum(share_i × price_i).
+ */
+export function bessChemistryWeightedPrice(cohort: VintageCohort): number {
+  const mix = BESS_CHEMISTRY_MIX[cohort.label]
+  if (!mix) return 4_500  // fallback weighted-avg
+  return (
+    mix.nmc    * BLACK_MASS_PRICING_BY_CHEMISTRY_USD_PER_T.nmc +
+    mix.lfp    * BLACK_MASS_PRICING_BY_CHEMISTRY_USD_PER_T.lfp +
+    mix.nca    * BLACK_MASS_PRICING_BY_CHEMISTRY_USD_PER_T.nca +
+    mix.na_ion * BLACK_MASS_PRICING_BY_CHEMISTRY_USD_PER_T.na_ion
+  )
+}
+
+// ── Confidence bands (P10 / P50 / P90 propagation) ───────────────────
+
+/**
+ * Uncertainty envelope per asset class. Reflects compounding uncertainty
+ * across (a) intensity per MW estimate, (b) recovery rate observed at
+ * fleet scale, (c) chemistry/technology mix evolution.
+ *
+ * Used to derive symmetric bands around the central estimate:
+ *   P10 = central × (1 - uncertainty)
+ *   P50 = central
+ *   P90 = central × (1 + uncertainty)
+ *
+ * Sources for the chosen ranges:
+ *   - Wind ±15%: blade composite mass varies turbine-to-turbine; well-
+ *     studied steel / copper. Tightest band.
+ *   - Solar ±25%: glass/silicon mass varies materially by panel gen
+ *     and silver content has reduced 5-10× across the era — vintage
+ *     mapping introduces uncertainty.
+ *   - BESS ±35%: chemistry mix forecast is the dominant uncertainty;
+ *     2025+ cohort especially (sodium-ion entry rate uncertain).
+ */
+export const UNCERTAINTY_PCT: Record<AssetClass, number> = {
+  wind:  15,
+  solar: 25,
+  bess:  35,
+}
+
+export interface ConfidenceBand {
+  p10: number
+  p50: number
+  p90: number
+}
+
+export function applyUncertainty(central: number, ac: AssetClass): ConfidenceBand {
+  const u = UNCERTAINTY_PCT[ac] / 100
+  return {
+    p10: central * (1 - u),
+    p50: central,
+    p90: central * (1 + u),
+  }
+}
+
 // ── Headline first-degree pricing (USD/t for the scrap output) ──
 
 /**
@@ -357,9 +462,10 @@ export const LEFT_IN_PLACE_NOTE = {
 // ── Methodology disclaimer (used in panel footer) ──
 
 export const METHODOLOGY_NOTE = `
-First-degree recovery only. Black mass / scrap pricing reflects refiner bid prices,
-which track second-degree commodity markets (LME Li/Ni/Co, Fastmarkets solar Ag) but
-the material shown is the scrap stream the asset owner actually sells. Vintage cohort
-intensities reflect commissioning year. Foundation concrete (wind) and mounting
-structure (solar) excluded — typically left in place. Confidence: Medium.
+First-degree recovery only — what asset owners realise as scrap. Refiner bid prices
+track second-degree markets (LME Li/Ni/Co, Fastmarkets Ag) but the scrap stream
+shown is what the operator actually sells. Foundation concrete (wind) and mounting
+structure (solar) NOT counted — left in place. Vintage cohort intensities reflect
+commissioning year. BESS valuation uses cohort-aware chemistry mix (NMC/LFP/NCA/Na-ion).
+Bands: P10 / P50 / P90 around central estimate.
 `.trim()
