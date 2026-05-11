@@ -34,6 +34,10 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # FRED API key — script uses api.stlouisfed.org (reliable) when
+          # set, falls back to the flaky fred.stlouisfed.org graph CSV
+          # otherwise. Free key at https://fredaccount.stlouisfed.org/apikey
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
         run: python weekly_scrap_price_update.py
 
       - name: Public press scan (Argus / AMM / RecyclingToday / LetsRecycle)
