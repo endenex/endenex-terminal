@@ -32,15 +32,10 @@ from __future__ import annotations
 
 import argparse
 import sys
-from io import StringIO
 from datetime import date
 
-import requests
-
 from base_ingestor import get_supabase_client, log
-
-
-FRED_CSV_URL = 'https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}'
+from fred_client import fetch_fred, FRED_CSV_URL
 
 # Each tracked scrap grade gets one FRED PPI index that we apply movements
 # from. Anchor row is looked up dynamically — the most-recent published
@@ -105,33 +100,6 @@ TRACKED = [
 ]
 
 
-def fetch_fred(series_id: str) -> list[tuple[str, float]]:
-    """Returns [(date_iso, index_value), ...] for the FRED series."""
-    try:
-        import pandas as pd
-    except ImportError:
-        log.error('pandas required: pip install pandas')
-        sys.exit(1)
-
-    url = FRED_CSV_URL.format(series_id=series_id)
-    r = requests.get(url, timeout=60, headers={'User-Agent': 'endenex-terminal/1.0'})
-    r.raise_for_status()
-    df = pd.read_csv(StringIO(r.text))
-    if len(df.columns) < 2:
-        return []
-    df = df[[df.columns[0], df.columns[1]]].rename(columns={df.columns[0]: 'd', df.columns[1]: 'v'})
-    out: list[tuple[str, float]] = []
-    for _, row in df.iterrows():
-        try:
-            v = float(row['v'])
-        except (TypeError, ValueError):
-            continue
-        if v != v or v <= 0:
-            continue
-        out.append((str(row['d']).strip(), v))
-    return out
-
-
 def get_anchor_row(client, material: str, region: str) -> dict | None:
     """
     Most recent NON-fred anchor row for (material, region). We don't want to
@@ -168,13 +136,41 @@ def main():
 
     log.info(f'=== weekly scrap price update · {today} ===')
 
-    # Cache FRED histories (one HTTP call per distinct series)
+    # Cache FRED histories (one HTTP call per distinct series).
+    # fetch_fred returns [] on transport failure (timeout / 5xx / network)
+    # rather than raising — we track which series failed so the run can
+    # be marked failed in telemetry rather than silently passing with
+    # 0 records.
     fred_cache: dict[str, list[tuple[str, float]]] = {}
+    fetch_failures: list[str] = []
     for cfg in TRACKED:
         sid = cfg['fred_series']
         if sid not in fred_cache:
-            log.info(f'  fetching FRED {sid}…')
-            fred_cache[sid] = fetch_fred(sid)
+            history = fetch_fred(sid)
+            fred_cache[sid] = history
+            if not history:
+                fetch_failures.append(sid)
+
+    # If every FRED series failed to fetch, this isn't a "no movement"
+    # week — it's an upstream outage. Log to telemetry as failed and
+    # exit non-zero so CI flags it.
+    distinct_series = list({cfg['fred_series'] for cfg in TRACKED})
+    if fetch_failures and len(fetch_failures) == len(distinct_series):
+        msg = (f'All {len(distinct_series)} FRED series failed to fetch '
+               f'(upstream outage or auth failure): {", ".join(fetch_failures)}')
+        log.error(msg)
+        try:
+            client.table('ingestion_runs').insert({
+                'pipeline':    'weekly_scrap_price_update',
+                'status':      'failure',
+                'started_at':  f'{today}T00:00:00Z',
+                'finished_at': f'{today}T00:00:00Z',
+                'records_written': 0,
+                'notes':       msg,
+            }).execute()
+        except Exception as tex:
+            log.error(f'  telemetry insert also failed: {tex}')
+        sys.exit(1)
 
     inserted = 0
     skipped  = 0
@@ -247,18 +243,24 @@ def main():
             log.error(f'  upsert failed: {e}')
             raise
 
-    # Telemetry
+    # Telemetry. Status is 'partial' when some FRED series failed but
+    # others succeeded — the panel still gets fresh data, but we want
+    # the partial outage visible.
+    status = 'partial' if fetch_failures else 'success'
+    notes  = f'Weekly run · {inserted} rows inserted · {skipped} skipped (no anchor or no FRED value).'
+    if fetch_failures:
+        notes += f' FRED fetch failed for: {", ".join(fetch_failures)}.'
     client.table('ingestion_runs').insert({
         'pipeline':           'weekly_scrap_price_update',
-        'status':             'success',
+        'status':             status,
         'started_at':         f'{today}T00:00:00Z',
         'finished_at':        f'{today}T00:00:00Z',
         'records_written':    inserted,
         'source_attribution': 'FRED PPI scrap series (free; movements applied to most-recent hand-curated anchor)',
-        'notes':              f'Weekly run · {inserted} rows inserted · {skipped} skipped (no anchor or no FRED value).',
+        'notes':              notes,
     }).execute()
 
-    log.info(f'=== complete: {inserted} inserted, {skipped} skipped ===')
+    log.info(f'=== complete: {inserted} inserted, {skipped} skipped, status={status} ===')
 
 
 if __name__ == '__main__':

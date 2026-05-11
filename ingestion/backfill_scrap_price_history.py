@@ -35,7 +35,8 @@ from datetime import date, timedelta
 import requests
 
 from base_ingestor import get_supabase_client, log
-from weekly_scrap_price_update import TRACKED, FRED_CSV_URL, fetch_fred, get_anchor_row, index_at_or_before
+from fred_client import fetch_fred, FRED_CSV_URL
+from weekly_scrap_price_update import TRACKED, get_anchor_row, index_at_or_before
 
 
 BATCH = 500
