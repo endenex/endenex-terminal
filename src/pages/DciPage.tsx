@@ -86,9 +86,13 @@ export function DciPage() {
       </div>
 
       {/* Content grid — 3×3 with row 2 spanning full width:
-            Row 1: Indices Strip (col-span-2) | Reference Archetype
+            Row 1: Indices Strip (col-span-2) | Series Routing
             Row 2: Cost Waterfall (col-span-3, full width)
-            Row 3: Variable Basket | Scope | Series Routing
+            Row 3: Variable Basket | Scope | Reference Archetype
+          Series Routing sits up top because the use-case → series
+          mapping calibrates how a user reads the headline numbers
+          right next to it. Reference Archetype is reference detail
+          and lives in the row-3 reference cluster.
           Contributor Coverage moved into the DCI Publication footer
           modal — it's reference info about index governance, not a
           live workspace panel. */}
@@ -96,13 +100,13 @@ export function DciPage() {
         <div className="h-full grid grid-cols-3 grid-rows-3 gap-1.5">
 
           <IndicesStripPanel pubs={pubs} loading={loading} selected={selected} onSelect={setSelected} />
-          <ReferenceArchetypePanel selected={selected} />
+          <SeriesRoutingPanel />
 
           <CostWaterfallPanel pubs={pubs} loading={loading} selected={selected} />
 
           <VariableBasketPanel />
           <ScopePanel selected={selected} />
-          <SeriesRoutingPanel />
+          <ReferenceArchetypePanel selected={selected} />
         </div>
       </div>
 
