@@ -104,7 +104,7 @@ export function DciPage() {
 
           <CostWaterfallPanel pubs={pubs} loading={loading} selected={selected} />
 
-          <VariableBasketPanel />
+          <VariableBasketPanel selected={selected} />
           <ScopePanel selected={selected} />
           <ReferenceArchetypePanel selected={selected} />
         </div>
@@ -399,20 +399,30 @@ function OpsRow({ label, value }: { label: string; value: string }) {
 
 // ── Panel: Variable Basket (compressed list view) ───────────────────
 
-function VariableBasketPanel() {
+function VariableBasketPanel({ selected }: { selected: DciSeries }) {
+  const meta = DCI_INDICES.find(i => i.series === selected)!
+  const assetClass = meta.asset_class
+
+  // Filter to variables that feed THIS asset class — cranes don't
+  // apply to solar, PV labour doesn't apply to wind, etc. Then group
+  // by category, dropping empty categories so we don't render dead
+  // section headers.
   const grouped = useMemo(() => {
+    const filtered = DCI_VARIABLES.filter(v => v.applies_to.includes(assetClass))
     const out: Record<DciCategory, typeof DCI_VARIABLES> = {
       'Crane': [], 'Labour': [], 'Transport': [], 'Gate fees': [], 'Material recovery': [],
     }
-    for (const v of DCI_VARIABLES) out[v.category].push(v)
+    for (const v of filtered) out[v.category].push(v)
     return out
-  }, [])
+  }, [assetClass])
   const order: DciCategory[] = ['Crane', 'Labour', 'Transport', 'Gate fees', 'Material recovery']
+  const visibleCategories = order.filter(c => grouped[c].length > 0)
+  const totalCount = visibleCategories.reduce((sum, c) => sum + grouped[c].length, 0)
 
   return (
-    <Panel label="DCI" title="Variable Basket">
+    <Panel label="DCI" title={`Variable Basket · ${meta.asset_class.toUpperCase()} · ${totalCount}`}>
       <div className="overflow-y-auto h-full">
-        {order.map(cat => (
+        {visibleCategories.map(cat => (
           <div key={cat} className="border-b border-border/60">
             <div className="bg-canvas/50 px-2 py-1 text-[10px] font-bold text-[#0A1628] uppercase tracking-wider">
               {cat} · {grouped[cat].length}
