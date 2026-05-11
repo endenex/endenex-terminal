@@ -87,17 +87,17 @@ export function DciPage() {
       </div>
 
       {/* Content grid — true 3×3:
-            Row 1: Indices Strip (col-span-2) | Contributor Coverage
-            Row 2: Cost Waterfall (col-span-2) | Reference Archetype
+            Row 1: Indices Strip (col-span-2) | Reference Archetype
+            Row 2: Cost Waterfall (col-span-2) | Contributor Coverage
             Row 3: Variable Basket | Scope | Placeholder */}
       <div className="flex-1 min-h-0 overflow-hidden p-1.5">
         <div className="h-full grid grid-cols-3 grid-rows-3 gap-1.5">
 
           <IndicesStripPanel pubs={pubs} loading={loading} selected={selected} onSelect={setSelected} />
-          <ContributorCoveragePanel />
+          <ReferenceArchetypePanel selected={selected} />
 
           <CostWaterfallPanel pubs={pubs} loading={loading} selected={selected} />
-          <ReferenceArchetypePanel selected={selected} />
+          <ContributorCoveragePanel />
 
           <VariableBasketPanel />
           <ScopePanel selected={selected} />
@@ -172,67 +172,44 @@ function IndicesStripPanel({ pubs, loading, selected, onSelect }: IndicesStripPr
             const grossDelta = (gross != null && grossPrev != null && grossPrev !== 0)
               ? ((gross - grossPrev) / grossPrev) * 100
               : null
-            const sparkValues = agg.history.map(p => p.gross_cost).filter((v): v is number => v != null)
             return (
               <button key={idx.series}
                       onClick={() => onSelect(idx.series)}
                       className={clsx(
-                        'w-[200px] flex-shrink-0 text-left px-3 py-2 border-l-2 transition-colors',
+                        'w-[148px] flex-shrink-0 text-left px-2.5 py-1.5 border-l-2 transition-colors',
                         isSel ? 'bg-active border-l-[#0A1628]' : 'hover:bg-raised border-l-transparent',
                       )}>
-                <div className="flex items-baseline justify-between mb-1.5">
-                  <span className={clsx('text-[12px] font-bold tabular-nums tracking-wide', isSel ? 'text-[#0A1628]' : 'text-ink')}>{idx.ticker}</span>
+                <div className="flex items-baseline justify-between mb-1">
+                  <span className={clsx('text-[11px] font-bold tabular-nums tracking-wide', isSel ? 'text-[#0A1628]' : 'text-ink')}>{idx.ticker}</span>
                   {idx.status === 'pending' && (
-                    <span className="text-[8.5px] font-bold tracking-wider text-[#C4863A] bg-[#C4863A]/10 border border-[#C4863A]/30 px-1 py-px rounded-sm">PENDING</span>
+                    <span className="text-[8px] font-bold tracking-wider text-[#C4863A] bg-[#C4863A]/10 border border-[#C4863A]/30 px-1 rounded-sm">PEND</span>
                   )}
                 </div>
-                <div className="space-y-0.5 text-[10.5px] leading-tight">
-                  <div className="flex justify-between">
-                    <span className="text-ink-4 uppercase tracking-wider text-[9px]">Gross</span>
-                    <span className="text-[14px] font-bold text-[#0A1628] tabular-nums">{fmtCurrency(gross, idx.ccy_symbol)}</span>
+                <div className="space-y-0 text-[10px] leading-tight">
+                  <div className="flex justify-between items-baseline">
+                    <span className="text-ink-4 uppercase tracking-wider text-[8.5px]">Gross</span>
+                    <span className="text-[13px] font-bold text-[#0A1628] tabular-nums">{fmtCurrency(gross, idx.ccy_symbol)}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-ink-4 uppercase tracking-wider text-[9px]">NRO</span>
-                    <span className="text-[11px] text-[#007B8A] tabular-nums font-semibold">{fmtCurrency(nro, idx.ccy_symbol)}</span>
+                  <div className="flex justify-between items-baseline">
+                    <span className="text-ink-4 uppercase tracking-wider text-[8.5px]">NRO</span>
+                    <span className="text-[10.5px] text-[#007B8A] tabular-nums font-semibold">{fmtCurrency(nro, idx.ccy_symbol)}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-ink-4 uppercase tracking-wider text-[9px]">Net</span>
-                    <span className="text-[11px] text-ink-2 tabular-nums">{fmtCurrency(net, idx.ccy_symbol)}</span>
+                  <div className="flex justify-between items-baseline">
+                    <span className="text-ink-4 uppercase tracking-wider text-[8.5px]">Net</span>
+                    <span className="text-[10.5px] text-ink-2 tabular-nums">{fmtCurrency(net, idx.ccy_symbol)}</span>
                   </div>
-                </div>
-                <div className="mt-1.5 text-[10px] flex items-baseline gap-1">
-                  <span className="text-ink-4 uppercase tracking-wider text-[9px]">Q/Q</span>
-                  <span className={clsx('tabular-nums font-semibold', pctClass(grossDelta))}>{fmtPct(grossDelta)}</span>
-                </div>
-                <div className="mt-1 h-5">
-                  {sparkValues.length >= 4 ? (
-                    <MiniSpark values={sparkValues} />
-                  ) : (
-                    <div className="h-full text-[9px] text-ink-4 italic flex items-center">
-                      history building · {sparkValues.length} pt{sparkValues.length === 1 ? '' : 's'}
-                    </div>
-                  )}
+                  <div className="flex justify-between items-baseline pt-0.5">
+                    <span className="text-ink-4 uppercase tracking-wider text-[8.5px]">Q/Q</span>
+                    <span className={clsx('text-[10px] tabular-nums font-semibold', pctClass(grossDelta))}>{fmtPct(grossDelta)}</span>
+                  </div>
                 </div>
               </button>
             )
           })}
-          {loading && <div className="px-4 py-4 text-[11px] text-ink-3 flex items-center">Loading…</div>}
+          {loading && <div className="px-4 py-2 text-[11px] text-ink-3 flex items-center">Loading…</div>}
         </div>
       </div>
     </div>
-  )
-}
-
-function MiniSpark({ values }: { values: number[] }) {
-  if (values.length < 2) return null
-  const min = Math.min(...values), max = Math.max(...values), range = max - min || 1
-  const W = 180, H = 20, step = W / (values.length - 1)
-  const points = values.map((v, i) => `${i * step},${H - ((v - min) / range) * H}`).join(' ')
-  const up = values[values.length - 1] >= values[0]
-  return (
-    <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
-      <polyline fill="none" stroke={up ? '#0F8B58' : '#C73838'} strokeWidth={1.2} points={points} />
-    </svg>
   )
 }
 
