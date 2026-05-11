@@ -86,24 +86,19 @@ export function DciPage() {
         </div>
       </div>
 
-      {/* Content grid:
-            Row 1 (auto):  Indices Strip (full width)
-            Row 2-4 (1fr each): 3-col grid below */}
+      {/* Content grid — true 3×3:
+            Row 1: Indices Strip (col-span-2) | Contributor Coverage
+            Row 2: Cost Waterfall (col-span-2) | Reference Archetype
+            Row 3: Variable Basket | Scope | Placeholder */}
       <div className="flex-1 min-h-0 overflow-hidden p-1.5">
-        <div className="h-full grid grid-cols-3 grid-rows-[auto_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-1.5">
+        <div className="h-full grid grid-cols-3 grid-rows-3 gap-1.5">
 
-          {/* Indices Strip — full width */}
           <IndicesStripPanel pubs={pubs} loading={loading} selected={selected} onSelect={setSelected} />
-
-          {/* Row 2: Hero (2-wide) + Contributor Coverage */}
-          <HeroPanel pubs={pubs} loading={loading} selected={selected} />
           <ContributorCoveragePanel />
 
-          {/* Row 3: Cost Waterfall (2-wide) + Reference Archetype */}
           <CostWaterfallPanel pubs={pubs} loading={loading} selected={selected} />
           <ReferenceArchetypePanel selected={selected} />
 
-          {/* Row 4: Variable Basket | Scope | Placeholder */}
           <VariableBasketPanel />
           <ScopePanel selected={selected} />
           <PlaceholderPanel />
@@ -156,8 +151,8 @@ interface IndicesStripProps {
 
 function IndicesStripPanel({ pubs, loading, selected, onSelect }: IndicesStripProps) {
   return (
-    <div className="col-span-3 bg-panel border border-border rounded-sm overflow-hidden flex-shrink-0">
-      <div className="h-7 px-3 flex items-center justify-between border-b border-border bg-titlebar">
+    <div className="col-span-2 bg-panel border border-border rounded-sm flex flex-col overflow-hidden">
+      <div className="h-7 px-3 flex items-center justify-between border-b border-border bg-titlebar flex-shrink-0">
         <div className="flex items-center gap-2">
           <span className="label-xs">DCI</span>
           <span className="text-ink-4 text-[10px]">·</span>
@@ -165,8 +160,8 @@ function IndicesStripPanel({ pubs, loading, selected, onSelect }: IndicesStripPr
         </div>
         <span className="text-[10px] text-ink-4">Click to select · Gross / NRO / Net</span>
       </div>
-      <div className="overflow-x-auto">
-        <div className="flex divide-x divide-border min-w-max">
+      <div className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden">
+        <div className="flex divide-x divide-border min-w-max h-full">
           {DCI_INDICES.map(idx => {
             const agg = aggregateForSeries(pubs, idx.series)
             const isSel = selected === idx.series
@@ -238,80 +233,6 @@ function MiniSpark({ values }: { values: number[] }) {
     <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
       <polyline fill="none" stroke={up ? '#0F8B58' : '#C73838'} strokeWidth={1.2} points={points} />
     </svg>
-  )
-}
-
-// ── Panel: Hero (selected index) ─────────────────────────────────────
-
-function HeroPanel({ pubs, loading, selected }: { pubs: DciPublication[]; loading: boolean; selected: DciSeries }) {
-  const meta = DCI_INDICES.find(i => i.series === selected)!
-  const agg  = aggregateForSeries(pubs, selected)
-
-  return (
-    <Panel label="DCI" title={`${meta.ticker} · ${meta.label}`} className="col-span-2">
-      {loading ? (
-        <div className="h-full flex items-center justify-center text-[12px] text-ink-3">Loading…</div>
-      ) : (
-        <div className="px-3 py-2 h-full flex flex-col">
-          {/* Hero numbers */}
-          <div className="grid grid-cols-3 gap-3 pb-3 border-b border-border">
-            <HeroStat label="Gross cost" value={agg.current?.gross_cost} ccy={meta.ccy_symbol} bold />
-            <HeroStat label="NRO"        value={agg.current?.material_recovery} ccy={meta.ccy_symbol} accent />
-            <HeroStat label="Net"        value={(agg.current?.gross_cost != null && agg.current?.material_recovery != null) ? agg.current.gross_cost - agg.current.material_recovery : null} ccy={meta.ccy_symbol} />
-          </div>
-          {/* Publication date + region context */}
-          <div className="mt-2 mb-2 flex items-center gap-3 text-[10px] text-ink-3">
-            <span><span className="text-ink-4 uppercase tracking-wider mr-1">Region</span>{meta.region}</span>
-            <span className="text-ink-4">·</span>
-            <span><span className="text-ink-4 uppercase tracking-wider mr-1">Currency</span>{meta.currency}</span>
-            <span className="text-ink-4">·</span>
-            <span>
-              <span className="text-ink-4 uppercase tracking-wider mr-1">As of</span>
-              {agg.current?.publication_date ?? `not yet published · next ${DCI_PUBLICATION.next_publication}`}
-            </span>
-          </div>
-
-          {/* History grid */}
-          <div className="flex-1 min-h-0 overflow-y-auto">
-            <div className="text-[10px] font-semibold text-ink-4 uppercase tracking-wider mb-1">
-              Publication history · {agg.history.length} pt{agg.history.length === 1 ? '' : 's'}
-            </div>
-            {agg.history.length === 0 ? (
-              <div className="text-[11px] text-ink-3 italic px-2 py-3 bg-canvas border border-border rounded-sm">
-                No publications yet. Next scheduled: {DCI_PUBLICATION.next_publication}.
-              </div>
-            ) : (
-              <div className="grid grid-cols-4 gap-1.5">
-                {agg.history.slice(-8).map(p => (
-                  <div key={p.publication_date} className="bg-canvas border border-border px-2 py-1 rounded-sm">
-                    <div className="text-[9px] text-ink-4 uppercase tracking-wide">{p.publication_date}</div>
-                    <div className="text-[12px] tabular-nums font-bold text-[#0A1628]">{fmtCurrency(p.gross_cost, meta.ccy_symbol)}</div>
-                    <div className="text-[9px] tabular-nums text-[#007B8A]">NRO {fmtCurrency(p.material_recovery, meta.ccy_symbol)}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </Panel>
-  )
-}
-
-function HeroStat({ label, value, ccy, bold = false, accent = false }: { label: string; value: number | null | undefined; ccy: string; bold?: boolean; accent?: boolean }) {
-  return (
-    <div>
-      <div className="text-[9.5px] text-ink-4 uppercase tracking-wider">{label}</div>
-      <div className={clsx(
-        'tabular-nums leading-none mt-0.5',
-        bold ? 'text-[24px] font-bold text-[#0A1628]'
-             : accent ? 'text-[16px] font-semibold text-[#007B8A]'
-                      : 'text-[16px] font-semibold text-ink-2',
-      )}>
-        {fmtCurrency(value, ccy)}
-      </div>
-      <div className="text-[8.5px] text-ink-4 uppercase tracking-wider mt-0.5">per MW</div>
-    </div>
   )
 }
 
