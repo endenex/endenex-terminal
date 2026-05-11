@@ -458,15 +458,17 @@ function ScopePanel({ selected }: { selected: DciSeries }) {
 // This panel makes that mapping load-bearing on the page itself, not
 // just buried in the methodology PDF.
 
+// Ordered headline-first: NET use cases (the spot benchmark) lead,
+// then GROSS use cases (accounting / surety reference), then EITHER.
 const SERIES_ROUTING: Array<{
   use_case: string
   series:   'GROSS' | 'NET' | 'EITHER'
   why:      string
 }> = [
-  { use_case: 'ARO understatement',          series: 'GROSS',  why: 'IFRS IAS 37 — provision recorded gross of expected salvage' },
-  { use_case: 'Surety bond pricing',         series: 'GROSS',  why: 'Underwriter cannot rely on future scrap prices' },
   { use_case: 'Lender residual liability',   series: 'NET',    why: 'Realistic cash outflow at today\'s prices' },
   { use_case: 'Operator cash-flow planning', series: 'NET',    why: 'Both outflow and salvage credit settle in same period' },
+  { use_case: 'ARO understatement',          series: 'GROSS',  why: 'IFRS IAS 37 — provision recorded gross of expected salvage' },
+  { use_case: 'Surety bond pricing',         series: 'GROSS',  why: 'Underwriter cannot rely on future scrap prices' },
   { use_case: 'Cross-region cost spreads',   series: 'EITHER', why: 'Gross for purity, Net for relevance' },
 ]
 
