@@ -18,7 +18,6 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Toolti
 import { supabase } from '@/lib/supabase'
 import {
   DCI_INDICES, DCI_ARCHETYPES, DCI_SCOPE, DCI_VARIABLES,
-  DCI_CONTRIBUTOR_COVERAGE, DCI_CONTRIBUTOR_THRESHOLD,
   DCI_PUBLICATION, DCI_REBALANCE_SOURCE,
   type DciSeries, type DciCategory,
 } from '@/data/dci_meta'
@@ -86,10 +85,13 @@ export function DciPage() {
         </div>
       </div>
 
-      {/* Content grid — true 3×3:
+      {/* Content grid — 3×3 with row 2 spanning full width:
             Row 1: Indices Strip (col-span-2) | Reference Archetype
-            Row 2: Cost Waterfall (col-span-2) | Contributor Coverage
-            Row 3: Variable Basket | Scope | Placeholder */}
+            Row 2: Cost Waterfall (col-span-3, full width)
+            Row 3: Variable Basket | Scope | Placeholder
+          Contributor Coverage moved into the DCI Publication footer
+          modal — it's reference info about index governance, not a
+          live workspace panel. */}
       <div className="flex-1 min-h-0 overflow-hidden p-1.5">
         <div className="h-full grid grid-cols-3 grid-rows-3 gap-1.5">
 
@@ -97,7 +99,6 @@ export function DciPage() {
           <ReferenceArchetypePanel selected={selected} />
 
           <CostWaterfallPanel pubs={pubs} loading={loading} selected={selected} />
-          <ContributorCoveragePanel />
 
           <VariableBasketPanel />
           <ScopePanel selected={selected} />
@@ -279,7 +280,7 @@ function CostWaterfallPanel({ pubs, loading, selected }: { pubs: DciPublication[
   }, [cur])
 
   return (
-    <Panel label="DCI" title={`Cost Waterfall · ${meta.ticker}`} className="col-span-2">
+    <Panel label="DCI" title={`Cost Waterfall · ${meta.ticker}`} className="col-span-3">
       {loading ? (
         <div className="h-full flex items-center justify-center text-[12px] text-ink-3">Loading…</div>
       ) : steps.length === 0 ? (
@@ -435,35 +436,6 @@ function ScopePanel({ selected }: { selected: DciSeries }) {
               </li>
             ))}
           </ul>
-        </div>
-      </div>
-    </Panel>
-  )
-}
-
-// ── Panel: Contributor Coverage ──────────────────────────────────────
-
-function ContributorCoveragePanel() {
-  return (
-    <Panel label="DCI" title="Contributor Coverage">
-      <div className="px-3 py-2 h-full overflow-y-auto">
-        <div className="space-y-1">
-          {DCI_CONTRIBUTOR_COVERAGE.map(c => {
-            const meta = DCI_INDICES.find(i => i.series === c.series)!
-            const above = c.contributors >= DCI_CONTRIBUTOR_THRESHOLD
-            return (
-              <div key={c.series} className="flex items-center gap-2 text-[10.5px] py-1 border-b border-border/50 last:border-b-0">
-                <span className="font-bold text-[#0A1628] tabular-nums w-16">{meta.ticker}</span>
-                <span className="text-ink tabular-nums font-semibold w-6 text-right">{c.contributors}</span>
-                <span className={clsx('text-[9px] uppercase tracking-wider flex-1', above ? 'text-emerald-700' : 'text-amber-700')}>
-                  {above ? '✓ above' : '⚠ pre-threshold'}
-                </span>
-              </div>
-            )
-          })}
-        </div>
-        <div className="mt-2 pt-2 border-t border-border text-[9.5px] text-ink-4 leading-snug">
-          Threshold = {DCI_CONTRIBUTOR_THRESHOLD} contributors per index for separate publication.
         </div>
       </div>
     </Panel>

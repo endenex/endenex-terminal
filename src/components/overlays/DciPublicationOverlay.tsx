@@ -4,7 +4,11 @@
 // and IOSCO compliance — moved here from a dedicated DCI-page panel
 // because it's static reference info, not a workspace.
 
-import { DCI_PUBLICATION } from '@/data/dci_meta'
+import { clsx } from 'clsx'
+import {
+  DCI_PUBLICATION, DCI_INDICES,
+  DCI_CONTRIBUTOR_COVERAGE, DCI_CONTRIBUTOR_THRESHOLD,
+} from '@/data/dci_meta'
 
 interface Props {
   onClose: () => void
@@ -42,6 +46,33 @@ export function DciPublicationOverlay({ onClose }: Props) {
           <Row label="Methodology"        value={`${DCI_PUBLICATION.methodology_version} · effective ${DCI_PUBLICATION.methodology_effective}`} />
           <Row label="Annual rebalance"   value={DCI_PUBLICATION.rebalance_date} />
           <Row label="Compliance"         value={DCI_PUBLICATION.iosco_compliant ? 'IOSCO PRA principles' : '—'} />
+
+          {/* Contributor coverage — gates separate publication of each
+              series. Below threshold = aggregated/withheld until enough
+              independent contributors report. */}
+          <div className="pt-3 mt-3 border-t border-border">
+            <div className="text-[9px] font-bold text-ink-4 uppercase tracking-wider mb-1.5">
+              Contributor Coverage
+            </div>
+            <div className="space-y-0.5">
+              {DCI_CONTRIBUTOR_COVERAGE.map(c => {
+                const meta = DCI_INDICES.find(i => i.series === c.series)!
+                const above = c.contributors >= DCI_CONTRIBUTOR_THRESHOLD
+                return (
+                  <div key={c.series} className="flex items-center gap-2 text-[10.5px] py-0.5">
+                    <span className="font-bold text-[#0A1628] tabular-nums w-16">{meta.ticker}</span>
+                    <span className="text-ink tabular-nums font-semibold w-6 text-right">{c.contributors}</span>
+                    <span className={clsx('text-[9px] uppercase tracking-wider flex-1', above ? 'text-emerald-700' : 'text-amber-700')}>
+                      {above ? '✓ above' : '⚠ pre-threshold'}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+            <div className="mt-1.5 text-[9.5px] text-ink-4 leading-snug">
+              Threshold = {DCI_CONTRIBUTOR_THRESHOLD} contributors per index for separate publication.
+            </div>
+          </div>
 
           <div className="pt-3 mt-3 border-t border-border text-[10.5px] text-ink-3 leading-snug">
             Quarterly headline publication. Underlying input prices for high-frequency
