@@ -56,8 +56,15 @@ function fmtClock(d: Date): string {
  * not "did data change". Threshold = 36h (1.5x daily cadence) so
  * we don't false-alarm on overnight timezone edges.
  */
-function useFeedSync() {
-  const [lastSync, setLastSync] = useState<string | null>(null)
+type FeedState = 'loading' | 'live' | 'stale' | 'error'
+
+interface FeedSync {
+  state:    FeedState
+  lastSync: string | null
+}
+
+function useFeedSync(): FeedSync {
+  const [feed, setFeed] = useState<FeedSync>({ state: 'loading', lastSync: null })
   useEffect(() => {
     supabase.from('ingestion_runs')
       .select('finished_at')
@@ -70,23 +77,42 @@ function useFeedSync() {
       ])
       .order('finished_at', { ascending: false })
       .limit(1).maybeSingle()
-      .then(({ data }) => { if (data?.finished_at) setLastSync(data.finished_at as string) })
+      .then(({ data, error }) => {
+        if (error) {
+          // Network blip / RLS edge / timeout — distinguish from
+          // "actually stale" so we don't false-alarm.
+          console.warn('[feed-sync] query failed:', error.message)
+          setFeed({ state: 'error', lastSync: null })
+          return
+        }
+        const ts = (data?.finished_at as string | undefined) ?? null
+        if (!ts) {
+          setFeed({ state: 'stale', lastSync: null })
+          return
+        }
+        // 36h tolerates timezone edges (browser-local vs UTC) and
+        // some pipeline-run variance, while still catching genuine
+        // multi-day outages.
+        const hoursStale = (Date.now() - new Date(ts).getTime()) / (1000 * 60 * 60)
+        setFeed({ state: hoursStale < 36 ? 'live' : 'stale', lastSync: ts })
+      })
   }, [])
-  return lastSync
+  return feed
+}
+
+const FEED_STYLES: Record<FeedState, { dot: string; text: string; label: string }> = {
+  loading: { dot: 'bg-chrome-border',  text: 'text-chrome-muted', label: 'FEED …' },
+  live:    { dot: 'bg-teal-bright',    text: 'text-chrome-text',  label: 'FEED LIVE' },
+  stale:   { dot: 'bg-amber-bright',   text: 'text-amber-bright', label: 'FEED STALE' },
+  error:   { dot: 'bg-chrome-border',  text: 'text-chrome-muted', label: 'FEED ?' },
 }
 
 export function BottomFooter() {
   const { signOut } = useClerk()
   const [overlay, setOverlay] = useState<null | 'health' | 'methodology' | 'dci-publication'>(null)
-  const now      = useClock()
-  const lastSync = useFeedSync()
-  // Threshold: 36h tolerates timezone edges (browser-local vs UTC) and
-  // some pipeline-run variance, while still catching genuine multi-day
-  // outages.
-  const hoursStale = lastSync
-    ? (Date.now() - new Date(lastSync).getTime()) / (1000 * 60 * 60)
-    : Infinity
-  const synced = hoursStale < 36
+  const now  = useClock()
+  const feed = useFeedSync()
+  const fs   = FEED_STYLES[feed.state]
 
   return (
     <>
@@ -107,11 +133,17 @@ export function BottomFooter() {
             )
           })}
           <span className="w-px h-3 bg-chrome-border" />
-          <span className="flex items-center gap-1" title="Endenex feed sync (daily 06:00 UTC)">
-            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${synced ? 'bg-teal-bright' : 'bg-amber-bright'}`} />
-            <span className={synced ? 'text-chrome-text' : 'text-amber-bright'}>
-              {synced ? 'FEED LIVE' : 'FEED STALE'}
-            </span>
+          <span
+            className="flex items-center gap-1"
+            title={
+              feed.state === 'loading' ? 'Checking feed sync…' :
+              feed.state === 'live'    ? `Feed live · last sync ${feed.lastSync}` :
+              feed.state === 'stale'   ? (feed.lastSync ? `No fresh sync since ${feed.lastSync}` : 'No successful sync recorded') :
+                                          'Feed-sync check failed (network / RLS) — see browser console'
+            }
+          >
+            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${fs.dot}`} />
+            <span className={fs.text}>{fs.label}</span>
           </span>
         </div>
 
