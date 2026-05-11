@@ -100,9 +100,13 @@ function useFeedSync(): FeedSync {
   return feed
 }
 
+// Dot colours match the existing "OK = emerald" convention used by the
+// market-session indicators (LME / COMEX / EEX / TOCOM). Teal read as
+// blue against the chrome background and broke the at-a-glance "is it
+// healthy?" scan.
 const FEED_STYLES: Record<FeedState, { dot: string; text: string; label: string }> = {
   loading: { dot: 'bg-chrome-border',  text: 'text-chrome-muted', label: 'FEED …' },
-  live:    { dot: 'bg-teal-bright',    text: 'text-chrome-text',  label: 'FEED LIVE' },
+  live:    { dot: 'bg-emerald-400',    text: 'text-chrome-text',  label: 'FEED LIVE' },
   stale:   { dot: 'bg-amber-bright',   text: 'text-amber-bright', label: 'FEED STALE' },
   error:   { dot: 'bg-chrome-border',  text: 'text-chrome-muted', label: 'FEED ?' },
 }
