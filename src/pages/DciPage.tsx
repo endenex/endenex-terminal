@@ -95,7 +95,9 @@ export function DciPage() {
           <ReferenceAssetsPanel selected={selected} />
           <VariableBasketsPanel />
           <ContributorCoveragePanel />
-          <PublicationSchedulePanel />
+          {/* Publication Schedule moved to footer modal — accessible via
+              "DCI Publication" link in the bottom footer next to Method v1.1.
+              Static reference info doesn't deserve a workspace panel. */}
         </div>
       </div>
 
@@ -523,7 +525,7 @@ function VariableBasketsPanel() {
 
 function ContributorCoveragePanel() {
   return (
-    <Panel label="DCI" title="Contributor Coverage" className="col-span-6">
+    <Panel label="DCI" title="Contributor Coverage" className="col-span-12">
       <div className="px-3 py-2">
         <div className="space-y-1">
           {DCI_CONTRIBUTOR_COVERAGE.map(c => {
@@ -550,32 +552,6 @@ function ContributorCoveragePanel() {
         </div>
       </div>
     </Panel>
-  )
-}
-
-// ── Panel: Publication Schedule ─────────────────────────────────────
-
-function PublicationSchedulePanel() {
-  return (
-    <Panel label="DCI" title="Publication Schedule" className="col-span-6">
-      <div className="px-3 py-2 grid grid-cols-2 gap-x-4 gap-y-2 text-[10.5px]">
-        <SchedRow label="Next publication"     value={DCI_PUBLICATION.next_publication} />
-        <SchedRow label="Last publication"     value={DCI_PUBLICATION.last_publication} />
-        <SchedRow label="Cadence"              value={DCI_PUBLICATION.cadence} wide />
-        <SchedRow label="Methodology"          value={`${DCI_PUBLICATION.methodology_version} · effective ${DCI_PUBLICATION.methodology_effective}`} wide />
-        <SchedRow label="Rebalance"            value={DCI_PUBLICATION.rebalance_date} />
-        <SchedRow label="Compliance"           value={DCI_PUBLICATION.iosco_compliant ? 'IOSCO PRA principles' : '—'} />
-      </div>
-    </Panel>
-  )
-}
-
-function SchedRow({ label, value, wide = false }: { label: string; value: string; wide?: boolean }) {
-  return (
-    <div className={wide ? 'col-span-2' : 'col-span-1'}>
-      <div className="text-[9px] font-semibold text-ink-4 uppercase tracking-wider">{label}</div>
-      <div className="text-ink leading-tight mt-0.5">{value}</div>
-    </div>
   )
 }
 

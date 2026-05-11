@@ -6,6 +6,7 @@ import { useClerk } from '@clerk/clerk-react'
 import { supabase } from '@/lib/supabase'
 import { DataHealthOverlay } from '@/components/overlays/DataHealthOverlay'
 import { MethodologyOverlay } from '@/components/overlays/MethodologyOverlay'
+import { DciPublicationOverlay } from '@/components/overlays/DciPublicationOverlay'
 
 interface Session {
   label:    string
@@ -76,7 +77,7 @@ function useFeedSync() {
 
 export function BottomFooter() {
   const { signOut } = useClerk()
-  const [overlay, setOverlay] = useState<null | 'health' | 'methodology'>(null)
+  const [overlay, setOverlay] = useState<null | 'health' | 'methodology' | 'dci-publication'>(null)
   const now      = useClock()
   const lastSync = useFeedSync()
   // Threshold: 36h tolerates timezone edges (browser-local vs UTC) and
@@ -122,6 +123,12 @@ export function BottomFooter() {
           >
             Method <span className="text-chrome-muted">v1.1</span>
           </button>
+          <button
+            onClick={() => setOverlay('dci-publication')}
+            className="text-chrome-muted hover:text-chrome-text uppercase tracking-wide font-semibold transition-colors"
+          >
+            DCI Publication
+          </button>
           <span className="w-px h-3 bg-chrome-border" />
           <button
             onClick={() => setOverlay('health')}
@@ -147,8 +154,9 @@ export function BottomFooter() {
 
       </footer>
 
-      {overlay === 'health'      && <DataHealthOverlay  onClose={() => setOverlay(null)} />}
-      {overlay === 'methodology' && <MethodologyOverlay onClose={() => setOverlay(null)} />}
+      {overlay === 'health'          && <DataHealthOverlay     onClose={() => setOverlay(null)} />}
+      {overlay === 'methodology'     && <MethodologyOverlay    onClose={() => setOverlay(null)} />}
+      {overlay === 'dci-publication' && <DciPublicationOverlay onClose={() => setOverlay(null)} />}
     </>
   )
 }
