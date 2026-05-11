@@ -1,30 +1,34 @@
 // ── DCI Dashboard — Tab 02 ───────────────────────────────────────────────────
-// BloombergNEF light. 12-col grid. Charts capped at 1/3 width.
+//
+// Second-degree view of the DCI index family. The Home page Spot Indices
+// panel is the first-degree view (headline numbers + sparklines). This
+// page is for users who want to understand the mechanics:
+//   - Indices Strip: master selector, all indices visible at once
+//   - Selected Index Detail: history + cost decomposition + sub-archetype
+//   - Reference Assets & Scope: what each index is measuring (with scope
+//     promoted to its own prominent section)
+//   - Variable Baskets: what feeds the indices (sourcing PUBLIC/PRIMARY
+//     + generic source type — vendor names deliberately omitted)
+//   - Contributor Coverage + Publication Schedule
+//
+// Bloomberg-density aesthetic. All panels visible simultaneously.
 
 import { useState, useEffect, useMemo } from 'react'
 import { clsx } from 'clsx'
-import {
-  ResponsiveContainer, LineChart, Line,
-  XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine,
-} from 'recharts'
 import { supabase } from '@/lib/supabase'
-import { DciCostWaterfall } from '@/components/charts/DciCostWaterfall'
-import { DciSeriesOverlay } from '@/components/charts/DciSeriesOverlay'
-import { Sparklines, SparklinesLine, SparklinesSpots } from '@/components/charts/Sparklines'
+import {
+  DCI_INDICES, DCI_ARCHETYPES, DCI_SCOPE, DCI_VARIABLES,
+  DCI_CONTRIBUTOR_COVERAGE, DCI_CONTRIBUTOR_THRESHOLD,
+  DCI_PUBLICATION, DCI_REBALANCE_SOURCE,
+  type DciSeries, type DciAssetClass, type DciCategory,
+} from '@/data/dci_meta'
 
-type DciSeries =
-  | 'dci_wind_europe'
-  | 'dci_wind_north_america'
-  | 'dci_solar_europe'
-  | 'dci_solar_north_america'
-  | 'dci_solar_japan'
+// ── Types from Supabase (existing dci_publications schema) ───────────
 
 interface DciPublication {
-  id:                    string
   series:                DciSeries
   publication_date:      string
   index_value:           number | null
-  index_base_date:       string | null
   currency:              string
   net_liability:         number | null
   net_liability_low:     number | null
@@ -40,430 +44,557 @@ interface DciPublication {
   blade_gate_fees:       number | null
   scrap_haulage:         number | null
   methodology_version:   string | null
-  notes:                 string | null
   is_published:          boolean
 }
 
-const HEADLINE_SERIES: { series: DciSeries; ticker: string; region: string; ccy: string; status: 'live' | 'pending' }[] = [
-  { series: 'dci_wind_europe',         ticker: 'DCIW.EU',  region: 'EU + UK · DE anchor',    ccy: '€', status: 'live'    },
-  { series: 'dci_wind_north_america',  ticker: 'DCIW.NA',  region: 'US + CA · US anchor',    ccy: '$', status: 'live'    },
-  { series: 'dci_solar_europe',        ticker: 'DCIS.EU',  region: 'EU + UK · Phase 2',      ccy: '€', status: 'pending' },
-  { series: 'dci_solar_north_america', ticker: 'DCIS.NA',  region: 'US + CA · Phase 2',      ccy: '$', status: 'pending' },
-  { series: 'dci_solar_japan',         ticker: 'DCIS.JP',  region: 'JP only · Phase 2',      ccy: '¥', status: 'pending' },
-]
+// ── Page shell ───────────────────────────────────────────────────────
 
-const SUB_SERIES: { series: DciSeries; label: string }[] = [
-  { series: 'dci_wind_europe',        label: 'WIND.EU' },
-  { series: 'dci_wind_north_america', label: 'WIND.NA' },
-]
+export function DciPage() {
+  const [pubs,     setPubs]     = useState<DciPublication[]>([])
+  const [loading,  setLoading]  = useState(true)
+  const [selected, setSelected] = useState<DciSeries>('dci_wind_europe')
 
-const CURRENCY_SYMBOL: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', JPY: '¥' }
-
-function fmtDate(val: string | null): string {
-  if (!val) return '—'
-  try {
-    return new Date(val).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })
-  } catch { return '—' }
-}
-
-function fmtShortDate(val: string): string {
-  try {
-    return new Date(val).toLocaleDateString('en-GB', { month: 'short', year: '2-digit' })
-  } catch { return val }
-}
-
-function fmtMoney(val: number | null, currency: string): string {
-  if (val == null) return '—'
-  const sym = CURRENCY_SYMBOL[currency] ?? ''
-  if (Math.abs(val) >= 1000) return `${sym}${(val / 1000).toFixed(1)}k`
-  return `${sym}${Math.round(val).toLocaleString('en-GB')}`
-}
-
-function fmtIndex(val: number | null): string {
-  if (val == null) return '—'
-  return val.toFixed(2)
-}
-
-function Direction({ current, prior }: { current: number | null; prior: number | null }) {
-  if (current == null || prior == null || prior === 0) return <span className="text-ink-4">—</span>
-  const pct = ((current - prior) / prior) * 100
-  if (Math.abs(pct) < 0.01) return <span className="text-ink-4">—</span>
-  const up = pct > 0
-  return (
-    <span className={clsx('tabular-nums font-semibold text-[11.5px]', up ? 'text-down' : 'text-up')}>
-      {up ? '▲' : '▼'}{Math.abs(pct).toFixed(2)}%
-    </span>
-  )
-}
-
-// Headline ticker row
-function HeadlineRow({
-  seriesDef, latest, prior, history, idx, total,
-}: {
-  seriesDef: typeof HEADLINE_SERIES[0]
-  latest:    DciPublication | null
-  prior:     DciPublication | null
-  history:   DciPublication[]
-  idx:       number
-  total:     number
-}) {
-  const pending = seriesDef.status === 'pending'
-  const sym     = CURRENCY_SYMBOL[latest?.currency ?? ''] ?? seriesDef.ccy
-
-  const sparkValues = useMemo(() => {
-    return history
-      .filter(p => p.series === seriesDef.series && p.index_value != null)
-      .sort((a, b) => a.publication_date.localeCompare(b.publication_date))
-      .slice(-12)
-      .map(p => p.index_value as number)
-  }, [history, seriesDef.series])
+  useEffect(() => {
+    setLoading(true)
+    supabase.from('dci_publications')
+      .select('*')
+      .eq('is_published', true)
+      .order('publication_date', { ascending: true })
+      .then(({ data }) => {
+        setPubs((data ?? []) as DciPublication[])
+        setLoading(false)
+      })
+  }, [])
 
   return (
-    <div className={clsx(
-      'flex items-center gap-3 px-3 py-2 hover:bg-raised transition-colors',
-      idx < total - 1 && 'border-r border-border',
-    )}>
-      <div className="flex flex-col min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
-          <span className={clsx(
-            'text-[11.5px] font-bold tracking-[0.06em]',
-            pending ? 'text-ink-4' : 'text-teal',
-          )}>
-            {seriesDef.ticker}
+    <div className="flex flex-col h-full overflow-hidden bg-page">
+
+      {/* Page header */}
+      <div className="flex-shrink-0 h-9 px-3 border-b border-border bg-canvas flex items-center justify-between">
+        <div className="flex items-baseline gap-2.5">
+          <h1 className="text-[13px] font-semibold text-ink uppercase tracking-wide">DCI · Decommissioning Cost Index Family</h1>
+          <span className="text-[11.5px] text-ink-3">
+            {DCI_INDICES.filter(i => i.status === 'live').length} live · {DCI_INDICES.filter(i => i.status === 'pending').length} pending · {DCI_PUBLICATION.cadence}
           </span>
-          {pending && (
-            <span className="text-[9.5px] uppercase tracking-wider text-ink-4 border border-border px-1 py-px rounded-sm">PEND</span>
+        </div>
+        <div className="flex items-center gap-2 text-[10.5px] text-ink-3 flex-shrink-0 uppercase tracking-wide">
+          <span>Methodology {DCI_PUBLICATION.methodology_version}</span>
+          {DCI_PUBLICATION.iosco_compliant && (
+            <span className="px-1.5 py-px bg-canvas border border-[#0A1628]/30 rounded-sm text-[#0A1628] normal-case font-semibold">
+              IOSCO
+            </span>
           )}
         </div>
-        <span className="text-[10.5px] text-ink-3 leading-tight truncate mt-px">{seriesDef.region}</span>
       </div>
 
-      <div className="flex flex-col items-end min-w-0">
-        {pending ? (
-          <span className="text-[16px] font-semibold text-ink-4 tabular-nums leading-none">—</span>
-        ) : latest == null ? (
-          <span className="text-[16px] font-semibold text-ink-4 tabular-nums leading-none">—</span>
-        ) : (
-          <>
-            <span className="text-[16px] font-semibold text-ink tabular-nums leading-none">
-              {fmtIndex(latest.index_value)}
-            </span>
-            <div className="flex items-baseline gap-1.5 mt-1">
-              <Direction current={latest.index_value} prior={prior?.index_value ?? null} />
-              <span className="text-[10.5px] text-ink-3 tabular-nums">
-                {sym}{fmtMoney(latest.net_liability, latest.currency).replace(sym, '')}<span className="text-ink-4">/MW</span>
-              </span>
+      {/* Content grid — 12-col × 4-row */}
+      <div className="flex-1 min-h-0 overflow-hidden p-1.5">
+        <div className="h-full grid grid-cols-12 grid-rows-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] gap-1.5">
+          <IndicesStripPanel pubs={pubs} loading={loading} selected={selected} onSelect={setSelected} />
+          <SelectedIndexDetailPanel pubs={pubs} loading={loading} selected={selected} />
+          <ReferenceAssetsPanel selected={selected} />
+          <VariableBasketsPanel />
+          <ContributorCoveragePanel />
+          <PublicationSchedulePanel />
+        </div>
+      </div>
+
+    </div>
+  )
+}
+
+// ── Format helpers ───────────────────────────────────────────────────
+
+const fmtCurrency = (n: number | null | undefined, sym: string): string => {
+  if (n == null) return '—'
+  if (Math.abs(n) >= 1_000_000) return `${sym}${(n / 1_000_000).toFixed(2)}M`
+  if (Math.abs(n) >= 1_000)     return `${sym}${(n / 1_000).toFixed(0)},${String(Math.round(n) % 1000).padStart(3, '0')}`
+  return `${sym}${n.toFixed(0)}`
+}
+const fmtPct = (n: number | null | undefined): string => {
+  if (n == null) return '—'
+  const sign = n >= 0 ? '+' : ''
+  return `${sign}${n.toFixed(1)}%`
+}
+const pctClass = (n: number | null | undefined): string =>
+  n == null ? 'text-ink-4' : n > 0 ? 'text-rose-700' : n < 0 ? 'text-emerald-700' : 'text-ink-3'
+// (For decommissioning COST: positive = cost up = bad, so red. Inverted vs equities.)
+
+// ── Panel: Indices Strip ─────────────────────────────────────────────
+//
+// Master selector. Horizontal scroll on small viewports. Each card
+// shows Gross / NRO / Net + q/q delta + sparkline-or-history-grid.
+
+interface IndexAggregate {
+  current?:  DciPublication
+  previous?: DciPublication
+  history:   DciPublication[]
+}
+
+function aggregateForSeries(pubs: DciPublication[], series: DciSeries): IndexAggregate {
+  const filtered = pubs.filter(p => p.series === series)
+  return {
+    current:  filtered[filtered.length - 1],
+    previous: filtered[filtered.length - 2],
+    history:  filtered,
+  }
+}
+
+interface IndicesStripProps {
+  pubs:     DciPublication[]
+  loading:  boolean
+  selected: DciSeries
+  onSelect: (s: DciSeries) => void
+}
+
+function IndicesStripPanel({ pubs, loading, selected, onSelect }: IndicesStripProps) {
+  return (
+    <div className="col-span-12 bg-panel border border-border rounded-sm overflow-hidden flex-shrink-0">
+      <div className="h-7 px-3 flex items-center justify-between border-b border-border bg-titlebar">
+        <div className="flex items-center gap-2">
+          <span className="label-xs">DCI</span>
+          <span className="text-ink-4 text-[10px]">·</span>
+          <span className="text-[12.5px] font-semibold text-ink">Indices</span>
+        </div>
+        <span className="text-[10px] text-ink-4">Click to select · Gross / NRO / Net</span>
+      </div>
+      <div className="overflow-x-auto">
+        <div className="flex divide-x divide-border min-w-max">
+          {DCI_INDICES.map(idx => {
+            const agg = aggregateForSeries(pubs, idx.series)
+            const isSel = selected === idx.series
+            const gross = agg.current?.gross_cost ?? null
+            const nro   = agg.current?.material_recovery ?? null
+            const net   = (gross != null && nro != null) ? gross - nro : null
+            const grossPrev = agg.previous?.gross_cost ?? null
+            const grossDelta = (gross != null && grossPrev != null && grossPrev !== 0)
+              ? ((gross - grossPrev) / grossPrev) * 100
+              : null
+            const sparkValues = agg.history.map(p => p.gross_cost).filter((v): v is number => v != null)
+
+            return (
+              <button key={idx.series}
+                      onClick={() => onSelect(idx.series)}
+                      className={clsx(
+                        'w-[200px] flex-shrink-0 text-left px-3 py-2 border-l-2 transition-colors',
+                        isSel ? 'bg-active border-l-[#0A1628]' : 'hover:bg-raised border-l-transparent',
+                      )}>
+                {/* Ticker + status */}
+                <div className="flex items-baseline justify-between mb-1.5">
+                  <span className={clsx('text-[12px] font-bold tabular-nums tracking-wide', isSel ? 'text-[#0A1628]' : 'text-ink')}>
+                    {idx.ticker}
+                  </span>
+                  {idx.status === 'pending' && (
+                    <span className="text-[8.5px] font-bold tracking-wider text-[#C4863A] bg-[#C4863A]/10 border border-[#C4863A]/30 px-1 py-px rounded-sm">
+                      PENDING
+                    </span>
+                  )}
+                </div>
+
+                {/* Gross / NRO / Net stack */}
+                <div className="space-y-0.5 text-[10.5px] leading-tight">
+                  <div className="flex justify-between">
+                    <span className="text-ink-4 uppercase tracking-wider text-[9px]">Gross</span>
+                    <span className="text-[14px] font-bold text-[#0A1628] tabular-nums">{fmtCurrency(gross, idx.ccy_symbol)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-ink-4 uppercase tracking-wider text-[9px]">NRO</span>
+                    <span className="text-[11px] text-[#007B8A] tabular-nums font-semibold">{fmtCurrency(nro, idx.ccy_symbol)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-ink-4 uppercase tracking-wider text-[9px]">Net</span>
+                    <span className="text-[11px] text-ink-2 tabular-nums">{fmtCurrency(net, idx.ccy_symbol)}</span>
+                  </div>
+                </div>
+
+                {/* q/q delta */}
+                <div className="mt-1.5 text-[10px] flex items-baseline gap-1">
+                  <span className="text-ink-4 uppercase tracking-wider text-[9px]">Q/Q</span>
+                  <span className={clsx('tabular-nums font-semibold', pctClass(grossDelta))}>{fmtPct(grossDelta)}</span>
+                </div>
+
+                {/* Spark / history-building */}
+                <div className="mt-1 h-5">
+                  {sparkValues.length >= 4 ? (
+                    <MiniSpark values={sparkValues} />
+                  ) : (
+                    <div className="h-full text-[9px] text-ink-4 italic flex items-center">
+                      history building · {sparkValues.length} pt{sparkValues.length === 1 ? '' : 's'}
+                    </div>
+                  )}
+                </div>
+              </button>
+            )
+          })}
+          {loading && (
+            <div className="px-4 py-4 text-[11px] text-ink-3 flex items-center">Loading…</div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Tiny inline sparkline using SVG. Bypasses Recharts overhead for these
+// micro-charts; fine for ≥4 data points.
+function MiniSpark({ values }: { values: number[] }) {
+  if (values.length < 2) return null
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  const range = max - min || 1
+  const W = 180, H = 20
+  const step = W / (values.length - 1)
+  const points = values.map((v, i) => `${i * step},${H - ((v - min) / range) * H}`).join(' ')
+  const last = values[values.length - 1]
+  const first = values[0]
+  const up = last >= first
+  return (
+    <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+      <polyline fill="none" stroke={up ? '#0F8B58' : '#C73838'} strokeWidth={1.2} points={points} />
+    </svg>
+  )
+}
+
+// ── Panel: Selected Index Detail ─────────────────────────────────────
+
+interface SelectedDetailProps {
+  pubs:     DciPublication[]
+  loading:  boolean
+  selected: DciSeries
+}
+
+function SelectedIndexDetailPanel({ pubs, loading, selected }: SelectedDetailProps) {
+  const meta = DCI_INDICES.find(i => i.series === selected)!
+  const agg = aggregateForSeries(pubs, selected)
+  const history = agg.history
+
+  const subArchetypes = DCI_ARCHETYPES.filter(a => a.series === selected)
+
+  return (
+    <Panel label="DCI" title={`${meta.ticker} · Detail`} className="col-span-7">
+      {loading ? (
+        <div className="h-full flex items-center justify-center text-[12px] text-ink-3">Loading…</div>
+      ) : (
+        <div className="px-3 py-2 space-y-3 overflow-y-auto h-full">
+
+          {/* Hero — Gross / NRO / Net */}
+          <div className="grid grid-cols-3 gap-3 pb-3 border-b border-border">
+            <HeroStat label="Gross cost" value={agg.current?.gross_cost} ccy={meta.ccy_symbol} bold />
+            <HeroStat label="NRO"        value={agg.current?.material_recovery} ccy={meta.ccy_symbol} accent />
+            <HeroStat label="Net"        value={(agg.current?.gross_cost != null && agg.current?.material_recovery != null) ? agg.current.gross_cost - agg.current.material_recovery : null} ccy={meta.ccy_symbol} />
+          </div>
+
+          {/* History — number grid until ≥4 quarters */}
+          <div>
+            <div className="text-[10px] font-semibold text-ink-4 uppercase tracking-wider mb-1">
+              Publication history · {history.length} pt{history.length === 1 ? '' : 's'}
             </div>
-          </>
-        )}
-      </div>
+            {history.length === 0 ? (
+              <div className="text-[11px] text-ink-3 italic px-2 py-3 bg-canvas border border-border rounded-sm">
+                No publications yet. Next scheduled: {DCI_PUBLICATION.next_publication}.
+              </div>
+            ) : (
+              <div className="grid grid-cols-4 gap-1.5">
+                {history.slice(-8).map(p => (
+                  <div key={p.publication_date} className="bg-canvas border border-border px-2 py-1 rounded-sm">
+                    <div className="text-[9px] text-ink-4 uppercase tracking-wide">{p.publication_date}</div>
+                    <div className="text-[12px] tabular-nums font-bold text-[#0A1628]">{fmtCurrency(p.gross_cost, meta.ccy_symbol)}</div>
+                    <div className="text-[9px] tabular-nums text-[#007B8A]">NRO {fmtCurrency(p.material_recovery, meta.ccy_symbol)}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
-      {!pending && sparkValues.length >= 2 && (
-        <div className="flex-shrink-0 ml-1">
-          <Sparklines data={sparkValues} width={56} height={22}>
-            <SparklinesLine color="#0E7A86" strokeWidth={1.3} />
-            <SparklinesSpots color="#0E7A86" size={1.6} />
-          </Sparklines>
+          {/* Cost decomposition */}
+          {agg.current && (
+            <div>
+              <div className="text-[10px] font-semibold text-ink-4 uppercase tracking-wider mb-1">
+                Cost decomposition · {agg.current.publication_date}
+              </div>
+              <DecompositionBar current={agg.current} ccy={meta.ccy_symbol} />
+            </div>
+          )}
+
+          {/* Sub-archetype weights */}
+          <div>
+            <div className="text-[10px] font-semibold text-ink-4 uppercase tracking-wider mb-1">
+              Sub-archetype weights · {DCI_PUBLICATION.rebalance_date.split(' ').slice(-1)[0]} rebalance
+            </div>
+            <div className="space-y-1">
+              {subArchetypes.map(a => (
+                <div key={a.code} className="flex items-center gap-2 text-[10.5px]">
+                  <span className="text-ink font-semibold tabular-nums w-24">{a.code}</span>
+                  <div className="flex-1 h-2 bg-canvas border border-border rounded-sm overflow-hidden">
+                    <div className="h-full bg-[#007B8A]" style={{ width: `${a.weight_pct}%` }} />
+                  </div>
+                  <span className="text-ink-2 tabular-nums w-10 text-right">{a.weight_pct}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
-    </div>
+    </Panel>
   )
 }
 
-// Index history chart
-function DciChart({
-  history, activeSeries, loading,
-}: {
-  history:      DciPublication[]
-  activeSeries: DciSeries
-  loading:      boolean
-}) {
-  const seriesData = useMemo(() => {
-    return history
-      .filter(p => p.series === activeSeries && p.index_value != null)
-      .sort((a, b) => a.publication_date.localeCompare(b.publication_date))
-      .map(p => ({
-        date:          p.publication_date,
-        index:         p.index_value,
-        net_liability: p.net_liability,
-        currency:      p.currency,
-      }))
-  }, [history, activeSeries])
-
-  const currency = HEADLINE_SERIES.find(s => s.series === activeSeries)?.ccy ?? '€'
-
-  if (loading) {
-    return <div className="h-48 flex items-center justify-center text-[11px] text-ink-3 uppercase tracking-wider">loading</div>
-  }
-  if (seriesData.length < 2) {
-    return <div className="h-48 flex items-center justify-center text-[11.5px] text-ink-4">—</div>
-  }
-  return (
-    <div className="h-48">
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={seriesData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="2 4" stroke="#E5E8EC" vertical={false} />
-          <XAxis dataKey="date" tickFormatter={fmtShortDate}
-                 tick={{ fill: '#98A1AE', fontSize: 11 }} axisLine={false} tickLine={false} />
-          <YAxis tick={{ fill: '#98A1AE', fontSize: 11 }} axisLine={false} tickLine={false} width={36} domain={['auto','auto']} />
-          <ReferenceLine y={100} stroke="#D6DBE0" strokeDasharray="3 2" />
-          <Tooltip
-            contentStyle={{ background: '#FFFFFF', border: '1px solid #D6DBE0', borderRadius: 2, fontSize: 12, color: '#0A1628' }}
-            labelFormatter={(label: unknown) => fmtDate(label as string)}
-            formatter={(val: unknown, name: unknown) => {
-              const v = val as number
-              return (name as string) === 'index'
-                ? [v.toFixed(2), 'Idx']
-                : [`${currency}${Math.round(v).toLocaleString('en-GB')}/MW`, 'Net']
-            }}
-          />
-          <Line type="monotone" dataKey="index" stroke="#0E7A86" strokeWidth={1.6}
-                dot={{ r: 2, fill: '#0E7A86', strokeWidth: 0 }}
-                activeDot={{ r: 3.5, fill: '#14A4B4' }}
-                isAnimationActive={false} />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  )
-}
-
-// Cost component table
-function ComponentTable({ pub }: { pub: DciPublication | null }) {
-  if (!pub) {
-    return <div className="px-3 py-4 text-[11.5px] text-ink-4 text-center">—</div>
-  }
-  const sym = CURRENCY_SYMBOL[pub.currency] ?? ''
-  const rows: { label: string; value: number | null; indent?: boolean; sep?: boolean; sum?: boolean }[] = [
-    { label: 'Gross cost',            value: pub.gross_cost },
-    { sep: true, label: '', value: null },
-    { label: 'Material recovery',     value: pub.material_recovery },
-    { label: 'Ferrous',  value: pub.recovery_ferrous,   indent: true },
-    { label: 'Copper',   value: pub.recovery_copper,    indent: true },
-    { label: 'Aluminium',value: pub.recovery_aluminium, indent: true },
-    { sep: true, label: '', value: null },
-    { label: 'Disposal costs',        value: pub.disposal_costs    ? -pub.disposal_costs    : null },
-    { label: 'Blade transport',       value: pub.blade_transport   ? -pub.blade_transport   : null, indent: true },
-    { label: 'Gate fees',             value: pub.blade_gate_fees   ? -pub.blade_gate_fees   : null, indent: true },
-    { label: 'Scrap haulage',         value: pub.scrap_haulage     ? -pub.scrap_haulage     : null, indent: true },
-    { sep: true, label: '', value: null },
-    { label: 'Net material position', value: pub.net_material_position },
-    { sep: true, label: '', value: null },
-    { label: 'Net liability',         value: pub.net_liability, sum: true },
-  ]
+function HeroStat({ label, value, ccy, bold = false, accent = false }: { label: string; value: number | null | undefined; ccy: string; bold?: boolean; accent?: boolean }) {
   return (
     <div>
-      {rows.map((row, i) => {
-        if (row.sep) return <div key={i} className="h-px bg-border" />
-        const isPos = (row.value ?? 0) >= 0
-        return (
-          <div key={i} className={clsx(
-            'flex items-center justify-between px-3 py-1.5',
-            row.sum && 'bg-titlebar',
-          )}>
-            <span className={clsx(
-              'text-[12.5px]',
-              row.indent  && 'pl-3 text-ink-3',
-              !row.indent && (row.sum ? 'text-ink font-semibold' : 'text-ink-2'),
-            )}>{row.label}</span>
-            <span className={clsx(
-              'text-[12.5px] tabular-nums',
-              row.sum     ? 'text-ink font-semibold' :
-              !row.indent && row.value != null ? (isPos ? 'text-down' : 'text-up') :
-              row.indent  ? 'text-ink-3' : 'text-ink-2',
-            )}>
-              {row.value != null
-                ? `${sym}${Math.abs(Math.round(row.value)).toLocaleString('en-GB')}`
-                : '—'}
-              {row.value != null && <span className="text-[10.5px] text-ink-4 ml-0.5">/MW</span>}
-            </span>
-          </div>
-        )
-      })}
+      <div className="text-[9.5px] text-ink-4 uppercase tracking-wider">{label}</div>
+      <div className={clsx(
+        'tabular-nums leading-none mt-0.5',
+        bold ? 'text-[22px] font-bold text-[#0A1628]'
+             : accent ? 'text-[16px] font-semibold text-[#007B8A]'
+                      : 'text-[16px] font-semibold text-ink-2',
+      )}>
+        {fmtCurrency(value, ccy)}
+      </div>
+      <div className="text-[8.5px] text-ink-4 uppercase tracking-wider mt-0.5">per MW</div>
     </div>
   )
 }
 
-// Local panel chrome with denser titlebar
-function Panel({
-  label, title, meta, children, className,
-}: {
+function DecompositionBar({ current, ccy }: { current: DciPublication; ccy: string }) {
+  // Sum the available cost segments
+  const segments = [
+    { label: 'Labour',     value: 0, color: '#0A1628' },  // not stored separately — placeholder
+    { label: 'Transport',  value: current.blade_transport ?? current.scrap_haulage ?? 0, color: '#1C3D52' },
+    { label: 'Gate fees',  value: current.blade_gate_fees ?? 0, color: '#2A7F8E' },
+    { label: 'Disposal',   value: current.disposal_costs ?? 0, color: '#3D6E7A' },
+  ].filter(s => s.value > 0)
+  const total = segments.reduce((s, sg) => s + sg.value, 0)
+  if (total === 0) {
+    return <div className="text-[10px] text-ink-4 italic">Decomposition data not yet published for this publication.</div>
+  }
+  return (
+    <div>
+      <div className="flex h-3 rounded-sm overflow-hidden border border-border mb-1">
+        {segments.map(s => (
+          <div key={s.label} style={{ width: `${(s.value / total) * 100}%`, background: s.color }} title={`${s.label}: ${fmtCurrency(s.value, ccy)}`} />
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[9.5px] text-ink-3">
+        {segments.map(s => (
+          <span key={s.label} className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-sm" style={{ background: s.color }} />
+            {s.label} {fmtCurrency(s.value, ccy)}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Panel: Reference Assets & Scope ─────────────────────────────────
+
+function ReferenceAssetsPanel({ selected }: { selected: DciSeries }) {
+  const meta = DCI_INDICES.find(i => i.series === selected)!
+  const archetypes = DCI_ARCHETYPES.filter(a => a.series === selected)
+  const scope = DCI_SCOPE.find(s => s.asset_class === meta.asset_class)!
+
+  return (
+    <Panel label="DCI" title={`Reference Assets & Scope · ${meta.ticker}`} className="col-span-5">
+      <div className="overflow-y-auto h-full">
+
+        {/* Scope — promoted to top, prominent */}
+        <div className="px-3 py-2 border-b border-border bg-canvas/30">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <div className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider mb-1">In scope</div>
+              <ul className="space-y-0.5">
+                {scope.in_scope.map((s, i) => (
+                  <li key={i} className="text-[10.5px] text-ink-2 leading-snug flex gap-1.5">
+                    <span className="text-emerald-700 flex-shrink-0">✓</span>
+                    <span>{s}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <div className="text-[10px] font-bold text-rose-800 uppercase tracking-wider mb-1">Out of scope</div>
+              <ul className="space-y-0.5">
+                {scope.out_of_scope.map((s, i) => (
+                  <li key={i} className="text-[10.5px] text-ink-2 leading-snug flex gap-1.5">
+                    <span className="text-rose-700 flex-shrink-0">✗</span>
+                    <span>{s}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        {/* Reference archetypes */}
+        <div className="px-3 py-2 space-y-2">
+          <div className="text-[10px] font-bold text-ink-4 uppercase tracking-wider">Reference archetypes</div>
+          {archetypes.map(a => (
+            <div key={a.code} className="border border-border rounded-sm p-2 bg-canvas/40">
+              <div className="flex items-baseline justify-between mb-1">
+                <span className="text-[11px] font-bold text-[#0A1628] tabular-nums tracking-wide">{a.code}</span>
+                <span className="text-[10px] font-semibold tabular-nums text-[#007B8A] bg-[#007B8A]/10 border border-[#007B8A]/30 px-1.5 py-px rounded-sm">
+                  {a.weight_pct}% weight
+                </span>
+              </div>
+              <div className="text-[11px] text-ink leading-snug">
+                {a.unit_count.toLocaleString()} × {a.unit_model}
+                {a.hub_height_m && <> · {a.hub_height_m}m hub</>} · {a.project_size_mw} MW project
+              </div>
+              <div className="text-[10px] text-ink-3 mt-0.5">
+                {a.geography} · ~{a.vintage_circa} vintage · {a.operator_typology}
+              </div>
+            </div>
+          ))}
+          <div className="text-[9px] text-ink-4 italic mt-1">
+            Weights rebalanced {DCI_PUBLICATION.rebalance_date}. Source: {DCI_REBALANCE_SOURCE[meta.asset_class]}
+          </div>
+        </div>
+      </div>
+    </Panel>
+  )
+}
+
+// ── Panel: Variable Baskets ─────────────────────────────────────────
+
+function VariableBasketsPanel() {
+  const grouped = useMemo(() => {
+    const out: Record<DciCategory, typeof DCI_VARIABLES> = {
+      'Crane': [], 'Labour': [], 'Transport': [], 'Gate fees': [], 'Material recovery': [],
+    }
+    for (const v of DCI_VARIABLES) out[v.category].push(v)
+    return out
+  }, [])
+  const order: DciCategory[] = ['Crane', 'Labour', 'Transport', 'Gate fees', 'Material recovery']
+
+  return (
+    <Panel label="DCI" title="Variable Baskets" className="col-span-12">
+      <div className="overflow-y-auto h-full">
+        <table className="w-full">
+          <thead>
+            <tr className="bg-titlebar border-b border-border sticky top-0 z-10">
+              <th className="px-2.5 py-1 text-left  text-[9.5px] font-semibold text-ink-3 uppercase tracking-wide" style={{ width: '28%' }}>Variable</th>
+              <th className="px-2.5 py-1 text-left  text-[9.5px] font-semibold text-ink-3 uppercase tracking-wide" style={{ width: '15%' }}>Applies to</th>
+              <th className="px-2.5 py-1 text-left  text-[9.5px] font-semibold text-ink-3 uppercase tracking-wide" style={{ width: '12%' }}>Sourcing</th>
+              <th className="px-2.5 py-1 text-left  text-[9.5px] font-semibold text-ink-3 uppercase tracking-wide" style={{ width: '20%' }}>Type</th>
+              <th className="px-2.5 py-1 text-left  text-[9.5px] font-semibold text-ink-3 uppercase tracking-wide" style={{ width: '10%' }}>Refresh</th>
+              <th className="px-2.5 py-1 text-left  text-[9.5px] font-semibold text-ink-3 uppercase tracking-wide">Note</th>
+            </tr>
+          </thead>
+          <tbody>
+            {order.flatMap(cat => [
+              <tr key={`hdr-${cat}`} className="bg-canvas/50 border-b border-border/60">
+                <td colSpan={6} className="px-2.5 py-0.5 text-[10px] font-bold text-[#0A1628] uppercase tracking-wider">
+                  {cat} ({grouped[cat].length})
+                </td>
+              </tr>,
+              ...grouped[cat].map((v, i) => (
+                <tr key={`${cat}-${i}`} className="border-b border-border/70 hover:bg-raised">
+                  <td className="px-2.5 py-1 text-[11px] text-ink font-medium">{v.variable}</td>
+                  <td className="px-2.5 py-1 text-[10px] text-ink-3 uppercase tracking-wide">{v.applies_to.join(' · ')}</td>
+                  <td className="px-2.5 py-1">
+                    <span className={clsx(
+                      'text-[9px] font-bold px-1.5 py-px rounded-sm tracking-wider border',
+                      v.sourcing === 'PRIMARY'
+                        ? 'bg-[#C4863A]/10 text-[#C4863A] border-[#C4863A]/40'
+                        : 'bg-[#007B8A]/10 text-[#007B8A] border-[#007B8A]/40',
+                    )}>
+                      {v.sourcing}
+                    </span>
+                  </td>
+                  <td className="px-2.5 py-1 text-[10.5px] text-ink-2">{v.source_type}</td>
+                  <td className="px-2.5 py-1 text-[10.5px] text-ink-3">{v.refresh_cadence}</td>
+                  <td className="px-2.5 py-1 text-[10px] text-ink-4 leading-snug">{v.note ?? ''}</td>
+                </tr>
+              )),
+            ])}
+          </tbody>
+        </table>
+        <div className="px-3 py-1.5 border-t border-border bg-canvas/30 text-[9.5px] text-ink-4 leading-snug">
+          <span className="font-semibold text-[#C4863A] mr-1">PRIMARY</span> = contributor data (Endenex moat, no public benchmark) ·
+          <span className="font-semibold text-[#007B8A] mx-1">PUBLIC</span> = independently verifiable benchmark (vendor names omitted to protect strategic positioning)
+        </div>
+      </div>
+    </Panel>
+  )
+}
+
+// ── Panel: Contributor Coverage ──────────────────────────────────────
+
+function ContributorCoveragePanel() {
+  return (
+    <Panel label="DCI" title="Contributor Coverage" className="col-span-6">
+      <div className="px-3 py-2">
+        <div className="space-y-1">
+          {DCI_CONTRIBUTOR_COVERAGE.map(c => {
+            const meta = DCI_INDICES.find(i => i.series === c.series)!
+            const aboveAt = c.contributors >= DCI_CONTRIBUTOR_THRESHOLD
+            return (
+              <div key={c.series} className="flex items-center gap-3 text-[10.5px] py-1 border-b border-border/50 last:border-b-0">
+                <span className="font-bold text-[#0A1628] tabular-nums w-20">{meta.ticker}</span>
+                <span className="text-ink-2 flex-1 truncate">{meta.label}</span>
+                <span className="text-ink tabular-nums font-semibold">{c.contributors}</span>
+                <span className="text-ink-4 text-[9.5px] uppercase tracking-wider w-24">
+                  {aboveAt ? (
+                    <span className="text-emerald-700">✓ above threshold</span>
+                  ) : (
+                    <span className="text-amber-700">⚠ pre-threshold</span>
+                  )}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+        <div className="mt-2 pt-2 border-t border-border text-[9.5px] text-ink-4 leading-snug">
+          Anonymisation threshold = {DCI_CONTRIBUTOR_THRESHOLD} contributors per index. Below threshold an index builds quietly until coverage is sufficient to publish without re-identification risk.
+        </div>
+      </div>
+    </Panel>
+  )
+}
+
+// ── Panel: Publication Schedule ─────────────────────────────────────
+
+function PublicationSchedulePanel() {
+  return (
+    <Panel label="DCI" title="Publication Schedule" className="col-span-6">
+      <div className="px-3 py-2 grid grid-cols-2 gap-x-4 gap-y-2 text-[10.5px]">
+        <SchedRow label="Next publication"     value={DCI_PUBLICATION.next_publication} />
+        <SchedRow label="Last publication"     value={DCI_PUBLICATION.last_publication} />
+        <SchedRow label="Cadence"              value={DCI_PUBLICATION.cadence} wide />
+        <SchedRow label="Methodology"          value={`${DCI_PUBLICATION.methodology_version} · effective ${DCI_PUBLICATION.methodology_effective}`} wide />
+        <SchedRow label="Rebalance"            value={DCI_PUBLICATION.rebalance_date} />
+        <SchedRow label="Compliance"           value={DCI_PUBLICATION.iosco_compliant ? 'IOSCO PRA principles' : '—'} />
+      </div>
+    </Panel>
+  )
+}
+
+function SchedRow({ label, value, wide = false }: { label: string; value: string; wide?: boolean }) {
+  return (
+    <div className={wide ? 'col-span-2' : 'col-span-1'}>
+      <div className="text-[9px] font-semibold text-ink-4 uppercase tracking-wider">{label}</div>
+      <div className="text-ink leading-tight mt-0.5">{value}</div>
+    </div>
+  )
+}
+
+// ── Panel shell ──────────────────────────────────────────────────────
+
+function Panel({ label, title, children, className }: {
   label:    string
   title:    string
-  meta?:    React.ReactNode
   children: React.ReactNode
   className?: string
 }) {
   return (
     <div className={clsx('bg-panel border border-border rounded-sm flex flex-col overflow-hidden', className)}>
-      <div className="h-7 px-3 flex items-center justify-between border-b border-border bg-titlebar flex-shrink-0">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="label-xs">{label}</span>
-          <span className="text-ink-4 text-[10px]">·</span>
-          <span className="text-[12.5px] font-semibold text-ink truncate">{title}</span>
-        </div>
-        {meta && <div className="text-[10.5px] text-ink-3 flex items-center gap-2">{meta}</div>}
+      <div className="h-7 px-3 flex items-center gap-2 border-b border-border bg-titlebar flex-shrink-0">
+        <span className="label-xs">{label}</span>
+        <span className="text-ink-4 text-[10px]">·</span>
+        <span className="text-[12.5px] font-semibold text-ink truncate">{title}</span>
       </div>
-      <div className="flex-1 min-h-0 overflow-auto">
-        {children}
-      </div>
-    </div>
-  )
-}
-
-// Main page
-export function DciPage() {
-  const [history,     setHistory]     = useState<DciPublication[]>([])
-  const [loading,     setLoading]     = useState(true)
-  const [chartSeries, setChartSeries] = useState<DciSeries>('dci_wind_europe')
-
-  useEffect(() => {
-    supabase
-      .from('dci_publications').select('*')
-      .eq('is_published', true)
-      .order('publication_date', { ascending: false })
-      .then(({ data }) => {
-        setHistory((data as DciPublication[]) ?? [])
-        setLoading(false)
-      })
-  }, [])
-
-  const latestByS = useMemo(() => {
-    const map: Partial<Record<DciSeries, DciPublication>> = {}
-    for (const p of history) { if (!map[p.series]) map[p.series] = p }
-    return map
-  }, [history])
-
-  const priorByS = useMemo(() => {
-    const seen = new Set<DciSeries>()
-    const map:  Partial<Record<DciSeries, DciPublication>> = {}
-    for (const p of history) {
-      if (!seen.has(p.series)) { seen.add(p.series); continue }
-      if (!map[p.series]) map[p.series] = p
-    }
-    return map
-  }, [history])
-
-  const breakdownPub = latestByS['dci_wind_europe'] ?? latestByS['dci_wind_north_america'] ?? null
-  const latestPub    = latestByS['dci_wind_europe'] ?? latestByS['dci_wind_north_america']
-
-  return (
-    <div className="flex flex-col h-full overflow-hidden bg-page">
-
-      {/* Page header strip */}
-      <div className="flex-shrink-0 h-9 px-3 border-b border-border bg-canvas flex items-center justify-between">
-        <div className="flex items-baseline gap-2.5">
-          <h1 className="text-[13px] font-semibold text-ink uppercase tracking-wide">Decommissioning Cost Index</h1>
-          <span className="text-[11.5px] text-ink-3">Independent benchmark · onshore wind decommissioning liability</span>
-        </div>
-        <div className="flex items-center gap-3 text-[10.5px] text-ink-3 flex-shrink-0 uppercase tracking-wide">
-          {latestPub && (
-            <>
-              <span>Latest <span className="text-ink ml-1 normal-case tabular-nums">{fmtDate(latestPub.publication_date)}</span></span>
-              <span className="cell-divider" />
-              <span>Method <span className="text-ink ml-1 normal-case">v{latestPub.methodology_version ?? '1.1'}</span></span>
-              <span className="cell-divider" />
-              <span>Cadence <span className="text-ink ml-1 normal-case">Monthly</span></span>
-            </>
-          )}
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-auto p-1.5 space-y-1.5">
-
-        {/* ── Row 1: 5 headline ticker rows ─────────────────────────────── */}
-        <div className="bg-panel border border-border rounded-sm">
-          <div className="h-6 px-3 flex items-center border-b border-border bg-titlebar">
-            <span className="label-xs">DCI Spot Indices · 5-card lineup</span>
-            <span className="ml-auto text-[10.5px] text-ink-3 uppercase tracking-wide">12-month sparkline</span>
-          </div>
-          <div className="grid grid-cols-5">
-            {HEADLINE_SERIES.map((s, i) => (
-              <HeadlineRow
-                key={s.series}
-                seriesDef={s}
-                latest={latestByS[s.series] ?? null}
-                prior={priorByS[s.series] ?? null}
-                history={history}
-                idx={i}
-                total={HEADLINE_SERIES.length}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* ── Row 2: 3 charts side-by-side at col-span-4 each ─────────────── */}
-        <div className="grid grid-cols-12 gap-1.5">
-          <Panel label="DCI" title="Series Comparison" className="col-span-4 min-h-[240px]"
-                 meta={<span>Indexed · base 100</span>}>
-            <div className="p-2">
-              <DciSeriesOverlay history={history} />
-            </div>
-          </Panel>
-
-          <Panel label="DCI" title="Cost Waterfall" className="col-span-4 min-h-[240px]"
-                 meta={breakdownPub && <span>{HEADLINE_SERIES.find(s => s.series === breakdownPub.series)?.ticker} · {fmtDate(breakdownPub.publication_date)}</span>}>
-            <div className="p-2">
-              <DciCostWaterfall pub={breakdownPub} />
-            </div>
-          </Panel>
-
-          <Panel label="DCI" title="Index History" className="col-span-4 min-h-[240px]"
-                 meta={
-                   <div className="flex items-center gap-px">
-                     {SUB_SERIES.map(s => {
-                       const has = history.some(p => p.series === s.series)
-                       return (
-                         <button key={s.series} onClick={() => setChartSeries(s.series)} disabled={!has}
-                           className={clsx(
-                             'px-1.5 py-0.5 text-[10px] font-semibold tracking-wide uppercase rounded-sm',
-                             chartSeries === s.series ? 'bg-active text-teal' : has ? 'text-ink-3 hover:text-ink' : 'text-ink-4',
-                           )}>
-                           {s.label}
-                         </button>
-                       )
-                     })}
-                   </div>
-                 }>
-            <div className="p-2">
-              <DciChart history={history} activeSeries={chartSeries} loading={loading} />
-            </div>
-          </Panel>
-        </div>
-
-        {/* ── Row 3: components table (col-6) + intended use (col-6) ─────── */}
-        <div className="grid grid-cols-12 gap-1.5">
-          <Panel label="DCI" title="Cost Components" className="col-span-6"
-                 meta={breakdownPub && <span>{HEADLINE_SERIES.find(s => s.series === breakdownPub.series)?.ticker} · {fmtDate(breakdownPub.publication_date)}</span>}>
-            <ComponentTable pub={breakdownPub} />
-          </Panel>
-
-          <Panel label="DCI" title="Intended Use" className="col-span-6">
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 p-3">
-              {[
-                'Benchmark ARO / decommissioning provisions',
-                'Assess reserve adequacy',
-                'Support repowering decisions',
-                'Inform M&A due diligence',
-                'Support lender and IC review',
-                'Track portfolio-level liability',
-                'Evidence cost inflation in EOL obligations',
-                'Stress-test for surety / IFRS IAS 37',
-              ].map(use => (
-                <div key={use} className="flex items-start gap-2">
-                  <div className="w-1 h-1 rounded-full bg-teal mt-1.5 flex-shrink-0" />
-                  <span className="text-[12px] text-ink-2 leading-snug">{use}</span>
-                </div>
-              ))}
-            </div>
-            <div className="border-t border-border px-3 py-2">
-              <p className="text-[11.5px] text-ink-3 leading-relaxed">
-                <span className="text-ink-2 font-semibold">DCI Spot Wind</span> tracks the market price of decommissioning a fixed onshore wind reference asset as cost drivers move. It is not a site-specific budget or contractor quote.
-              </p>
-            </div>
-          </Panel>
-        </div>
-
-      </div>
+      <div className="flex-1 min-h-0 overflow-hidden">{children}</div>
     </div>
   )
 }
