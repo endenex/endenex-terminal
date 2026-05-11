@@ -74,7 +74,7 @@ export function DciPage() {
         <div className="flex items-baseline gap-2.5">
           <h1 className="text-[13px] font-semibold text-ink uppercase tracking-wide">DCI · Decommissioning Cost Index Family</h1>
           <span className="text-[11.5px] text-ink-3">
-            {DCI_INDICES.filter(i => i.status === 'live').length} live · {DCI_INDICES.filter(i => i.status === 'pending').length} pending · {DCI_PUBLICATION.cadence}
+            {DCI_INDICES.filter(i => i.status === 'live').length} live · {DCI_INDICES.filter(i => i.status === 'pending').length} pending · {DCI_PUBLICATION.cadence} · spot benchmark, net of recovery
           </span>
         </div>
         <div className="flex items-center gap-2 text-[10.5px] text-ink-3 flex-shrink-0 uppercase tracking-wide">
@@ -88,7 +88,7 @@ export function DciPage() {
       {/* Content grid — 3×3 with row 2 spanning full width:
             Row 1: Indices Strip (col-span-2) | Reference Archetype
             Row 2: Cost Waterfall (col-span-3, full width)
-            Row 3: Variable Basket | Scope | Placeholder
+            Row 3: Variable Basket | Scope | Series Routing
           Contributor Coverage moved into the DCI Publication footer
           modal — it's reference info about index governance, not a
           live workspace panel. */}
@@ -102,7 +102,7 @@ export function DciPage() {
 
           <VariableBasketPanel />
           <ScopePanel selected={selected} />
-          <PlaceholderPanel />
+          <SeriesRoutingPanel />
         </div>
       </div>
 
@@ -159,7 +159,7 @@ function IndicesStripPanel({ pubs, loading, selected, onSelect }: IndicesStripPr
           <span className="text-ink-4 text-[10px]">·</span>
           <span className="text-[12.5px] font-semibold text-ink">Indices</span>
         </div>
-        <span className="text-[10px] text-ink-4">Click to select · Gross / NRO / Net</span>
+        <span className="text-[10px] text-ink-4">Net headline · Gross + NRO constituents</span>
       </div>
       <div className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden">
         <div className="flex divide-x divide-border min-w-max h-full">
@@ -169,9 +169,12 @@ function IndicesStripPanel({ pubs, loading, selected, onSelect }: IndicesStripPr
             const gross = agg.current?.gross_cost ?? null
             const nro   = agg.current?.material_recovery ?? null
             const net   = (gross != null && nro != null) ? gross - nro : null
-            const grossPrev = agg.previous?.gross_cost ?? null
-            const grossDelta = (gross != null && grossPrev != null && grossPrev !== 0)
-              ? ((gross - grossPrev) / grossPrev) * 100
+            // Net is the spot benchmark — Q/Q tracks net, not gross.
+            const netPrev = (agg.previous?.gross_cost != null && agg.previous?.material_recovery != null)
+              ? agg.previous.gross_cost - agg.previous.material_recovery
+              : null
+            const netDelta = (net != null && netPrev != null && netPrev !== 0)
+              ? ((net - netPrev) / netPrev) * 100
               : null
             return (
               <button key={idx.series}
@@ -186,22 +189,24 @@ function IndicesStripPanel({ pubs, loading, selected, onSelect }: IndicesStripPr
                     <span className="text-[8px] font-bold tracking-wider text-[#C4863A] bg-[#C4863A]/10 border border-[#C4863A]/30 px-1 rounded-sm">PEND</span>
                   )}
                 </div>
-                <div className="space-y-0 text-[10px] leading-tight">
+                {/* NET — hero (spot benchmark) */}
+                <div className="flex justify-between items-baseline">
+                  <span className="text-ink-4 uppercase tracking-wider text-[8.5px]">Net</span>
+                  <span className="text-[13px] font-bold text-[#0A1628] tabular-nums">{fmtCurrency(net, idx.ccy_symbol)}</span>
+                </div>
+                <div className="flex justify-between items-baseline mt-0.5">
+                  <span className="text-ink-4 uppercase tracking-wider text-[8.5px]">Q/Q</span>
+                  <span className={clsx('text-[10px] tabular-nums font-semibold', pctClass(netDelta))}>{fmtPct(netDelta)}</span>
+                </div>
+                {/* Constituents — equal weight, smaller */}
+                <div className="border-t border-border/50 mt-1 pt-1 space-y-0 text-[10px] leading-tight">
                   <div className="flex justify-between items-baseline">
                     <span className="text-ink-4 uppercase tracking-wider text-[8.5px]">Gross</span>
-                    <span className="text-[13px] font-bold text-[#0A1628] tabular-nums">{fmtCurrency(gross, idx.ccy_symbol)}</span>
+                    <span className="text-[10.5px] text-ink-2 tabular-nums">{fmtCurrency(gross, idx.ccy_symbol)}</span>
                   </div>
                   <div className="flex justify-between items-baseline">
                     <span className="text-ink-4 uppercase tracking-wider text-[8.5px]">NRO</span>
-                    <span className="text-[10.5px] text-[#007B8A] tabular-nums font-semibold">{fmtCurrency(nro, idx.ccy_symbol)}</span>
-                  </div>
-                  <div className="flex justify-between items-baseline">
-                    <span className="text-ink-4 uppercase tracking-wider text-[8.5px]">Net</span>
-                    <span className="text-[10.5px] text-ink-2 tabular-nums">{fmtCurrency(net, idx.ccy_symbol)}</span>
-                  </div>
-                  <div className="flex justify-between items-baseline pt-0.5">
-                    <span className="text-ink-4 uppercase tracking-wider text-[8.5px]">Q/Q</span>
-                    <span className={clsx('text-[10px] tabular-nums font-semibold', pctClass(grossDelta))}>{fmtPct(grossDelta)}</span>
+                    <span className="text-[10.5px] text-[#007B8A] tabular-nums">{fmtCurrency(nro, idx.ccy_symbol)}</span>
                   </div>
                 </div>
               </button>
@@ -268,14 +273,14 @@ function CostWaterfallPanel({ pubs, loading, selected }: { pubs: DciPublication[
       out.push({ name: 'Disposal', base: cum, value: disposal, color: '#3D6E7A', displayValue: disposal })
       cum += disposal
     }
-    // GROSS total bar (full-height pillar)
-    out.push({ name: 'GROSS', base: 0, value: gross, color: '#0A1628', isTotal: true, displayValue: gross })
+    // GROSS — intermediate sub-total (muted slate, not the hero)
+    out.push({ name: 'GROSS', base: 0, value: gross, color: '#5B6B7A', isTotal: true, displayValue: gross })
     // NRO deduction (from gross down to net)
     if (nro > 0) {
       out.push({ name: '(–) NRO', base: net, value: nro, color: '#007B8A', displayValue: -nro })
     }
-    // NET total bar
-    out.push({ name: 'NET', base: 0, value: net, color: '#C4863A', isTotal: true, displayValue: net })
+    // NET — terminal hero (deep navy, spot benchmark)
+    out.push({ name: 'NET', base: 0, value: net, color: '#0A1628', isTotal: true, displayValue: net })
     return out
   }, [cur])
 
@@ -442,19 +447,45 @@ function ScopePanel({ selected }: { selected: DciSeries }) {
   )
 }
 
-// ── Panel: Placeholder ───────────────────────────────────────────────
+// ── Panel: Series Routing ────────────────────────────────────────────
+//
+// The three-series structure (Net headline + Gross/NRO constituents)
+// only works if users know which series to point at which question.
+// This panel makes that mapping load-bearing on the page itself, not
+// just buried in the methodology PDF.
 
-function PlaceholderPanel() {
+const SERIES_ROUTING: Array<{
+  use_case: string
+  series:   'GROSS' | 'NET' | 'EITHER'
+  why:      string
+}> = [
+  { use_case: 'ARO understatement',          series: 'GROSS',  why: 'IFRS IAS 37 — provision recorded gross of expected salvage' },
+  { use_case: 'Surety bond pricing',         series: 'GROSS',  why: 'Underwriter cannot rely on future scrap prices' },
+  { use_case: 'Lender residual liability',   series: 'NET',    why: 'Realistic cash outflow at today\'s prices' },
+  { use_case: 'Operator cash-flow planning', series: 'NET',    why: 'Both outflow and salvage credit settle in same period' },
+  { use_case: 'Cross-region cost spreads',   series: 'EITHER', why: 'Gross for purity, Net for relevance' },
+]
+
+function SeriesRoutingPanel() {
   return (
-    <Panel label="DCI" title="Placeholder">
-      <div className="h-full flex items-center justify-center px-4 text-center">
-        <div>
-          <div className="text-[10px] font-semibold text-ink-4 uppercase tracking-wider mb-1">Reserved</div>
-          <div className="text-[10.5px] text-ink-3 leading-snug">
-            Future panel slot.<br/>
-            Candidates: cross-region comparison, ARO understatement calculator, gross/NRO spread.
+    <Panel label="DCI" title="Series Routing">
+      <div className="overflow-y-auto h-full px-2 py-1.5 space-y-1.5">
+        {SERIES_ROUTING.map((r, i) => (
+          <div key={i} className="border-b border-border/50 last:border-b-0 pb-1.5 last:pb-0">
+            <div className="flex items-baseline justify-between gap-2 mb-0.5">
+              <span className="text-[10.5px] text-ink leading-tight font-medium">{r.use_case}</span>
+              <span className={clsx(
+                'text-[8.5px] font-bold tracking-wider px-1 py-px rounded-sm border flex-shrink-0',
+                r.series === 'GROSS'  ? 'bg-[#5B6B7A]/10 text-[#3D5560] border-[#5B6B7A]/40' :
+                r.series === 'NET'    ? 'bg-[#0A1628]/10 text-[#0A1628] border-[#0A1628]/40' :
+                                        'bg-[#C4863A]/10 text-[#C4863A] border-[#C4863A]/40',
+              )}>
+                {r.series}
+              </span>
+            </div>
+            <div className="text-[9.5px] text-ink-3 leading-snug">{r.why}</div>
           </div>
-        </div>
+        ))}
       </div>
     </Panel>
   )

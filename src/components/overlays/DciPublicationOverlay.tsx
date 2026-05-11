@@ -74,6 +74,31 @@ export function DciPublicationOverlay({ onClose }: Props) {
             </div>
           </div>
 
+          {/* Series convention — load-bearing because Net is the headline.
+              Users coming from accounting / surety / lending backgrounds
+              all need to know which series their use case routes to. */}
+          <div className="pt-3 mt-3 border-t border-border">
+            <div className="text-[9px] font-bold text-ink-4 uppercase tracking-wider mb-1.5">
+              Series Convention
+            </div>
+            <p className="text-[10.5px] text-ink-3 leading-snug">
+              <span className="font-semibold text-ink-2">Net is the spot benchmark</span> —
+              the cash outflow a project decommissioned today would actually face at
+              today's input prices and today's commodity markets. Gross and NRO are
+              published as separately tracked constituent series.
+              <span className="block mt-1.5">
+                <span className="font-semibold text-ink-2">Gross is the appropriate reference</span> for
+                accounting (IFRS IAS 37 ARO provisions) and bonded liability use cases,
+                where future salvage cannot be relied upon.
+              </span>
+              <span className="block mt-1.5">
+                NRO excludes secondary-market component resale (refurbished nacelles,
+                drive units). Site-to-realisation merchant margin assumptions are
+                proprietary to the index calculation.
+              </span>
+            </p>
+          </div>
+
           <div className="pt-3 mt-3 border-t border-border text-[10.5px] text-ink-3 leading-snug">
             Quarterly headline publication. Underlying input prices for high-frequency
             variables (freight benchmarks, metal exchange data) refresh monthly during the
