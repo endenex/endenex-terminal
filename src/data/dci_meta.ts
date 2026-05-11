@@ -76,22 +76,121 @@ export interface DciArchetype {
   geography:          string    // "Northern Germany agricultural"
   vintage_circa:      number    // ~year first commissioned
   operator_typology:  string    // "IPP", "utility", etc.
+
+  // ── Operational ops (load-bearing for NRO + transport cost legs) ──
+  // Per-project volumes and distances. These are the inputs that
+  // make the per-archetype cost reproducible from public unit-level
+  // assumptions. Exposed in the Reference Archetype panel so users
+  // can sanity-check the cost build-up against their own portfolio.
+  /** Material classes sold to scrap merchant — full-project tonnage.
+   *  Specialist-pathway materials (PV Si/Ag, BESS black mass) are
+   *  NOT in this list — they go through payable specialist offtake,
+   *  not scrap markets. */
+  scrap_volumes_t:    Array<{ material: string; tonnes: number }>
+  /** Dominant disposal pathway for the asset's primary waste stream:
+   *    Wind  → blade pathway
+   *    Solar → module pathway
+   *    BESS  → cell pre-treatment pathway */
+  primary_pathway:        string
+  /** Pathway label shown to user — distinguishes "blade" vs "module"
+   *  vs "battery" so the row is unambiguous across asset classes. */
+  pathway_kind:           'Blade' | 'Module' | 'Battery'
+  /** Round-trip site → primary-pathway processor distance (km). */
+  distance_to_pathway_km: number
+  /** Round-trip site → scrap merchant distance (km). */
+  distance_to_scrap_km:   number
 }
 
 export const DCI_ARCHETYPES: DciArchetype[] = [
   // ── EUR-WIND family
-  { code: 'EUR-WIND-N',  series: 'dci_wind_europe',        weight_pct: 60, unit_count: 12,  unit_model: 'Vestas V80-2.0 MW',     hub_height_m: 80, project_size_mw: 24,    geography: 'Northern Germany agricultural', vintage_circa: 2003, operator_typology: 'IPP' },
-  { code: 'EUR-WIND-IB', series: 'dci_wind_europe',        weight_pct: 25, unit_count: 30,  unit_model: 'Gamesa G52-850 kW',     hub_height_m: 65, project_size_mw: 25.5,  geography: 'Spanish ridge',                 vintage_circa: 2002, operator_typology: 'Utility' },
-  { code: 'EUR-WIND-UK', series: 'dci_wind_europe',        weight_pct: 15, unit_count: 15,  unit_model: 'Vestas V66-1.65 MW',    hub_height_m: 70, project_size_mw: 24.75, geography: 'Scottish upland',               vintage_circa: 2004, operator_typology: 'IPP' },
+  {
+    code: 'EUR-WIND-N',  series: 'dci_wind_europe',        weight_pct: 60, unit_count: 12,  unit_model: 'Vestas V80-2.0 MW',  hub_height_m: 80, project_size_mw: 24,    geography: 'Northern Germany agricultural', vintage_circa: 2003, operator_typology: 'IPP',
+    scrap_volumes_t: [
+      { material: 'Steel (tower)', tonnes: 2_460 },
+      { material: 'Cast iron',     tonnes: 300   },
+      { material: 'Copper',        tonnes: 36    },
+      { material: 'Aluminium',     tonnes: 12    },
+    ],
+    primary_pathway: 'Cement co-processing', pathway_kind: 'Blade',
+    distance_to_pathway_km: 300, distance_to_scrap_km: 80,
+  },
+  {
+    code: 'EUR-WIND-IB', series: 'dci_wind_europe',        weight_pct: 25, unit_count: 30,  unit_model: 'Gamesa G52-850 kW',  hub_height_m: 65, project_size_mw: 25.5,  geography: 'Spanish ridge',                 vintage_circa: 2002, operator_typology: 'Utility',
+    scrap_volumes_t: [
+      { material: 'Steel (tower)', tonnes: 2_250 },
+      { material: 'Cast iron',     tonnes: 180   },
+      { material: 'Copper',        tonnes: 30    },
+      { material: 'Aluminium',     tonnes: 12    },
+    ],
+    primary_pathway: 'Mechanical shred', pathway_kind: 'Blade',
+    distance_to_pathway_km: 450, distance_to_scrap_km: 120,
+  },
+  {
+    code: 'EUR-WIND-UK', series: 'dci_wind_europe',        weight_pct: 15, unit_count: 15,  unit_model: 'Vestas V66-1.65 MW', hub_height_m: 70, project_size_mw: 24.75, geography: 'Scottish upland',               vintage_circa: 2004, operator_typology: 'IPP',
+    scrap_volumes_t: [
+      { material: 'Steel (tower)', tonnes: 2_475 },
+      { material: 'Cast iron',     tonnes: 300   },
+      { material: 'Copper',        tonnes: 38    },
+      { material: 'Aluminium',     tonnes: 12    },
+    ],
+    primary_pathway: 'Mechanical shred + landfill', pathway_kind: 'Blade',
+    distance_to_pathway_km: 550, distance_to_scrap_km: 150,
+  },
   // ── US-WIND
-  { code: 'US-WIND',     series: 'dci_wind_north_america', weight_pct: 100, unit_count: 100, unit_model: 'GE 1.5 SLE',           hub_height_m: 80, project_size_mw: 150,   geography: 'Texas / Plains',                vintage_circa: 2008, operator_typology: 'IPP / utility-scale' },
+  {
+    code: 'US-WIND',     series: 'dci_wind_north_america', weight_pct: 100, unit_count: 100, unit_model: 'GE 1.5 SLE',         hub_height_m: 80, project_size_mw: 150,   geography: 'Texas / Plains',                vintage_circa: 2008, operator_typology: 'IPP / utility-scale',
+    scrap_volumes_t: [
+      { material: 'Steel (tower)', tonnes: 14_000 },
+      { material: 'Cast iron',     tonnes: 1_500  },
+      { material: 'Copper',        tonnes: 200    },
+      { material: 'Aluminium',     tonnes: 60     },
+    ],
+    primary_pathway: 'Cement co-processing', pathway_kind: 'Blade',
+    distance_to_pathway_km: 600, distance_to_scrap_km: 100,
+  },
   // ── EUR-SOLAR family (pending publication; archetypes specified)
-  { code: 'EUR-SOLAR-N', series: 'dci_solar_europe',       weight_pct: 65, unit_count: 90_000, unit_model: 'c-Si 250 Wp ground-mount', hub_height_m: null, project_size_mw: 22.5, geography: 'Northern Germany / NL',      vintage_circa: 2012, operator_typology: 'IPP' },
-  { code: 'EUR-SOLAR-IB',series: 'dci_solar_europe',       weight_pct: 35, unit_count: 100_000, unit_model: 'c-Si 280 Wp single-axis tracker', hub_height_m: null, project_size_mw: 28, geography: 'Iberian plateau', vintage_circa: 2013, operator_typology: 'Utility' },
+  {
+    code: 'EUR-SOLAR-N', series: 'dci_solar_europe',       weight_pct: 65, unit_count: 90_000, unit_model: 'c-Si 250 Wp ground-mount', hub_height_m: null, project_size_mw: 22.5, geography: 'Northern Germany / NL',      vintage_circa: 2012, operator_typology: 'IPP',
+    scrap_volumes_t: [
+      { material: 'Tracker steel',     tonnes: 600 },
+      { material: 'Aluminium (frame)', tonnes: 80  },
+      { material: 'Copper',            tonnes: 110 },
+    ],
+    primary_pathway: 'Mechanical (frame + glass)', pathway_kind: 'Module',
+    distance_to_pathway_km: 250, distance_to_scrap_km: 80,
+  },
+  {
+    code: 'EUR-SOLAR-IB',series: 'dci_solar_europe',       weight_pct: 35, unit_count: 100_000, unit_model: 'c-Si 280 Wp single-axis tracker', hub_height_m: null, project_size_mw: 28, geography: 'Iberian plateau', vintage_circa: 2013, operator_typology: 'Utility',
+    scrap_volumes_t: [
+      { material: 'Tracker steel',     tonnes: 1_400 },
+      { material: 'Aluminium (frame)', tonnes: 140   },
+      { material: 'Copper',            tonnes: 140   },
+    ],
+    primary_pathway: 'Mechanical (frame + glass)', pathway_kind: 'Module',
+    distance_to_pathway_km: 400, distance_to_scrap_km: 120,
+  },
   // ── US-SOLAR
-  { code: 'US-SOLAR',    series: 'dci_solar_north_america', weight_pct: 100, unit_count: 350_000, unit_model: 'c-Si 320 Wp single-axis tracker', hub_height_m: null, project_size_mw: 100, geography: 'Texas / Southwest', vintage_circa: 2014, operator_typology: 'Utility-scale' },
+  {
+    code: 'US-SOLAR',    series: 'dci_solar_north_america', weight_pct: 100, unit_count: 350_000, unit_model: 'c-Si 320 Wp single-axis tracker', hub_height_m: null, project_size_mw: 100, geography: 'Texas / Southwest', vintage_circa: 2014, operator_typology: 'Utility-scale',
+    scrap_volumes_t: [
+      { material: 'Tracker steel',     tonnes: 5_000 },
+      { material: 'Aluminium (frame)', tonnes: 500   },
+      { material: 'Copper',            tonnes: 500   },
+    ],
+    primary_pathway: 'Mechanical (frame + glass)', pathway_kind: 'Module',
+    distance_to_pathway_km: 500, distance_to_scrap_km: 150,
+  },
   // ── JPN-SOLAR
-  { code: 'JPN-SOLAR',   series: 'dci_solar_japan',        weight_pct: 100, unit_count: 11_000, unit_model: 'c-Si 250 Wp fixed-tilt rooftop-replicate', hub_height_m: null, project_size_mw: 2.75, geography: 'Honshu mid-latitude', vintage_circa: 2014, operator_typology: 'Mix (FIT-era IPP)' },
+  {
+    code: 'JPN-SOLAR',   series: 'dci_solar_japan',        weight_pct: 100, unit_count: 11_000, unit_model: 'c-Si 250 Wp fixed-tilt rooftop-replicate', hub_height_m: null, project_size_mw: 2.75, geography: 'Honshu mid-latitude', vintage_circa: 2014, operator_typology: 'Mix (FIT-era IPP)',
+    scrap_volumes_t: [
+      { material: 'Steel',             tonnes: 85 },
+      { material: 'Aluminium (frame)', tonnes: 14 },
+      { material: 'Copper',            tonnes: 14 },
+    ],
+    primary_pathway: 'Specialty Si + Ag recovery', pathway_kind: 'Module',
+    distance_to_pathway_km: 120, distance_to_scrap_km: 50,
+  },
 ]
 
 // ── Scope ────────────────────────────────────────────────────────────

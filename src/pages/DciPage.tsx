@@ -340,31 +340,60 @@ function ReferenceArchetypePanel({ selected }: { selected: DciSeries }) {
   const meta = DCI_INDICES.find(i => i.series === selected)!
   const archetypes = DCI_ARCHETYPES.filter(a => a.series === selected)
 
+  const fmtT = (t: number) => t >= 1000 ? `${(t / 1000).toFixed(1)}kt` : `${t.toLocaleString()}t`
+
   return (
     <Panel label="DCI" title={`Reference Archetype · ${meta.ticker}`}>
-      <div className="overflow-y-auto h-full px-3 py-2 space-y-2">
+      <div className="overflow-y-auto h-full px-2 py-1.5 space-y-1.5">
         {archetypes.map(a => (
-          <div key={a.code} className="border border-border rounded-sm p-2 bg-canvas/40">
+          <div key={a.code} className="border border-border rounded-sm p-1.5 bg-canvas/40">
+            {/* Header: code + weight */}
             <div className="flex items-baseline justify-between mb-1">
               <span className="text-[11px] font-bold text-[#0A1628] tabular-nums tracking-wide">{a.code}</span>
-              <span className="text-[10px] font-semibold tabular-nums text-[#007B8A] bg-[#007B8A]/10 border border-[#007B8A]/30 px-1.5 py-px rounded-sm">
+              <span className="text-[9.5px] font-semibold tabular-nums text-[#007B8A] bg-[#007B8A]/10 border border-[#007B8A]/30 px-1 py-px rounded-sm">
                 {a.weight_pct}% weight
               </span>
             </div>
-            <div className="text-[11px] text-ink leading-snug">
+            {/* Project descriptor */}
+            <div className="text-[10.5px] text-ink leading-snug">
               {a.unit_count.toLocaleString()} × {a.unit_model}
               {a.hub_height_m && <> · {a.hub_height_m}m hub</>} · {a.project_size_mw} MW
             </div>
-            <div className="text-[10px] text-ink-3 mt-0.5">
+            <div className="text-[9.5px] text-ink-3 mt-0.5">
               {a.geography} · ~{a.vintage_circa} · {a.operator_typology}
+            </div>
+
+            {/* Operational ops — load-bearing for cost build-up */}
+            <div className="mt-1.5 pt-1.5 border-t border-border/60 space-y-0.5">
+              <OpsRow
+                label="Scrap"
+                value={a.scrap_volumes_t.map(s => `${s.material} ${fmtT(s.tonnes)}`).join(' · ')}
+              />
+              <OpsRow
+                label={a.pathway_kind}
+                value={a.primary_pathway}
+              />
+              <OpsRow
+                label="Routing"
+                value={`${a.pathway_kind.toLowerCase()} ${a.distance_to_pathway_km} km · scrap ${a.distance_to_scrap_km} km`}
+              />
             </div>
           </div>
         ))}
-        <div className="text-[9px] text-ink-4 italic mt-2 leading-snug">
+        <div className="text-[9px] text-ink-4 italic mt-2 leading-snug px-1">
           Weights rebalanced {DCI_PUBLICATION.rebalance_date}. Source: {DCI_REBALANCE_SOURCE[meta.asset_class]}
         </div>
       </div>
     </Panel>
+  )
+}
+
+function OpsRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline gap-1.5 text-[9.5px] leading-snug">
+      <span className="text-ink-4 uppercase tracking-wider font-semibold w-12 flex-shrink-0">{label}</span>
+      <span className="text-ink-2 flex-1 min-w-0">{value}</span>
+    </div>
   )
 }
 
